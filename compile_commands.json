@@ -1,0 +1,42 @@
+[
+  {
+    "directory": ".",
+    "command": "clang++ -std=c++17 -Iinclude -c src/main.cpp",
+    "file": "src/main.cpp"
+  },
+  {
+    "directory": ".",
+    "command": "clang++ -std=c++17 -Iinclude -c src/thread_pool.cpp",
+    "file": "src/thread_pool.cpp"
+  },
+  {
+    "directory": ".",
+    "command": "clang++ -std=c++17 -Iinclude -c src/video_reader.cpp",
+    "file": "src/video_reader.cpp"
+  },
+  {
+    "directory": ".",
+    "command": "clang++ -std=c++17 -Iinclude -c src/preprocessor.cpp",
+    "file": "src/preprocessor.cpp"
+  },
+  {
+    "directory": ".",
+    "command": "clang++ -std=c++17 -Iinclude -c src/yolo_detector.cpp",
+    "file": "src/yolo_detector.cpp"
+  },
+  {
+    "directory": ".",
+    "command": "clang++ -std=c++17 -Iinclude -c src/frame_queue.cpp",
+    "file": "src/frame_queue.cpp"
+  },
+  {
+    "directory": ".",
+    "command": "clang++ -std=c++17 -Iinclude -c src/config_parser.cpp",
+    "file": "src/config_parser.cpp"
+  },
+  {
+    "directory": ".",
+    "command": "clang++ -std=c++17 -Iinclude -c src/logger.cpp",
+    "file": "src/logger.cpp"
+  }
+]

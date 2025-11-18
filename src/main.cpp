@@ -75,8 +75,8 @@ int main(int argc, char* argv[]) {
         if (engine_configs.empty()) {
             std::cerr << "  - Model paths (use --engine or set in config file)" << std::endl;
         }
-        if (config.getVideoPaths().empty()) {
-            std::cerr << "  - Video paths (use --videos or set in config file)" << std::endl;
+        if (config.getVideoClips().empty()) {
+            std::cerr << "  - Video sources (use videos.list_file or set via --videos)" << std::endl;
         }
         if (config.getNumReaders() <= 0) {
             std::cerr << "  - Valid reader thread count (must be > 0)" << std::endl;
@@ -84,12 +84,12 @@ int main(int argc, char* argv[]) {
         printUsage(argv[0]);
         return 1;
     }
-    
+
     // Get configuration values
     int num_readers = config.getNumReaders();
     int num_preprocessors = config.getNumPreprocessors();
     std::string output_dir = config.getOutputDir();
-    std::vector<std::string> video_paths = config.getVideoPaths();
+    const auto& video_clips = config.getVideoClips();
     std::vector<EngineConfig> engine_configs = config.getEngineConfigs();
     
     // Initialize logger
@@ -118,10 +118,10 @@ int main(int argc, char* argv[]) {
                  ", gpu_id=" + std::to_string(engine_configs[i].gpu_id) + "]");
     }
     LOG_INFO("Main", "Output directory: " + output_dir);
-    LOG_INFO("Main", "Number of videos: " + std::to_string(video_paths.size()));
+    LOG_INFO("Main", "Number of videos: " + std::to_string(video_clips.size()));
     
     // Create thread pool
-    ThreadPool pool(num_readers, num_preprocessors, video_paths, engine_configs, output_dir);
+    ThreadPool pool(num_readers, num_preprocessors, video_clips, engine_configs, output_dir);
     
     // Start processing
     LOG_INFO("Main", "Starting processing...");

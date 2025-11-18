@@ -49,7 +49,7 @@ class ThreadPool {
 public:
     ThreadPool(int num_readers,
                int num_preprocessors,
-               const std::vector<std::string>& video_paths,
+               const std::vector<VideoClip>& video_clips,
                const std::vector<EngineConfig>& engine_configs,
                const std::string& output_dir);
     
@@ -88,7 +88,7 @@ public:
 private:
     int num_readers_;
     int num_preprocessors_;
-    std::vector<std::string> video_paths_;
+    std::vector<VideoClip> video_clips_;
     std::vector<std::unique_ptr<EngineGroup>> engine_groups_;
     std::string output_dir_;
     

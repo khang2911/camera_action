@@ -1,12 +1,13 @@
 #ifndef FRAME_QUEUE_H
 #define FRAME_QUEUE_H
 
-#include <queue>
-#include <mutex>
 #include <condition_variable>
-#include <string>
-#include <opencv2/opencv.hpp>
 #include <memory>
+#include <mutex>
+#include <queue>
+#include <string>
+#include <vector>
+#include <opencv2/opencv.hpp>
 
 struct FrameData {
     cv::Mat frame;  // Raw frame (shared among readers/preprocessors)

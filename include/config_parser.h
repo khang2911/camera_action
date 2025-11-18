@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "video_clip.h"
+
 enum class ModelType {
     DETECTION,
     POSE
@@ -41,7 +43,8 @@ public:
     
     // Getters
     std::vector<EngineConfig> getEngineConfigs() const { return engine_configs_; }
-    std::vector<std::string> getVideoPaths() const { return video_paths_; }
+    std::vector<std::string> getVideoPaths() const;
+    const std::vector<VideoClip>& getVideoClips() const { return video_clips_; }
     int getNumReaders() const { return num_readers_; }
     int getNumPreprocessors() const { return num_preprocessors_; }
     std::string getOutputDir() const { return output_dir_; }
@@ -55,7 +58,7 @@ public:
     }
     
     // Setters (for command line overrides)
-    void setVideoPaths(const std::vector<std::string>& paths) { video_paths_ = paths; }
+    void setVideoPaths(const std::vector<std::string>& paths);
     void setNumReaders(int num) { 
         num_readers_ = num; 
         if (num_preprocessors_ <= 0) {
@@ -85,10 +88,20 @@ public:
     
 private:
     std::vector<EngineConfig> engine_configs_;
-    std::vector<std::string> video_paths_;
+    std::vector<VideoClip> video_clips_;
     int num_readers_;
     int num_preprocessors_;
     std::string output_dir_;
+    double time_padding_seconds_ = 0.0;
+    
+    void loadVideoListFromFile(const std::string& path);
+    void loadPlainVideoList(std::istream& stream);
+    void loadJsonVideoList(const std::string& path);
+    void addPlainPath(const std::string& path);
+    void addVideoClip(const VideoClip& clip);
+    std::pair<double, double> computeTimeWindow(const std::string& start_iso,
+                                                const std::string& end_iso) const;
+    static double parseTimestamp(const std::string& iso);
 };
 
 #endif // CONFIG_PARSER_H

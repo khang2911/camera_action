@@ -46,12 +46,12 @@ void EngineGroup::releaseBuffer(std::vector<float>* buffer) {
 
 ThreadPool::ThreadPool(int num_readers,
                        int num_preprocessors,
-                       const std::vector<std::string>& video_paths,
+                       const std::vector<VideoClip>& video_clips,
                        const std::vector<EngineConfig>& engine_configs,
                        const std::string& output_dir)
     : num_readers_(num_readers),
       num_preprocessors_(num_preprocessors > 0 ? num_preprocessors : num_readers),
-      video_paths_(video_paths),
+      video_clips_(video_clips),
       output_dir_(output_dir),
       stop_flag_(false) {
     
@@ -72,7 +72,7 @@ ThreadPool::ThreadPool(int num_readers,
     // Initialize video processed flags
     {
         std::lock_guard<std::mutex> lock(video_mutex_);
-        video_processed_.resize(video_paths.size(), false);
+        video_processed_.assign(video_clips_.size(), false);
     }
     
     // Initialize engine groups (one per engine)
@@ -317,13 +317,14 @@ void ThreadPool::readerWorker(int reader_id) {
             break;
         }
         
+        const auto& clip = video_clips_[video_id];
         LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
-                 " processing video " + std::to_string(video_id) + ": " + video_paths_[video_id]);
+                 " processing video " + std::to_string(video_id) + ": " + clip.path);
         
-        VideoReader reader(video_paths_[video_id], video_id);
+        VideoReader reader(clip, video_id);
         
         if (!reader.isOpened()) {
-            LOG_ERROR("Reader", "Cannot open video " + std::to_string(video_id) + ": " + video_paths_[video_id]);
+            LOG_ERROR("Reader", "Cannot open video " + std::to_string(video_id) + ": " + clip.path);
             continue;
         }
         
@@ -335,7 +336,7 @@ void ThreadPool::readerWorker(int reader_id) {
             stats_.frames_read++;
             
             // Create frame data with original frame (shared to preprocessor queue)
-            FrameData frame_data(frame.clone(), video_id, reader.getFrameNumber(), video_paths_[video_id]);
+            FrameData frame_data(frame.clone(), video_id, reader.getFrameNumber(), clip.path);
             if (raw_frame_queue_) {
                 raw_frame_queue_->push(frame_data);
             }

@@ -88,6 +88,7 @@ set(HEADERS
     include/yolo_detector.h
     include/thread_pool.h
     include/frame_queue.h
+    include/video_clip.h
     include/config_parser.h
     include/logger.h
 )

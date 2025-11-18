@@ -36,7 +36,9 @@ models:
 
 # Video Sources
 videos:
-  list_file: "./video_list.txt"  # Path to text file containing video paths (one per line)
+  list_file: "./video_list.jsonl"  # Path to JSONL file containing video metadata with time ranges
+  # Alternative: use list_file_jsonl for explicit JSONL format
+  # list_file_jsonl: "./video_list.jsonl"
 
 # Thread Configuration
 threads:
