@@ -7,7 +7,8 @@ void FrameQueue::push(const FrameData& frame) {
     std::unique_lock<std::mutex> lock(mutex_);
     not_full_.wait(lock, [this] { return queue_.size() < max_size_; });
     queue_.push(frame);
-    not_empty_.notify_one();
+    // Use notify_all() to wake all waiting detector threads so frames are distributed fairly
+    not_empty_.notify_all();
 }
 
 bool FrameQueue::pop(FrameData& frame, int timeout_ms) {
