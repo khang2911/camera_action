@@ -1,0 +1,27 @@
+#ifndef VIDEO_READER_H
+#define VIDEO_READER_H
+
+#include <opencv2/opencv.hpp>
+#include <string>
+#include <memory>
+
+class VideoReader {
+public:
+    VideoReader(const std::string& video_path, int video_id);
+    ~VideoReader();
+    
+    bool isOpened() const;
+    bool readFrame(cv::Mat& frame);
+    int getFrameNumber() const { return frame_number_; }
+    int getVideoId() const { return video_id_; }
+    std::string getVideoPath() const { return video_path_; }
+    
+private:
+    cv::VideoCapture cap_;
+    std::string video_path_;
+    int video_id_;
+    int frame_number_;
+};
+
+#endif // VIDEO_READER_H
+

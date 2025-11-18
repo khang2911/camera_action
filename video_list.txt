@@ -1,0 +1,9 @@
+# Video List File
+# One video path per line
+# Lines starting with # are treated as comments and ignored
+# Empty lines are also ignored
+
+/path/to/video1.mp4
+/path/to/video2.mp4
+/path/to/video3.mp4
+

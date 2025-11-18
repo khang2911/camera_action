@@ -1,0 +1,87 @@
+#ifndef YOLO_DETECTOR_H
+#define YOLO_DETECTOR_H
+
+#include <string>
+#include <vector>
+#include <memory>
+#include <NvInfer.h>
+#include <cuda_runtime.h>
+#include "config_parser.h"
+
+// Pose keypoint structure
+struct Keypoint {
+    float x;
+    float y;
+    float confidence;
+    
+    Keypoint() : x(0.0f), y(0.0f), confidence(0.0f) {}
+    Keypoint(float x_val, float y_val, float conf) : x(x_val), y(y_val), confidence(conf) {}
+};
+
+// Detection result structure
+struct Detection {
+    float bbox[4];      // [x_center, y_center, width, height] or [x1, y1, x2, y2]
+    float confidence;
+    int class_id;
+    std::vector<Keypoint> keypoints;  // Empty for detection models, 17 keypoints for pose models
+    
+    Detection() : confidence(0.0f), class_id(-1) {
+        bbox[0] = bbox[1] = bbox[2] = bbox[3] = 0.0f;
+    }
+};
+
+class YOLODetector {
+public:
+    YOLODetector(const std::string& engine_path, ModelType model_type = ModelType::DETECTION);
+    ~YOLODetector();
+    
+    bool initialize();
+    bool detect(const std::vector<float>& input_data, const std::string& output_path);
+    
+    ModelType getModelType() const { return model_type_; }
+    
+private:
+    std::string engine_path_;
+    ModelType model_type_;
+    nvinfer1::IRuntime* runtime_;
+    nvinfer1::ICudaEngine* engine_;
+    nvinfer1::IExecutionContext* context_;
+    cudaStream_t stream_;
+    
+    void* input_buffer_;
+    void* output_buffer_;
+    size_t input_size_;
+    size_t output_size_;
+    
+    // Output dimensions
+    int output_height_;      // Grid height (e.g., 80 for 640x640 input)
+    int output_width_;       // Grid width
+    int num_anchors_;        // Total number of anchors (height * width)
+    int num_classes_;        // Number of classes
+    int output_channels_;    // Number of output channels per anchor
+    
+    // NMS parameters
+    float conf_threshold_;
+    float nms_threshold_;
+    int max_detections_;
+    
+    bool loadEngine();
+    void allocateBuffers();
+    void freeBuffers();
+    
+    // Parse raw YOLO output (without NMS)
+    std::vector<Detection> parseRawDetectionOutput(const std::vector<float>& output_data);
+    std::vector<Detection> parseRawPoseOutput(const std::vector<float>& output_data);
+    
+    // Apply NMS to detections
+    std::vector<Detection> applyNMS(const std::vector<Detection>& detections);
+    
+    // Calculate IoU between two boxes
+    float calculateIoU(const float* box1, const float* box2);
+    
+    // Write results to binary file
+    bool writeDetectionsToFile(const std::vector<Detection>& detections, const std::string& output_path);
+};
+
+#endif // YOLO_DETECTOR_H
+

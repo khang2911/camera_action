@@ -1,0 +1,30 @@
+# AI Camera Solution Configuration File
+
+# YOLO Model Configuration
+# Multiple engines can be configured, each frame will go through all engines
+models:
+  - path: "/path/to/yolo_engine1.engine"  # Path to TensorRT engine file
+    num_detectors: 4                      # Number of detector threads for this engine
+    name: "model1"                        # Optional: name identifier for output files
+    type: "detection"                     # Model type: "detection" or "pose"
+  - path: "/path/to/yolo_engine2.engine"
+    num_detectors: 4
+    name: "model2"
+    type: "detection"
+  - path: "/path/to/yolo_pose.engine"     # YOLO Pose model
+    num_detectors: 4
+    name: "pose_model"
+    type: "pose"                          # Pose model outputs keypoints
+
+# Video Sources
+videos:
+  list_file: "./video_list.txt"  # Path to text file containing video paths (one per line)
+
+# Thread Configuration
+threads:
+  num_readers: 10      # Number of reader/preprocessor threads (CPU)
+
+# Output Configuration
+output:
+  dir: "./output"      # Output directory for binary result files
+
