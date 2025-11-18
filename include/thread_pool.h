@@ -7,6 +7,7 @@
 #include <mutex>
 #include <functional>
 #include <memory>
+#include <string>
 #include "frame_queue.h"
 #include "preprocessor.h"
 #include "yolo_detector.h"
@@ -18,19 +19,36 @@ struct EngineGroup {
     std::string engine_path;
     std::string engine_name;
     int num_detectors;
+    int input_width;
+    int input_height;
+    size_t tensor_elements;
     std::vector<std::unique_ptr<YOLODetector>> detectors;
     std::vector<std::thread> detector_threads;
     std::unique_ptr<FrameQueue> frame_queue;
+    std::unique_ptr<Preprocessor> preprocessor;
     
-    EngineGroup(int id, const std::string& path, const std::string& name, int num_det)
-        : engine_id(id), engine_path(path), engine_name(name), num_detectors(num_det) {
+    std::vector<std::vector<float>*> buffer_pool;
+    std::mutex buffer_pool_mutex;
+    
+    EngineGroup(int id, const std::string& path, const std::string& name, int num_det,
+                int in_w, int in_h)
+        : engine_id(id), engine_path(path), engine_name(name), num_detectors(num_det),
+          input_width(in_w), input_height(in_h) {
+        tensor_elements = static_cast<size_t>(input_width) * input_height * 3;
         frame_queue = std::make_unique<FrameQueue>();
+        preprocessor = std::make_unique<Preprocessor>(input_width, input_height);
     }
+    
+    ~EngineGroup();
+    
+    std::shared_ptr<std::vector<float>> acquireBuffer();
+    void releaseBuffer(std::vector<float>* buffer);
 };
 
 class ThreadPool {
 public:
     ThreadPool(int num_readers,
+               int num_preprocessors,
                const std::vector<std::string>& video_paths,
                const std::vector<EngineConfig>& engine_configs,
                const std::string& output_dir);
@@ -53,6 +71,7 @@ public:
         std::atomic<long long> reader_total_time_ms{0};  // Total time spent reading frames
         std::vector<long long> engine_total_time_ms;     // Total time per engine (detection)
         std::vector<long long> engine_frame_count;      // Frame count per engine (for average calculation)
+        std::atomic<long long> preprocessor_total_time_ms{0};  // Total time for preprocessors
         std::chrono::steady_clock::time_point start_time;
     };
     
@@ -61,18 +80,22 @@ public:
                                std::vector<long long>& frames_detected,
                                std::vector<long long>& frames_failed,
                                long long& reader_total_time_ms,
+                               long long& preprocessor_total_time_ms,
                                std::vector<long long>& engine_total_time_ms,
                                std::vector<long long>& engine_frame_count,
                                std::chrono::steady_clock::time_point& start_time) const;
     
 private:
     int num_readers_;
+    int num_preprocessors_;
     std::vector<std::string> video_paths_;
     std::vector<std::unique_ptr<EngineGroup>> engine_groups_;
     std::string output_dir_;
     
     std::vector<std::thread> reader_threads_;
+    std::vector<std::thread> preprocessor_threads_;
     std::thread monitor_thread_;
+    std::unique_ptr<FrameQueue> raw_frame_queue_;
     
     std::atomic<bool> stop_flag_;
     std::vector<bool> video_processed_;  // Use regular bool with mutex (atomic vectors are not resizable)
@@ -81,6 +104,7 @@ private:
     mutable Statistics stats_;
     
     void readerWorker(int reader_id);
+    void preprocessorWorker(int worker_id);
     void detectorWorker(int engine_id, int detector_id);
     void monitorWorker();
     int getNextVideo();

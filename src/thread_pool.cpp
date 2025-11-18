@@ -8,12 +8,52 @@
 #include <chrono>
 #include <thread>
 
+EngineGroup::~EngineGroup() {
+    std::lock_guard<std::mutex> lock(buffer_pool_mutex);
+    for (auto* buffer : buffer_pool) {
+        delete buffer;
+    }
+    buffer_pool.clear();
+}
+
+std::shared_ptr<std::vector<float>> EngineGroup::acquireBuffer() {
+    std::vector<float>* buffer = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(buffer_pool_mutex);
+        if (!buffer_pool.empty()) {
+            buffer = buffer_pool.back();
+            buffer_pool.pop_back();
+        }
+    }
+    
+    if (!buffer) {
+        buffer = new std::vector<float>(tensor_elements);
+    } else {
+        buffer->resize(tensor_elements);
+    }
+    
+    auto deleter = [this](std::vector<float>* ptr) {
+        this->releaseBuffer(ptr);
+    };
+    
+    return std::shared_ptr<std::vector<float>>(buffer, deleter);
+}
+
+void EngineGroup::releaseBuffer(std::vector<float>* buffer) {
+    std::lock_guard<std::mutex> lock(buffer_pool_mutex);
+    buffer_pool.push_back(buffer);
+}
+
 ThreadPool::ThreadPool(int num_readers,
+                       int num_preprocessors,
                        const std::vector<std::string>& video_paths,
                        const std::vector<EngineConfig>& engine_configs,
                        const std::string& output_dir)
-    : num_readers_(num_readers), video_paths_(video_paths),
-      output_dir_(output_dir), stop_flag_(false) {
+    : num_readers_(num_readers),
+      num_preprocessors_(num_preprocessors > 0 ? num_preprocessors : num_readers),
+      video_paths_(video_paths),
+      output_dir_(output_dir),
+      stop_flag_(false) {
     
     // Initialize statistics
     {
@@ -27,6 +67,7 @@ ThreadPool::ThreadPool(int num_readers,
     
     // Create output directory if it doesn't exist
     std::filesystem::create_directories(output_dir);
+    raw_frame_queue_ = std::make_unique<FrameQueue>(500);
     
     // Initialize video processed flags
     {
@@ -38,7 +79,8 @@ ThreadPool::ThreadPool(int num_readers,
     for (size_t i = 0; i < engine_configs.size(); ++i) {
         const auto& config = engine_configs[i];
         auto engine_group = std::make_unique<EngineGroup>(
-            static_cast<int>(i), config.path, config.name, config.num_detectors
+            static_cast<int>(i), config.path, config.name, config.num_detectors,
+            config.input_width, config.input_height
         );
         
         LOG_INFO("ThreadPool", "Initializing engine " + config.name + " with " + 
@@ -72,7 +114,8 @@ ThreadPool::ThreadPool(int num_readers,
     }
     
     LOG_INFO("ThreadPool", "ThreadPool initialized with " + std::to_string(num_readers) + 
-             " reader threads and " + std::to_string(engine_configs.size()) + " engines");
+             " reader threads, " + std::to_string(num_preprocessors_) + " preprocessor threads, and " +
+             std::to_string(engine_configs.size()) + " engines");
 }
 
 ThreadPool::~ThreadPool() {
@@ -85,6 +128,7 @@ void ThreadPool::start() {
     stats_.frames_read = 0;
     stats_.frames_preprocessed = 0;
     stats_.reader_total_time_ms = 0;
+    stats_.preprocessor_total_time_ms = 0;
     {
         std::lock_guard<std::mutex> lock(stats_.stats_mutex);
         for (size_t i = 0; i < stats_.frames_detected.size(); ++i) {
@@ -93,6 +137,9 @@ void ThreadPool::start() {
             stats_.engine_total_time_ms[i] = 0;
             stats_.engine_frame_count[i] = 0;
         }
+    }
+    if (raw_frame_queue_) {
+        raw_frame_queue_->clear();
     }
     
     // Reset video processed flags
@@ -109,6 +156,12 @@ void ThreadPool::start() {
     for (int i = 0; i < num_readers_; ++i) {
         reader_threads_.emplace_back(&ThreadPool::readerWorker, this, i);
         LOG_DEBUG("ThreadPool", "Started reader thread " + std::to_string(i));
+    }
+    
+    // Start preprocessor threads
+    for (int i = 0; i < num_preprocessors_; ++i) {
+        preprocessor_threads_.emplace_back(&ThreadPool::preprocessorWorker, this, i);
+        LOG_DEBUG("ThreadPool", "Started preprocessor thread " + std::to_string(i));
     }
     
     // Start detector threads for each engine
@@ -144,6 +197,14 @@ void ThreadPool::stop() {
         }
     }
     reader_threads_.clear();
+    
+    // Wait for all preprocessor threads to finish
+    for (auto& thread : preprocessor_threads_) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+    preprocessor_threads_.clear();
     
     // Wait for all detector threads in all engine groups
     for (auto& engine_group : engine_groups_) {
@@ -181,6 +242,9 @@ void ThreadPool::waitForCompletion() {
         
         // Check if all queues are empty
         bool all_queues_empty = true;
+        if (raw_frame_queue_ && !raw_frame_queue_->empty()) {
+            all_queues_empty = false;
+        }
         for (auto& engine_group : engine_groups_) {
             if (!engine_group->frame_queue->empty()) {
                 all_queues_empty = false;
@@ -269,14 +333,11 @@ void ThreadPool::readerWorker(int reader_id) {
             auto frame_start = std::chrono::steady_clock::now();
             
             stats_.frames_read++;
-            stats_.frames_preprocessed++;  // Count as preprocessed (will be done per-engine)
             
-            // Create frame data with original frame (each engine will preprocess with its own size)
-            FrameData frame_data(frame, video_id, reader.getFrameNumber(), video_paths_[video_id]);
-            
-            // Push original frame to ALL engine queues (each frame goes through all engines)
-            for (auto& engine_group : engine_groups_) {
-                engine_group->frame_queue->push(frame_data);
+            // Create frame data with original frame (shared to preprocessor queue)
+            FrameData frame_data(frame.clone(), video_id, reader.getFrameNumber(), video_paths_[video_id]);
+            if (raw_frame_queue_) {
+                raw_frame_queue_->push(frame_data);
             }
             
             auto frame_end = std::chrono::steady_clock::now();
@@ -306,6 +367,43 @@ void ThreadPool::readerWorker(int reader_id) {
     }
 }
 
+void ThreadPool::preprocessorWorker(int worker_id) {
+    LOG_INFO("Preprocessor", "Preprocessor thread " + std::to_string(worker_id) + " started");
+    
+    while (!stop_flag_) {
+        FrameData raw_frame;
+        if (!raw_frame_queue_ || !raw_frame_queue_->pop(raw_frame, 100)) {
+            if (stop_flag_) break;
+            continue;
+        }
+        
+        auto preprocess_start = std::chrono::steady_clock::now();
+        
+        for (auto& engine_group : engine_groups_) {
+            auto buffer = engine_group->acquireBuffer();
+            engine_group->preprocessor->preprocessToFloat(raw_frame.frame, *buffer);
+            
+            FrameData processed;
+            processed.preprocessed_data = buffer;
+            processed.video_id = raw_frame.video_id;
+            processed.frame_number = raw_frame.frame_number;
+            processed.video_path = raw_frame.video_path;
+            processed.frame = raw_frame.frame;  // Keep reference for potential debugging/logging
+            
+            engine_group->frame_queue->push(processed);
+        }
+        
+        auto preprocess_end = std::chrono::steady_clock::now();
+        auto preprocess_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            preprocess_end - preprocess_start).count();
+        
+        stats_.frames_preprocessed++;
+        stats_.preprocessor_total_time_ms += preprocess_time_ms;
+    }
+    
+    LOG_INFO("Preprocessor", "Preprocessor thread " + std::to_string(worker_id) + " finished");
+}
+
 void ThreadPool::detectorWorker(int engine_id, int detector_id) {
     if (engine_id >= static_cast<int>(engine_groups_.size())) {
         return;
@@ -330,24 +428,14 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
     while (!stop_flag_) {
         // For batch_size > 1, accumulate frames into a batch
         if (batch_size > 1) {
-            std::vector<cv::Mat> batch_frames;
+            std::vector<std::shared_ptr<std::vector<float>>> batch_tensors;
             std::vector<std::string> batch_output_paths;
             std::vector<int> batch_frame_numbers;
             
             // Collect batch_size frames
-            for (int b = 0; b < batch_size; ++b) {
+            while (static_cast<int>(batch_tensors.size()) < batch_size && !stop_flag_) {
                 if (!engine_group->frame_queue->pop(frame_data, 100)) {
                     if (stop_flag_) break;
-                    
-                    // If we have some frames but not a full batch, process what we have
-                    if (!batch_frames.empty()) {
-                        // Pad with last frame or skip (for now, skip incomplete batches)
-                        LOG_DEBUG("Detector", "Incomplete batch (" + std::to_string(batch_frames.size()) + 
-                                 " frames), skipping...");
-                        batch_frames.clear();
-                        batch_output_paths.clear();
-                        batch_frame_numbers.clear();
-                    }
                     
                     // Log waiting status periodically (every 5 seconds)
                     auto now = std::chrono::steady_clock::now();
@@ -358,7 +446,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                                  "(Queue size: " + std::to_string(engine_group->frame_queue->size()) + ")");
                         last_wait_log = now;
                     }
-                    break;  // Break inner loop, continue outer loop
+                    continue;
                 }
                 
                 // Generate output path with engine name
@@ -370,16 +458,22 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     engine_group->engine_name
                 );
                 
-                batch_frames.push_back(frame_data.frame);
+                std::shared_ptr<std::vector<float>> tensor = frame_data.preprocessed_data;
+                if (!tensor) {
+                    tensor = engine_group->acquireBuffer();
+                    engine_group->preprocessor->preprocessToFloat(frame_data.frame, *tensor);
+                }
+                
+                batch_tensors.push_back(tensor);
                 batch_output_paths.push_back(output_path);
                 batch_frame_numbers.push_back(frame_data.frame_number);
             }
             
             // Process batch if we have enough frames
-            if (static_cast<int>(batch_frames.size()) == batch_size) {
+            if (static_cast<int>(batch_tensors.size()) == batch_size) {
                 auto batch_start = std::chrono::steady_clock::now();
-                bool success = engine_group->detectors[detector_id]->detectBatch(
-                    batch_frames, batch_output_paths, batch_frame_numbers
+                bool success = engine_group->detectors[detector_id]->runWithPreprocessedBatch(
+                    batch_tensors, batch_output_paths, batch_frame_numbers
                 );
                 auto batch_end = std::chrono::steady_clock::now();
                 auto batch_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(batch_end - batch_start).count();
@@ -438,8 +532,13 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             // Note: Multiple detector threads may write to the same file (same video+engine)
             // File writes are protected by per-file mutex inside writeDetectionsToFile
             auto detect_start = std::chrono::steady_clock::now();
-            bool success = engine_group->detectors[detector_id]->detect(
-                frame_data.frame, output_path, frame_data.frame_number
+            std::shared_ptr<std::vector<float>> tensor = frame_data.preprocessed_data;
+            if (!tensor) {
+                tensor = engine_group->acquireBuffer();
+                engine_group->preprocessor->preprocessToFloat(frame_data.frame, *tensor);
+            }
+            bool success = engine_group->detectors[detector_id]->runWithPreprocessedData(
+                tensor, output_path, frame_data.frame_number
             );
             auto detect_end = std::chrono::steady_clock::now();
             auto detect_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(detect_end - detect_start).count();
@@ -563,6 +662,19 @@ void ThreadPool::monitorWorker() {
         }
         stats_oss << std::endl;
         
+        long long preproc_time_ms = stats_.preprocessor_total_time_ms.load();
+        long long preproc_frames = stats_.frames_preprocessed.load();
+        stats_oss << "Preprocessor: Frames=" << preproc_frames;
+        if (elapsed > 0) {
+            stats_oss << " | FPS=" << (preproc_frames / elapsed);
+        }
+        if (preproc_frames > 0) {
+            double avg_preproc_time_ms = static_cast<double>(preproc_time_ms) / preproc_frames;
+            stats_oss << " | AvgTime=" << std::fixed << std::setprecision(2) << avg_preproc_time_ms << "ms/frame";
+            stats_oss << " | TotalTime=" << (preproc_time_ms / 1000.0) << "s";
+        }
+        stats_oss << std::endl;
+        
         LOG_STATS("Monitor", stats_oss.str());
     }
     
@@ -573,12 +685,14 @@ void ThreadPool::getStatisticsSnapshot(long long& frames_read, long long& frames
                                       std::vector<long long>& frames_detected,
                                       std::vector<long long>& frames_failed,
                                       long long& reader_total_time_ms,
+                                      long long& preprocessor_total_time_ms,
                                       std::vector<long long>& engine_total_time_ms,
                                       std::vector<long long>& engine_frame_count,
                                       std::chrono::steady_clock::time_point& start_time) const {
     frames_read = stats_.frames_read.load();
     frames_preprocessed = stats_.frames_preprocessed.load();
     reader_total_time_ms = stats_.reader_total_time_ms.load();
+    preprocessor_total_time_ms = stats_.preprocessor_total_time_ms.load();
     {
         std::lock_guard<std::mutex> lock(stats_.stats_mutex);
         frames_detected.resize(stats_.frames_detected.size());

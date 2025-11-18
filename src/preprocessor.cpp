@@ -47,7 +47,7 @@ cv::Mat Preprocessor::preprocess(const cv::Mat& frame) {
     return normalized;
 }
 
-std::vector<float> Preprocessor::preprocessToFloat(const cv::Mat& frame) {
+void Preprocessor::preprocessToFloat(const cv::Mat& frame, std::vector<float>& output) {
     cv::Mat processed = preprocess(frame);
     
     // Convert to RGB format and flatten to CHW format for TensorRT
@@ -55,7 +55,8 @@ std::vector<float> Preprocessor::preprocessToFloat(const cv::Mat& frame) {
     cv::split(processed, channels);
     
     // TensorRT expects CHW format: [C, H, W]
-    std::vector<float> output(target_width_ * target_height_ * 3);
+    const size_t total_size = static_cast<size_t>(target_width_) * target_height_ * 3;
+    output.resize(total_size);
     
     size_t offset = 0;
     for (int c = 0; c < 3; ++c) {
@@ -64,7 +65,11 @@ std::vector<float> Preprocessor::preprocessToFloat(const cv::Mat& frame) {
             output[offset++] = data[i];
         }
     }
-    
+}
+
+std::vector<float> Preprocessor::preprocessToFloat(const cv::Mat& frame) {
+    std::vector<float> output;
+    preprocessToFloat(frame, output);
     return output;
 }
 

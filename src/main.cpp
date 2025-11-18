@@ -87,6 +87,7 @@ int main(int argc, char* argv[]) {
     
     // Get configuration values
     int num_readers = config.getNumReaders();
+    int num_preprocessors = config.getNumPreprocessors();
     std::string output_dir = config.getOutputDir();
     std::vector<std::string> video_paths = config.getVideoPaths();
     std::vector<EngineConfig> engine_configs = config.getEngineConfigs();
@@ -102,6 +103,7 @@ int main(int argc, char* argv[]) {
         LOG_INFO("Main", "Config file: " + (config_file.empty() ? std::string("config.yaml") : config_file));
     }
     LOG_INFO("Main", "Number of reader threads: " + std::to_string(num_readers));
+    LOG_INFO("Main", "Number of preprocessor threads: " + std::to_string(num_preprocessors));
     LOG_INFO("Main", "Number of engines: " + std::to_string(engine_configs.size()));
     for (size_t i = 0; i < engine_configs.size(); ++i) {
         std::string type_str = (engine_configs[i].type == ModelType::POSE) ? "pose" : "detection";
@@ -119,7 +121,7 @@ int main(int argc, char* argv[]) {
     LOG_INFO("Main", "Number of videos: " + std::to_string(video_paths.size()));
     
     // Create thread pool
-    ThreadPool pool(num_readers, video_paths, engine_configs, output_dir);
+    ThreadPool pool(num_readers, num_preprocessors, video_paths, engine_configs, output_dir);
     
     // Start processing
     LOG_INFO("Main", "Starting processing...");
@@ -129,12 +131,13 @@ int main(int argc, char* argv[]) {
     pool.waitForCompletion();
     
     // Print final statistics
-    long long frames_read, frames_preprocessed, reader_total_time_ms;
+    long long frames_read, frames_preprocessed, reader_total_time_ms, preprocessor_total_time_ms;
     std::vector<long long> frames_detected, frames_failed;
     std::vector<long long> engine_total_time_ms, engine_frame_count;
     std::chrono::steady_clock::time_point start_time;
     pool.getStatisticsSnapshot(frames_read, frames_preprocessed, frames_detected, frames_failed,
-                               reader_total_time_ms, engine_total_time_ms, engine_frame_count, start_time);
+                               reader_total_time_ms, preprocessor_total_time_ms,
+                               engine_total_time_ms, engine_frame_count, start_time);
     
     auto total_time = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::steady_clock::now() - start_time).count();
@@ -149,6 +152,12 @@ int main(int argc, char* argv[]) {
         double avg_reader_time_ms = static_cast<double>(reader_total_time_ms) / frames_read;
         LOG_INFO("Main", "Reader: AvgTime=" + std::to_string(avg_reader_time_ms) + "ms/frame, " +
                  "TotalTime=" + std::to_string(reader_total_time_ms / 1000.0) + "s");
+    }
+    
+    if (frames_preprocessed > 0) {
+        double avg_preproc_time_ms = static_cast<double>(preprocessor_total_time_ms) / frames_preprocessed;
+        LOG_INFO("Main", "Preprocessor: AvgTime=" + std::to_string(avg_preproc_time_ms) + "ms/frame, " +
+                 "TotalTime=" + std::to_string(preprocessor_total_time_ms / 1000.0) + "s");
     }
     
     // Engine timing statistics

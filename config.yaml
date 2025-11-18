@@ -3,36 +3,36 @@
 # YOLO Model Configuration
 # Multiple engines can be configured, each frame will go through all engines
 models:
-  - path: "/path/to/yolo_engine1.engine"  # Path to TensorRT engine file
-    num_detectors: 4                      # Number of detector threads for this engine
-    name: "model1"                        # Optional: name identifier for output files
+  - path: "/workspace/khangtd6/longchau_vaccine/action_c/weights/alcohol/2025-11-18_batch_16_640x640_fp16.engine"   # Path to TensorRT engine file
+    num_detectors: 1                      # Number of detector threads for this engine
+    name: "alcohol"                        # Optional: name identifier for output files
     type: "detection"                     # Model type: "detection" or "pose"
-    batch_size: 1                         # Batch size for inference (must match engine batch size)
+    batch_size: 16                         # Batch size for inference (must match engine batch size)
     input_width: 640                      # Input image width
     input_height: 640                     # Input image height
-    conf_threshold: 0.25                  # Confidence threshold (0.0-1.0)
-    nms_threshold: 0.45                  # NMS IoU threshold (0.0-1.0)
+    conf_threshold: 0.2                  # Confidence threshold (0.0-1.0)
+    nms_threshold: 0.55                  # NMS IoU threshold (0.0-1.0)
     gpu_id: 0                             # GPU device ID (0, 1, 2, etc.)
-  - path: "/path/to/yolo_engine2.engine"
-    num_detectors: 4
-    name: "model2"
-    type: "detection"
-    batch_size: 1
-    input_width: 640
-    input_height: 640
-    conf_threshold: 0.3
-    nms_threshold: 0.5
-    gpu_id: 0
-  - path: "/path/to/yolo_pose.engine"     # YOLO Pose model
-    num_detectors: 4
-    name: "pose_model"
-    type: "pose"                          # Pose model outputs keypoints
-    batch_size: 1
-    input_width: 640
-    input_height: 640
-    conf_threshold: 0.25
-    nms_threshold: 0.45
-    gpu_id: 1                             # Can use different GPU
+  - path: "/workspace/khangtd6/longchau_vaccine/action_c/weights/hand/2025-11-18_batch_16_864x864_fp16.engine"   # Path to TensorRT engine file
+    num_detectors: 1                      # Number of detector threads for this engine
+    name: "hand"                        # Optional: name identifier for output files
+    type: "detection"                     # Model type: "detection" or "pose"
+    batch_size: 16                         # Batch size for inference (must match engine batch size)
+    input_width: 864                      # Input image width
+    input_height: 864                     # Input image height
+    conf_threshold: 0.2                  # Confidence threshold (0.0-1.0)
+    nms_threshold: 0.6                  # NMS IoU threshold (0.0-1.0)
+    gpu_id: 0                             # GPU device ID (0, 1, 2, etc.)
+  - path: "/workspace/khangtd6/longchau_vaccine/action_c/weights/pose/2025-11-18_batch_16_640x640_fp16.engine"   # Path to TensorRT engine file
+    num_detectors: 1                      # Number of detector threads for this engine
+    name: "pose"                        # Optional: name identifier for output files
+    type: "pose"                     # Model type: "detection" or "pose"
+    batch_size: 16                         # Batch size for inference (must match engine batch size)
+    input_width: 640                      # Input image width
+    input_height: 640                     # Input image height
+    conf_threshold: 0.4                  # Confidence threshold (0.0-1.0)
+    nms_threshold: 0.55                  # NMS IoU threshold (0.0-1.0)
+    gpu_id: 0                             # GPU device ID (0, 1, 2, etc.)
 
 # Video Sources
 videos:
@@ -40,9 +40,10 @@ videos:
 
 # Thread Configuration
 threads:
-  num_readers: 10      # Number of reader/preprocessor threads (CPU)
+  num_readers: 7      # Number of reader/preprocessor threads (CPU)
+  num_preprocessors: 14  # Number of preprocessing workers (CPU)
 
 # Output Configuration
 output:
-  dir: "./output"      # Output directory for binary result files
+  dir: "/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins/"      # Output directory for binary result files
 

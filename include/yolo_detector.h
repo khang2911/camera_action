@@ -43,6 +43,11 @@ public:
     // Detect single frame (for batch_size=1) or batch of frames (for batch_size>1)
     bool detect(const cv::Mat& frame, const std::string& output_path, int frame_number);
     bool detectBatch(const std::vector<cv::Mat>& frames, const std::vector<std::string>& output_paths, const std::vector<int>& frame_numbers);
+    bool runWithPreprocessedData(const std::shared_ptr<std::vector<float>>& input_data,
+                                 const std::string& output_path, int frame_number);
+    bool runWithPreprocessedBatch(const std::vector<std::shared_ptr<std::vector<float>>>& inputs,
+                                  const std::vector<std::string>& output_paths,
+                                  const std::vector<int>& frame_numbers);
     
     ModelType getModelType() const { return model_type_; }
     int getBatchSize() const { return batch_size_; }
@@ -66,6 +71,7 @@ private:
     void* output_buffer_;
     size_t input_size_;
     size_t output_size_;
+    size_t input_elements_;
     
     // Output dimensions
     int output_height_;      // Grid height (e.g., 80 for 640x640 input)
@@ -98,6 +104,9 @@ private:
     
     // Write results to binary file
     bool writeDetectionsToFile(const std::vector<Detection>& detections, const std::string& output_path, int frame_number);
+    
+    bool runInference(const std::vector<std::string>& output_paths,
+                      const std::vector<int>& frame_numbers);
 };
 
 #endif // YOLO_DETECTOR_H

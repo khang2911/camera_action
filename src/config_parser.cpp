@@ -4,7 +4,7 @@
 #include <fstream>
 
 ConfigParser::ConfigParser()
-    : num_readers_(10), output_dir_("./output") {}
+    : num_readers_(10), num_preprocessors_(10), output_dir_("./output") {}
 
 ConfigParser::~ConfigParser() {}
 
@@ -189,6 +189,13 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
             if (config["threads"]["num_readers"]) {
                 num_readers_ = config["threads"]["num_readers"].as<int>();
             }
+            if (config["threads"]["num_preprocessors"]) {
+                num_preprocessors_ = config["threads"]["num_preprocessors"].as<int>();
+            }
+        }
+        
+        if (num_preprocessors_ <= 0) {
+            num_preprocessors_ = num_readers_;
         }
         
         // Load output directory
@@ -209,7 +216,7 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
 }
 
 bool ConfigParser::isValid() const {
-    if (engine_configs_.empty() || video_paths_.empty() || num_readers_ <= 0) {
+    if (engine_configs_.empty() || video_paths_.empty() || num_readers_ <= 0 || num_preprocessors_ <= 0) {
         return false;
     }
     

@@ -13,6 +13,7 @@ public:
     
     // Get preprocessed data as float array (for TensorRT input)
     std::vector<float> preprocessToFloat(const cv::Mat& frame);
+    void preprocessToFloat(const cv::Mat& frame, std::vector<float>& output);
     
 private:
     int target_width_;

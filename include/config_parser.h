@@ -43,6 +43,7 @@ public:
     std::vector<EngineConfig> getEngineConfigs() const { return engine_configs_; }
     std::vector<std::string> getVideoPaths() const { return video_paths_; }
     int getNumReaders() const { return num_readers_; }
+    int getNumPreprocessors() const { return num_preprocessors_; }
     std::string getOutputDir() const { return output_dir_; }
     
     // Backward compatibility getters
@@ -55,7 +56,13 @@ public:
     
     // Setters (for command line overrides)
     void setVideoPaths(const std::vector<std::string>& paths) { video_paths_ = paths; }
-    void setNumReaders(int num) { num_readers_ = num; }
+    void setNumReaders(int num) { 
+        num_readers_ = num; 
+        if (num_preprocessors_ <= 0) {
+            num_preprocessors_ = num;
+        }
+    }
+    void setNumPreprocessors(int num) { num_preprocessors_ = num; }
     void setOutputDir(const std::string& dir) { output_dir_ = dir; }
     
     // Backward compatibility setters
@@ -80,6 +87,7 @@ private:
     std::vector<EngineConfig> engine_configs_;
     std::vector<std::string> video_paths_;
     int num_readers_;
+    int num_preprocessors_;
     std::string output_dir_;
 };
 

@@ -4,11 +4,13 @@
 #include <queue>
 #include <mutex>
 #include <condition_variable>
+#include <string>
 #include <opencv2/opencv.hpp>
 #include <memory>
 
 struct FrameData {
-    cv::Mat frame;  // Original frame (will be preprocessed per engine)
+    cv::Mat frame;  // Raw frame (shared among readers/preprocessors)
+    std::shared_ptr<std::vector<float>> preprocessed_data;  // Reusable normalized tensor
     int video_id;
     int frame_number;
     std::string video_path;
@@ -16,6 +18,9 @@ struct FrameData {
     FrameData() : video_id(-1), frame_number(-1) {}
     FrameData(const cv::Mat& f, int vid_id, int fnum, const std::string& vpath)
         : frame(f), video_id(vid_id), frame_number(fnum), video_path(vpath) {}
+    FrameData(const std::shared_ptr<std::vector<float>>& tensor,
+              int vid_id, int fnum, const std::string& vpath)
+        : preprocessed_data(tensor), video_id(vid_id), frame_number(fnum), video_path(vpath) {}
 };
 
 class FrameQueue {
