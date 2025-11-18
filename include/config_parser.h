@@ -14,10 +14,12 @@ struct EngineConfig {
     int num_detectors;
     std::string name;  // Optional name identifier
     ModelType type;    // Model type: detection or pose
+    int batch_size;    // Batch size for inference (must match engine batch size)
     
-    EngineConfig() : num_detectors(4), type(ModelType::DETECTION) {}
-    EngineConfig(const std::string& p, int num_det, const std::string& n = "", ModelType t = ModelType::DETECTION)
-        : path(p), num_detectors(num_det), name(n), type(t) {}
+    EngineConfig() : num_detectors(4), type(ModelType::DETECTION), batch_size(1) {}
+    EngineConfig(const std::string& p, int num_det, const std::string& n = "", 
+                 ModelType t = ModelType::DETECTION, int batch = 1)
+        : path(p), num_detectors(num_det), name(n), type(t), batch_size(batch) {}
 };
 
 class ConfigParser {

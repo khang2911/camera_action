@@ -32,17 +32,19 @@ struct Detection {
 
 class YOLODetector {
 public:
-    YOLODetector(const std::string& engine_path, ModelType model_type = ModelType::DETECTION);
+    YOLODetector(const std::string& engine_path, ModelType model_type = ModelType::DETECTION, int batch_size = 1);
     ~YOLODetector();
     
     bool initialize();
     bool detect(const std::vector<float>& input_data, const std::string& output_path);
     
     ModelType getModelType() const { return model_type_; }
+    int getBatchSize() const { return batch_size_; }
     
 private:
     std::string engine_path_;
     ModelType model_type_;
+    int batch_size_;
     nvinfer1::IRuntime* runtime_;
     nvinfer1::ICudaEngine* engine_;
     nvinfer1::IExecutionContext* context_;

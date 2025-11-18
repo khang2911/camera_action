@@ -5,11 +5,11 @@
 #include <algorithm>
 #include <numeric>
 
-YOLODetector::YOLODetector(const std::string& engine_path, ModelType model_type)
-    : engine_path_(engine_path), model_type_(model_type), runtime_(nullptr), engine_(nullptr),
-      context_(nullptr), input_buffer_(nullptr), output_buffer_(nullptr),
-      input_size_(0), output_size_(0), output_height_(0), output_width_(0),
-      num_anchors_(0), num_classes_(0), output_channels_(0),
+YOLODetector::YOLODetector(const std::string& engine_path, ModelType model_type, int batch_size)
+    : engine_path_(engine_path), model_type_(model_type), batch_size_(batch_size),
+      runtime_(nullptr), engine_(nullptr), context_(nullptr), input_buffer_(nullptr), 
+      output_buffer_(nullptr), input_size_(0), output_size_(0), output_height_(0), 
+      output_width_(0), num_anchors_(0), num_classes_(0), output_channels_(0),
       conf_threshold_(0.25f), nms_threshold_(0.45f), max_detections_(300) {
     cudaStreamCreate(&stream_);
 }
@@ -146,6 +146,19 @@ bool YOLODetector::initialize() {
     if (!loadEngine()) {
         return false;
     }
+    
+    // Verify batch size matches engine batch size
+    if (engine_) {
+        auto input_dims = engine_->getBindingDimensions(0);
+        int engine_batch_size = input_dims.d[0];
+        if (engine_batch_size != batch_size_) {
+            std::cerr << "Warning: Engine batch size (" << engine_batch_size 
+                      << ") does not match config batch size (" << batch_size_ 
+                      << "). Using engine batch size." << std::endl;
+            batch_size_ = engine_batch_size;
+        }
+    }
+    
     allocateBuffers();
     return true;
 }

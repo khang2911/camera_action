@@ -7,14 +7,17 @@ models:
     num_detectors: 4                      # Number of detector threads for this engine
     name: "model1"                        # Optional: name identifier for output files
     type: "detection"                     # Model type: "detection" or "pose"
+    batch_size: 1                         # Batch size for inference (must match engine batch size)
   - path: "/path/to/yolo_engine2.engine"
     num_detectors: 4
     name: "model2"
     type: "detection"
+    batch_size: 1
   - path: "/path/to/yolo_pose.engine"     # YOLO Pose model
     num_detectors: 4
     name: "pose_model"
     type: "pose"                          # Pose model outputs keypoints
+    batch_size: 1
 
 # Video Sources
 videos:

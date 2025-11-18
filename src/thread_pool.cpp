@@ -45,13 +45,14 @@ ThreadPool::ThreadPool(int num_readers,
         
         // Initialize detectors for this engine
         for (int j = 0; j < config.num_detectors; ++j) {
-            auto detector = std::make_unique<YOLODetector>(config.path, config.type);
+            auto detector = std::make_unique<YOLODetector>(config.path, config.type, config.batch_size);
             if (!detector->initialize()) {
                 LOG_ERROR("ThreadPool", "Failed to initialize detector " + std::to_string(j) + 
                          " for engine " + config.name);
             } else {
                 std::string type_str = (config.type == ModelType::POSE) ? "pose" : "detection";
                 LOG_DEBUG("ThreadPool", "Detector " + std::to_string(j) + " (" + type_str + 
+                         ", batch_size=" + std::to_string(detector->getBatchSize()) + 
                          ") initialized for engine " + config.name);
             }
             engine_group->detectors.push_back(std::move(detector));

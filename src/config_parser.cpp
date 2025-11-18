@@ -43,6 +43,14 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
                     } else {
                         engine_config.type = ModelType::DETECTION;  // Default to detection
                     }
+                    
+                    // Parse batch size
+                    if (model_node["batch_size"]) {
+                        engine_config.batch_size = model_node["batch_size"].as<int>();
+                    } else {
+                        engine_config.batch_size = 1;  // Default to batch size 1
+                    }
+                    
                     engine_configs_.push_back(engine_config);
                 }
             }
@@ -62,6 +70,11 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
                 engine_config.type = (type_str == "pose") ? ModelType::POSE : ModelType::DETECTION;
             } else {
                 engine_config.type = ModelType::DETECTION;  // Default to detection
+            }
+            if (config["model"]["batch_size"]) {
+                engine_config.batch_size = config["model"]["batch_size"].as<int>();
+            } else {
+                engine_config.batch_size = 1;  // Default to batch size 1
             }
             engine_config.name = "engine0";
             engine_configs_.push_back(engine_config);
