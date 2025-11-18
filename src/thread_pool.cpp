@@ -340,8 +340,10 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
         );
         
         // Run YOLO detection on GPU (TensorRT) - frame will be preprocessed by detector
+        // Note: Multiple detector threads may write to the same file (same video+engine)
+        // File writes are protected by per-file mutex inside writeDetectionsToFile
         bool success = engine_group->detectors[detector_id]->detect(
-            frame_data.frame, output_path
+            frame_data.frame, output_path, frame_data.frame_number
         );
         
         if (success) {
@@ -465,11 +467,10 @@ void ThreadPool::getStatisticsSnapshot(long long& frames_read, long long& frames
 std::string ThreadPool::generateOutputPath(int video_id, int frame_number, 
                                             int engine_id, int detector_id, 
                                             const std::string& engine_name) {
+    // Generate path for one file per video per engine (frame_number and detector_id not used in path)
     std::ostringstream oss;
     oss << output_dir_ << "/video_" << std::setfill('0') << std::setw(4) << video_id
-        << "_frame_" << std::setfill('0') << std::setw(6) << frame_number
-        << "_" << engine_name
-        << "_detector_" << detector_id << ".bin";
+        << "_" << engine_name << ".bin";
     return oss.str();
 }
 

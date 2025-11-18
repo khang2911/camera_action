@@ -4,6 +4,9 @@
 #include <cstring>
 #include <algorithm>
 #include <numeric>
+#include <filesystem>
+#include <unordered_map>
+#include <mutex>
 
 // Simple TensorRT Logger implementation
 class TensorRTLogger : public nvinfer1::ILogger {
@@ -17,6 +20,10 @@ public:
 };
 
 static TensorRTLogger gLogger;
+
+// Static mutex map for thread-safe file writing (one mutex per file path)
+static std::unordered_map<std::string, std::unique_ptr<std::mutex>> file_mutexes;
+static std::mutex file_mutexes_map_mutex;  // Protects the map itself
 
 YOLODetector::YOLODetector(const std::string& engine_path, ModelType model_type, int batch_size,
                            int input_width, int input_height, float conf_threshold, 
@@ -190,7 +197,7 @@ bool YOLODetector::initialize() {
     return true;
 }
 
-bool YOLODetector::detect(const cv::Mat& frame, const std::string& output_path) {
+bool YOLODetector::detect(const cv::Mat& frame, const std::string& output_path, int frame_number) {
     if (!context_ || !input_buffer_ || !output_buffer_) {
         std::cerr << "Error: Detector not initialized" << std::endl;
         return false;
@@ -237,7 +244,10 @@ bool YOLODetector::detect(const cv::Mat& frame, const std::string& output_path) 
     }
     
     // Write parsed detections to file
-    return writeDetectionsToFile(detections, output_path);
+    // Frame number is not available here, will be passed separately
+    // For now, we'll need to modify the detect signature or pass it differently
+    // Let's check how it's called
+    return writeDetectionsToFile(detections, output_path, frame_number);
 }
 
 std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<float>& output_data) {
@@ -421,17 +431,53 @@ float YOLODetector::calculateIoU(const float* box1, const float* box2) {
     return inter_area / union_area;
 }
 
-bool YOLODetector::writeDetectionsToFile(const std::vector<Detection>& detections, const std::string& output_path) {
-    std::ofstream out_file(output_path, std::ios::binary);
+bool YOLODetector::writeDetectionsToFile(const std::vector<Detection>& detections, const std::string& output_path, int frame_number) {
+    // Get or create mutex for this file path (thread-safe)
+    std::mutex* file_mutex = nullptr;
+    {
+        std::lock_guard<std::mutex> map_lock(file_mutexes_map_mutex);
+        if (file_mutexes.find(output_path) == file_mutexes.end()) {
+            file_mutexes[output_path] = std::make_unique<std::mutex>();
+        }
+        file_mutex = file_mutexes[output_path].get();
+    }
+    
+    // Lock this specific file for writing
+    std::lock_guard<std::mutex> file_lock(*file_mutex);
+    
+    // Open file in append mode (ios::app) for binary writing
+    // Use ios::ate to seek to end, then ios::in|ios::out|ios::binary for read/write
+    std::fstream out_file(output_path, std::ios::in | std::ios::out | std::ios::binary | std::ios::ate);
+    
+    // If file doesn't exist, create it and write header
+    bool file_exists = out_file.is_open();
+    if (!file_exists) {
+        out_file.open(output_path, std::ios::out | std::ios::binary);
+        if (!out_file.is_open()) {
+            std::cerr << "Error: Cannot create output file: " << output_path << std::endl;
+            return false;
+        }
+        // Write header: model type (written once at file creation)
+        int model_type_int = static_cast<int>(model_type_);
+        out_file.write(reinterpret_cast<const char*>(&model_type_int), sizeof(int));
+        out_file.close();
+        // Reopen in append mode
+        out_file.open(output_path, std::ios::in | std::ios::out | std::ios::binary | std::ios::ate);
+    }
+    
     if (!out_file.is_open()) {
         std::cerr << "Error: Cannot open output file: " << output_path << std::endl;
         return false;
     }
     
-    // Write header: model type, number of detections
-    int model_type_int = static_cast<int>(model_type_);
+    // Seek to end for appending
+    out_file.seekp(0, std::ios::end);
+    
+    // Write frame number
+    out_file.write(reinterpret_cast<const char*>(&frame_number), sizeof(int));
+    
+    // Write number of detections for this frame
     int num_dets = static_cast<int>(detections.size());
-    out_file.write(reinterpret_cast<const char*>(&model_type_int), sizeof(int));
     out_file.write(reinterpret_cast<const char*>(&num_dets), sizeof(int));
     
     // Write each detection

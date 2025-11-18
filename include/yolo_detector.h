@@ -40,7 +40,7 @@ public:
     ~YOLODetector();
     
     bool initialize();
-    bool detect(const cv::Mat& frame, const std::string& output_path);
+    bool detect(const cv::Mat& frame, const std::string& output_path, int frame_number);
     
     ModelType getModelType() const { return model_type_; }
     int getBatchSize() const { return batch_size_; }
@@ -95,7 +95,7 @@ private:
     float calculateIoU(const float* box1, const float* box2);
     
     // Write results to binary file
-    bool writeDetectionsToFile(const std::vector<Detection>& detections, const std::string& output_path);
+    bool writeDetectionsToFile(const std::vector<Detection>& detections, const std::string& output_path, int frame_number);
 };
 
 #endif // YOLO_DETECTOR_H
