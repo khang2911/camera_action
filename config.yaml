@@ -8,16 +8,28 @@ models:
     name: "model1"                        # Optional: name identifier for output files
     type: "detection"                     # Model type: "detection" or "pose"
     batch_size: 1                         # Batch size for inference (must match engine batch size)
+    input_width: 640                      # Input image width
+    input_height: 640                     # Input image height
+    conf_threshold: 0.25                  # Confidence threshold (0.0-1.0)
+    nms_threshold: 0.45                  # NMS IoU threshold (0.0-1.0)
   - path: "/path/to/yolo_engine2.engine"
     num_detectors: 4
     name: "model2"
     type: "detection"
     batch_size: 1
+    input_width: 640
+    input_height: 640
+    conf_threshold: 0.3
+    nms_threshold: 0.5
   - path: "/path/to/yolo_pose.engine"     # YOLO Pose model
     num_detectors: 4
     name: "pose_model"
     type: "pose"                          # Pose model outputs keypoints
     batch_size: 1
+    input_width: 640
+    input_height: 640
+    conf_threshold: 0.25
+    nms_threshold: 0.45
 
 # Video Sources
 videos:

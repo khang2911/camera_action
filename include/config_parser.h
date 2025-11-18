@@ -15,11 +15,18 @@ struct EngineConfig {
     std::string name;  // Optional name identifier
     ModelType type;    // Model type: detection or pose
     int batch_size;    // Batch size for inference (must match engine batch size)
+    int input_width;   // Input image width
+    int input_height;  // Input image height
+    float conf_threshold;  // Confidence threshold (0.0-1.0)
+    float nms_threshold;  // NMS IoU threshold (0.0-1.0)
     
-    EngineConfig() : num_detectors(4), type(ModelType::DETECTION), batch_size(1) {}
+    EngineConfig() : num_detectors(4), type(ModelType::DETECTION), batch_size(1),
+                     input_width(640), input_height(640), conf_threshold(0.25f), nms_threshold(0.45f) {}
     EngineConfig(const std::string& p, int num_det, const std::string& n = "", 
-                 ModelType t = ModelType::DETECTION, int batch = 1)
-        : path(p), num_detectors(num_det), name(n), type(t), batch_size(batch) {}
+                 ModelType t = ModelType::DETECTION, int batch = 1,
+                 int in_w = 640, int in_h = 640, float conf = 0.25f, float nms = 0.45f)
+        : path(p), num_detectors(num_det), name(n), type(t), batch_size(batch),
+          input_width(in_w), input_height(in_h), conf_threshold(conf), nms_threshold(nms) {}
 };
 
 class ConfigParser {

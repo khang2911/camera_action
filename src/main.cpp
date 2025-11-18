@@ -106,7 +106,11 @@ int main(int argc, char* argv[]) {
         LOG_INFO("Main", "Engine " + std::to_string(i) + " (" + engine_configs[i].name + "): " + 
                  engine_configs[i].path + " [type=" + type_str + 
                  ", detectors=" + std::to_string(engine_configs[i].num_detectors) + 
-                 ", batch_size=" + std::to_string(engine_configs[i].batch_size) + "]");
+                 ", batch_size=" + std::to_string(engine_configs[i].batch_size) +
+                 ", input_size=" + std::to_string(engine_configs[i].input_width) + "x" + 
+                 std::to_string(engine_configs[i].input_height) +
+                 ", conf_threshold=" + std::to_string(engine_configs[i].conf_threshold) +
+                 ", nms_threshold=" + std::to_string(engine_configs[i].nms_threshold) + "]");
     }
     LOG_INFO("Main", "Output directory: " + output_dir);
     LOG_INFO("Main", "Number of videos: " + std::to_string(video_paths.size()));

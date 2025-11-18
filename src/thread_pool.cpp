@@ -44,14 +44,22 @@ ThreadPool::ThreadPool(int num_readers,
         
         // Initialize detectors for this engine
         for (int j = 0; j < config.num_detectors; ++j) {
-            auto detector = std::make_unique<YOLODetector>(config.path, config.type, config.batch_size);
+            auto detector = std::make_unique<YOLODetector>(
+                config.path, config.type, config.batch_size,
+                config.input_width, config.input_height,
+                config.conf_threshold, config.nms_threshold
+            );
             if (!detector->initialize()) {
                 LOG_ERROR("ThreadPool", "Failed to initialize detector " + std::to_string(j) + 
                          " for engine " + config.name);
             } else {
                 std::string type_str = (config.type == ModelType::POSE) ? "pose" : "detection";
                 LOG_DEBUG("ThreadPool", "Detector " + std::to_string(j) + " (" + type_str + 
-                         ", batch_size=" + std::to_string(detector->getBatchSize()) + 
+                         ", batch_size=" + std::to_string(detector->getBatchSize()) +
+                         ", input_size=" + std::to_string(detector->getInputWidth()) + "x" + 
+                         std::to_string(detector->getInputHeight()) +
+                         ", conf_threshold=" + std::to_string(config.conf_threshold) +
+                         ", nms_threshold=" + std::to_string(config.nms_threshold) +
                          ") initialized for engine " + config.name);
             }
             engine_group->detectors.push_back(std::move(detector));
@@ -174,7 +182,6 @@ int ThreadPool::getNextVideo() {
 }
 
 void ThreadPool::readerWorker(int reader_id) {
-    Preprocessor preprocessor;
     LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + " started");
     
     // Each reader thread processes videos until all are done
@@ -200,16 +207,13 @@ void ThreadPool::readerWorker(int reader_id) {
         cv::Mat frame;
         int frame_count = 0;
         while (!stop_flag_ && reader.readFrame(frame)) {
-            // Preprocess frame (CPU only): padding, resize to 640x640, normalize by 255
-            std::vector<float> processed_data = preprocessor.preprocessToFloat(frame);
-            
             stats_.frames_read++;
-            stats_.frames_preprocessed++;
+            stats_.frames_preprocessed++;  // Count as preprocessed (will be done per-engine)
             
-            // Create frame data with preprocessed float data
-            FrameData frame_data(processed_data, video_id, reader.getFrameNumber(), video_paths_[video_id]);
+            // Create frame data with original frame (each engine will preprocess with its own size)
+            FrameData frame_data(frame, video_id, reader.getFrameNumber(), video_paths_[video_id]);
             
-            // Push preprocessed data to ALL engine queues (each frame goes through all engines)
+            // Push original frame to ALL engine queues (each frame goes through all engines)
             for (auto& engine_group : engine_groups_) {
                 engine_group->frame_queue->push(frame_data);
             }
@@ -261,9 +265,9 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             engine_group->engine_name
         );
         
-        // Run YOLO detection on GPU (TensorRT) - data is already preprocessed
+        // Run YOLO detection on GPU (TensorRT) - frame will be preprocessed by detector
         bool success = engine_group->detectors[detector_id]->detect(
-            frame_data.preprocessed_data, output_path
+            frame_data.frame, output_path
         );
         
         if (success) {

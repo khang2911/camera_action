@@ -18,13 +18,16 @@ public:
 
 static TensorRTLogger gLogger;
 
-YOLODetector::YOLODetector(const std::string& engine_path, ModelType model_type, int batch_size)
+YOLODetector::YOLODetector(const std::string& engine_path, ModelType model_type, int batch_size,
+                           int input_width, int input_height, float conf_threshold, float nms_threshold)
     : engine_path_(engine_path), model_type_(model_type), batch_size_(batch_size),
+      input_width_(input_width), input_height_(input_height),
       runtime_(nullptr), engine_(nullptr), context_(nullptr), input_buffer_(nullptr), 
       output_buffer_(nullptr), input_size_(0), output_size_(0), output_height_(0), 
       output_width_(0), num_anchors_(0), num_classes_(0), output_channels_(0),
-      conf_threshold_(0.25f), nms_threshold_(0.45f), max_detections_(300) {
+      conf_threshold_(conf_threshold), nms_threshold_(nms_threshold), max_detections_(300) {
     cudaStreamCreate(&stream_);
+    preprocessor_ = std::make_unique<Preprocessor>(input_width_, input_height_);
 }
 
 YOLODetector::~YOLODetector() {
@@ -176,11 +179,14 @@ bool YOLODetector::initialize() {
     return true;
 }
 
-bool YOLODetector::detect(const std::vector<float>& input_data, const std::string& output_path) {
+bool YOLODetector::detect(const cv::Mat& frame, const std::string& output_path) {
     if (!context_ || !input_buffer_ || !output_buffer_) {
         std::cerr << "Error: Detector not initialized" << std::endl;
         return false;
     }
+    
+    // Preprocess frame for this engine's input size
+    std::vector<float> input_data = preprocessor_->preprocessToFloat(frame);
     
     // Copy input data to GPU
     cudaMemcpyAsync(input_buffer_, input_data.data(), input_size_, cudaMemcpyHostToDevice, stream_);

@@ -8,14 +8,14 @@
 #include <memory>
 
 struct FrameData {
-    std::vector<float> preprocessed_data;  // Preprocessed float data (CHW format)
+    cv::Mat frame;  // Original frame (will be preprocessed per engine)
     int video_id;
     int frame_number;
     std::string video_path;
     
     FrameData() : video_id(-1), frame_number(-1) {}
-    FrameData(const std::vector<float>& data, int vid_id, int fnum, const std::string& vpath)
-        : preprocessed_data(data), video_id(vid_id), frame_number(fnum), video_path(vpath) {}
+    FrameData(const cv::Mat& f, int vid_id, int fnum, const std::string& vpath)
+        : frame(f), video_id(vid_id), frame_number(fnum), video_path(vpath) {}
 };
 
 class FrameQueue {

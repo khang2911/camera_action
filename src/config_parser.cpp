@@ -51,6 +51,30 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
                         engine_config.batch_size = 1;  // Default to batch size 1
                     }
                     
+                    // Parse input dimensions
+                    if (model_node["input_width"]) {
+                        engine_config.input_width = model_node["input_width"].as<int>();
+                    } else {
+                        engine_config.input_width = 640;  // Default to 640
+                    }
+                    if (model_node["input_height"]) {
+                        engine_config.input_height = model_node["input_height"].as<int>();
+                    } else {
+                        engine_config.input_height = 640;  // Default to 640
+                    }
+                    
+                    // Parse confidence and NMS thresholds
+                    if (model_node["conf_threshold"]) {
+                        engine_config.conf_threshold = model_node["conf_threshold"].as<float>();
+                    } else {
+                        engine_config.conf_threshold = 0.25f;  // Default to 0.25
+                    }
+                    if (model_node["nms_threshold"]) {
+                        engine_config.nms_threshold = model_node["nms_threshold"].as<float>();
+                    } else {
+                        engine_config.nms_threshold = 0.45f;  // Default to 0.45
+                    }
+                    
                     engine_configs_.push_back(engine_config);
                 }
             }
@@ -75,6 +99,26 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
                 engine_config.batch_size = config["model"]["batch_size"].as<int>();
             } else {
                 engine_config.batch_size = 1;  // Default to batch size 1
+            }
+            if (config["model"]["input_width"]) {
+                engine_config.input_width = config["model"]["input_width"].as<int>();
+            } else {
+                engine_config.input_width = 640;  // Default to 640
+            }
+            if (config["model"]["input_height"]) {
+                engine_config.input_height = config["model"]["input_height"].as<int>();
+            } else {
+                engine_config.input_height = 640;  // Default to 640
+            }
+            if (config["model"]["conf_threshold"]) {
+                engine_config.conf_threshold = config["model"]["conf_threshold"].as<float>();
+            } else {
+                engine_config.conf_threshold = 0.25f;  // Default to 0.25
+            }
+            if (config["model"]["nms_threshold"]) {
+                engine_config.nms_threshold = config["model"]["nms_threshold"].as<float>();
+            } else {
+                engine_config.nms_threshold = 0.45f;  // Default to 0.45
             }
             engine_config.name = "engine0";
             engine_configs_.push_back(engine_config);

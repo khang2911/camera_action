@@ -6,7 +6,9 @@
 #include <memory>
 #include <NvInfer.h>
 #include <cuda_runtime.h>
+#include <opencv2/opencv.hpp>
 #include "config_parser.h"
+#include "preprocessor.h"
 
 // Pose keypoint structure
 struct Keypoint {
@@ -32,19 +34,25 @@ struct Detection {
 
 class YOLODetector {
 public:
-    YOLODetector(const std::string& engine_path, ModelType model_type = ModelType::DETECTION, int batch_size = 1);
+    YOLODetector(const std::string& engine_path, ModelType model_type = ModelType::DETECTION, 
+                 int batch_size = 1, int input_width = 640, int input_height = 640,
+                 float conf_threshold = 0.25f, float nms_threshold = 0.45f);
     ~YOLODetector();
     
     bool initialize();
-    bool detect(const std::vector<float>& input_data, const std::string& output_path);
+    bool detect(const cv::Mat& frame, const std::string& output_path);
     
     ModelType getModelType() const { return model_type_; }
     int getBatchSize() const { return batch_size_; }
+    int getInputWidth() const { return input_width_; }
+    int getInputHeight() const { return input_height_; }
     
 private:
     std::string engine_path_;
     ModelType model_type_;
     int batch_size_;
+    int input_width_;
+    int input_height_;
     nvinfer1::IRuntime* runtime_;
     nvinfer1::ICudaEngine* engine_;
     nvinfer1::IExecutionContext* context_;
@@ -66,6 +74,9 @@ private:
     float conf_threshold_;
     float nms_threshold_;
     int max_detections_;
+    
+    // Preprocessor for this detector
+    std::unique_ptr<Preprocessor> preprocessor_;
     
     bool loadEngine();
     void allocateBuffers();
