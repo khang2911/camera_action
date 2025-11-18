@@ -5,6 +5,19 @@
 #include <algorithm>
 #include <numeric>
 
+// Simple TensorRT Logger implementation
+class TensorRTLogger : public nvinfer1::ILogger {
+public:
+    void log(Severity severity, const char* msg) noexcept override {
+        // Suppress INFO and VERBOSE messages, only show WARNING and ERROR
+        if (severity == Severity::kWARNING || severity == Severity::kERROR) {
+            std::cerr << "[TensorRT] " << msg << std::endl;
+        }
+    }
+};
+
+static TensorRTLogger gLogger;
+
 YOLODetector::YOLODetector(const std::string& engine_path, ModelType model_type, int batch_size)
     : engine_path_(engine_path), model_type_(model_type), batch_size_(batch_size),
       runtime_(nullptr), engine_(nullptr), context_(nullptr), input_buffer_(nullptr), 
@@ -45,7 +58,7 @@ bool YOLODetector::loadEngine() {
     file.read(engine_data.data(), size);
     file.close();
     
-    runtime_ = nvinfer1::createInferRuntime(nvinfer1::Logger{});
+    runtime_ = nvinfer1::createInferRuntime(gLogger);
     if (!runtime_) {
         std::cerr << "Error: Failed to create TensorRT runtime" << std::endl;
         return false;

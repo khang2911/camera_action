@@ -16,11 +16,10 @@ ThreadPool::ThreadPool(int num_readers,
       output_dir_(output_dir), stop_flag_(false) {
     
     // Initialize statistics
-    stats_.frames_detected.resize(engine_configs.size());
-    stats_.frames_failed.resize(engine_configs.size());
-    for (size_t i = 0; i < engine_configs.size(); ++i) {
-        stats_.frames_detected[i] = 0;
-        stats_.frames_failed[i] = 0;
+    {
+        std::lock_guard<std::mutex> lock(stats_.stats_mutex);
+        stats_.frames_detected.resize(engine_configs.size(), 0);
+        stats_.frames_failed.resize(engine_configs.size(), 0);
     }
     stats_.start_time = std::chrono::steady_clock::now();
     
@@ -74,9 +73,12 @@ void ThreadPool::start() {
     stats_.start_time = std::chrono::steady_clock::now();
     stats_.frames_read = 0;
     stats_.frames_preprocessed = 0;
-    for (size_t i = 0; i < stats_.frames_detected.size(); ++i) {
-        stats_.frames_detected[i] = 0;
-        stats_.frames_failed[i] = 0;
+    {
+        std::lock_guard<std::mutex> lock(stats_.stats_mutex);
+        for (size_t i = 0; i < stats_.frames_detected.size(); ++i) {
+            stats_.frames_detected[i] = 0;
+            stats_.frames_failed[i] = 0;
+        }
     }
     
     // Reset video processed flags
@@ -262,7 +264,10 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
         );
         
         if (success) {
-            stats_.frames_detected[engine_id]++;
+            {
+                std::lock_guard<std::mutex> lock(stats_.stats_mutex);
+                stats_.frames_detected[engine_id]++;
+            }
             processed_count++;
             LOG_DEBUG("Detector", "Detection completed: " + output_path + 
                      " (Video: " + std::to_string(frame_data.video_id) + 
@@ -270,7 +275,10 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                      ", Engine: " + engine_group->engine_name +
                      ", Detector: " + std::to_string(detector_id) + ")");
         } else {
-            stats_.frames_failed[engine_id]++;
+            {
+                std::lock_guard<std::mutex> lock(stats_.stats_mutex);
+                stats_.frames_failed[engine_id]++;
+            }
             LOG_ERROR("Detector", "Detection failed: " + output_path);
         }
         
@@ -323,16 +331,19 @@ void ThreadPool::monitorWorker() {
         stats_oss << std::endl;
         
         // Per-engine statistics
-        for (size_t i = 0; i < engine_groups_.size(); ++i) {
-            long long detected = stats_.frames_detected[i].load();
-            long long failed = stats_.frames_failed[i].load();
-            stats_oss << "Engine " << engine_groups_[i]->engine_name 
-                      << ": Detected=" << detected 
-                      << " | Failed=" << failed;
-            if (elapsed > 0) {
-                stats_oss << " | FPS=" << (detected / elapsed);
+        {
+            std::lock_guard<std::mutex> lock(stats_.stats_mutex);
+            for (size_t i = 0; i < engine_groups_.size(); ++i) {
+                long long detected = stats_.frames_detected[i];
+                long long failed = stats_.frames_failed[i];
+                stats_oss << "Engine " << engine_groups_[i]->engine_name 
+                          << ": Detected=" << detected 
+                          << " | Failed=" << failed;
+                if (elapsed > 0) {
+                    stats_oss << " | FPS=" << (detected / elapsed);
+                }
+                stats_oss << std::endl;
             }
-            stats_oss << std::endl;
         }
         
         LOG_STATS("Monitor", stats_oss.str());
@@ -347,11 +358,14 @@ void ThreadPool::getStatisticsSnapshot(long long& frames_read, long long& frames
                                       std::chrono::steady_clock::time_point& start_time) const {
     frames_read = stats_.frames_read.load();
     frames_preprocessed = stats_.frames_preprocessed.load();
-    frames_detected.resize(stats_.frames_detected.size());
-    frames_failed.resize(stats_.frames_failed.size());
-    for (size_t i = 0; i < stats_.frames_detected.size(); ++i) {
-        frames_detected[i] = stats_.frames_detected[i].load();
-        frames_failed[i] = stats_.frames_failed[i].load();
+    {
+        std::lock_guard<std::mutex> lock(stats_.stats_mutex);
+        frames_detected.resize(stats_.frames_detected.size());
+        frames_failed.resize(stats_.frames_failed.size());
+        for (size_t i = 0; i < stats_.frames_detected.size(); ++i) {
+            frames_detected[i] = stats_.frames_detected[i];
+            frames_failed[i] = stats_.frames_failed[i];
+        }
     }
     start_time = stats_.start_time;
 }

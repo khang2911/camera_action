@@ -45,8 +45,10 @@ public:
     struct Statistics {
         std::atomic<long long> frames_read{0};
         std::atomic<long long> frames_preprocessed{0};
-        std::vector<std::atomic<long long>> frames_detected;  // per engine
-        std::vector<std::atomic<long long>> frames_failed;    // per engine
+        // Use regular long long with mutex for per-engine stats (atomic vectors are not resizable)
+        mutable std::mutex stats_mutex;
+        std::vector<long long> frames_detected;  // per engine
+        std::vector<long long> frames_failed;    // per engine
         std::chrono::steady_clock::time_point start_time;
     };
     
