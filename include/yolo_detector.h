@@ -40,7 +40,9 @@ public:
     ~YOLODetector();
     
     bool initialize();
+    // Detect single frame (for batch_size=1) or batch of frames (for batch_size>1)
     bool detect(const cv::Mat& frame, const std::string& output_path, int frame_number);
+    bool detectBatch(const std::vector<cv::Mat>& frames, const std::vector<std::string>& output_paths, const std::vector<int>& frame_numbers);
     
     ModelType getModelType() const { return model_type_; }
     int getBatchSize() const { return batch_size_; }

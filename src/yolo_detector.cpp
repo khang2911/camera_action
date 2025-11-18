@@ -198,19 +198,52 @@ bool YOLODetector::initialize() {
 }
 
 bool YOLODetector::detect(const cv::Mat& frame, const std::string& output_path, int frame_number) {
+    // For batch_size=1, process single frame using detectBatch
+    if (batch_size_ == 1) {
+        return detectBatch({frame}, {output_path}, {frame_number});
+    } else {
+        // For batch_size > 1, this should not be called directly
+        // Use detectBatch instead
+        std::cerr << "Error: detect() called with batch_size=" << batch_size_ 
+                  << ". Use detectBatch() instead." << std::endl;
+        return false;
+    }
+}
+
+bool YOLODetector::detectBatch(const std::vector<cv::Mat>& frames, 
+                                const std::vector<std::string>& output_paths, 
+                                const std::vector<int>& frame_numbers) {
     if (!context_ || !input_buffer_ || !output_buffer_) {
         std::cerr << "Error: Detector not initialized" << std::endl;
+        return false;
+    }
+    
+    if (frames.size() != static_cast<size_t>(batch_size_)) {
+        std::cerr << "Error: Expected " << batch_size_ << " frames, got " << frames.size() << std::endl;
+        return false;
+    }
+    
+    if (output_paths.size() != frames.size() || frame_numbers.size() != frames.size()) {
+        std::cerr << "Error: Mismatch between frames, output_paths, and frame_numbers sizes" << std::endl;
         return false;
     }
     
     // Set CUDA device for this detector (important for multi-GPU setups)
     cudaSetDevice(gpu_id_);
     
-    // Preprocess frame for this engine's input size
-    std::vector<float> input_data = preprocessor_->preprocessToFloat(frame);
+    // Preprocess all frames and concatenate into batch
+    size_t single_frame_size = input_width_ * input_height_ * 3;  // CHW format: 3 channels
+    std::vector<float> batch_data(batch_size_ * single_frame_size);
     
-    // Copy input data to GPU
-    cudaMemcpyAsync(input_buffer_, input_data.data(), input_size_, cudaMemcpyHostToDevice, stream_);
+    for (int b = 0; b < batch_size_; ++b) {
+        std::vector<float> frame_data = preprocessor_->preprocessToFloat(frames[b]);
+        // Copy frame data to batch at correct offset
+        std::copy(frame_data.begin(), frame_data.end(), 
+                  batch_data.begin() + b * single_frame_size);
+    }
+    
+    // Copy batch data to GPU
+    cudaMemcpyAsync(input_buffer_, batch_data.data(), input_size_, cudaMemcpyHostToDevice, stream_);
     
     // Prepare bindings array (input at index 0, output at index 1)
     void* bindings[] = {input_buffer_, output_buffer_};
@@ -227,27 +260,53 @@ bool YOLODetector::detect(const cv::Mat& frame, const std::string& output_path, 
     cudaMemcpyAsync(output_data.data(), output_buffer_, output_size_, cudaMemcpyDeviceToHost, stream_);
     cudaStreamSynchronize(stream_);
     
-    // Parse raw YOLO output (without NMS) based on model type
-    std::vector<Detection> detections;
-    if (model_type_ == ModelType::POSE) {
-        detections = parseRawPoseOutput(output_data);
-    } else {
-        detections = parseRawDetectionOutput(output_data);
+    // Process each frame in the batch
+    // Output format: [batch, num_anchors, channels] or flattened [batch * num_anchors * channels]
+    // num_anchors_ and output_channels_ are already set correctly (they don't include batch dimension)
+    size_t output_per_frame = num_anchors_ * output_channels_;
+    
+    // Verify output size matches expected batch output
+    size_t expected_total_output = batch_size_ * output_per_frame;
+    if (output_data.size() != expected_total_output) {
+        std::cerr << "Error: Output size mismatch. Expected " << expected_total_output 
+                  << " elements, got " << output_data.size() << std::endl;
+        std::cerr << "  batch_size=" << batch_size_ << ", num_anchors_=" << num_anchors_ 
+                  << ", output_channels_=" << output_channels_ << std::endl;
+        return false;
     }
     
-    // Apply NMS to filter overlapping detections
-    detections = applyNMS(detections);
-    
-    // Limit to max_detections
-    if (static_cast<int>(detections.size()) > max_detections_) {
-        detections.resize(max_detections_);
+    for (int b = 0; b < batch_size_; ++b) {
+        // Extract output for this frame (slice from batch output)
+        std::vector<float> frame_output(output_per_frame);
+        size_t batch_offset = b * output_per_frame;
+        std::copy(output_data.begin() + batch_offset,
+                  output_data.begin() + batch_offset + output_per_frame,
+                  frame_output.begin());
+        
+        // Parse raw YOLO output (without NMS) based on model type
+        std::vector<Detection> detections;
+        if (model_type_ == ModelType::POSE) {
+            detections = parseRawPoseOutput(frame_output);
+        } else {
+            detections = parseRawDetectionOutput(frame_output);
+        }
+        
+        // Apply NMS to filter overlapping detections
+        detections = applyNMS(detections);
+        
+        // Limit to max_detections
+        if (static_cast<int>(detections.size()) > max_detections_) {
+            detections.resize(max_detections_);
+        }
+        
+        // Write parsed detections to file
+        if (!writeDetectionsToFile(detections, output_paths[b], frame_numbers[b])) {
+            std::cerr << "Error: Failed to write detections for frame " << frame_numbers[b] << std::endl;
+            return false;
+        }
     }
     
-    // Write parsed detections to file
-    // Frame number is not available here, will be passed separately
-    // For now, we'll need to modify the detect signature or pass it differently
-    // Let's check how it's called
-    return writeDetectionsToFile(detections, output_path, frame_number);
+    return true;
 }
 
 std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<float>& output_data) {

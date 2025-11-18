@@ -313,73 +313,153 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
     int processed_count = 0;
     auto last_wait_log = std::chrono::steady_clock::now();
     
+    // Get batch size for this detector
+    int batch_size = engine_group->detectors[detector_id]->getBatchSize();
+    
     while (!stop_flag_) {
-        // Pop preprocessed frame data from this engine's queue
-        if (!engine_group->frame_queue->pop(frame_data, 100)) {
-            if (stop_flag_) break;
+        // For batch_size > 1, accumulate frames into a batch
+        if (batch_size > 1) {
+            std::vector<cv::Mat> batch_frames;
+            std::vector<std::string> batch_output_paths;
+            std::vector<int> batch_frame_numbers;
             
-            // Log waiting status periodically (every 5 seconds)
-            auto now = std::chrono::steady_clock::now();
-            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_wait_log).count();
-            if (elapsed >= 5) {
-                LOG_INFO("Detector", "[WAITING] Detector " + std::to_string(detector_id) + 
-                         " (" + engine_group->engine_name + ") waiting for frames... " +
-                         "(Queue size: " + std::to_string(engine_group->frame_queue->size()) + ")");
-                last_wait_log = now;
-            }
-            continue;
-        }
-        
-        // Generate output path with engine name
-        std::string output_path = generateOutputPath(
-            frame_data.video_id, 
-            frame_data.frame_number, 
-            engine_id,
-            detector_id,
-            engine_group->engine_name
-        );
-        
-        // Run YOLO detection on GPU (TensorRT) - frame will be preprocessed by detector
-        // Note: Multiple detector threads may write to the same file (same video+engine)
-        // File writes are protected by per-file mutex inside writeDetectionsToFile
-        bool success = engine_group->detectors[detector_id]->detect(
-            frame_data.frame, output_path, frame_data.frame_number
-        );
-        
-        if (success) {
-            {
-                std::lock_guard<std::mutex> lock(stats_.stats_mutex);
-                stats_.frames_detected[engine_id]++;
-            }
-            processed_count++;
-            
-            // Print progress every 10 frames to show continuous operation
-            if (processed_count % 10 == 0) {
-                LOG_INFO("Detector", "[RUNNING] Detector " + std::to_string(detector_id) + 
-                         " (" + engine_group->engine_name + ") processed " + 
-                         std::to_string(processed_count) + " frames - " +
-                         "Video: " + std::to_string(frame_data.video_id) + 
-                         ", Frame: " + std::to_string(frame_data.frame_number));
+            // Collect batch_size frames
+            for (int b = 0; b < batch_size; ++b) {
+                if (!engine_group->frame_queue->pop(frame_data, 100)) {
+                    if (stop_flag_) break;
+                    
+                    // If we have some frames but not a full batch, process what we have
+                    if (!batch_frames.empty()) {
+                        // Pad with last frame or skip (for now, skip incomplete batches)
+                        LOG_DEBUG("Detector", "Incomplete batch (" + std::to_string(batch_frames.size()) + 
+                                 " frames), skipping...");
+                        batch_frames.clear();
+                        batch_output_paths.clear();
+                        batch_frame_numbers.clear();
+                    }
+                    
+                    // Log waiting status periodically (every 5 seconds)
+                    auto now = std::chrono::steady_clock::now();
+                    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_wait_log).count();
+                    if (elapsed >= 5) {
+                        LOG_INFO("Detector", "[WAITING] Detector " + std::to_string(detector_id) + 
+                                 " (" + engine_group->engine_name + ") waiting for frames... " +
+                                 "(Queue size: " + std::to_string(engine_group->frame_queue->size()) + ")");
+                        last_wait_log = now;
+                    }
+                    break;  // Break inner loop, continue outer loop
+                }
+                
+                // Generate output path with engine name
+                std::string output_path = generateOutputPath(
+                    frame_data.video_id, 
+                    frame_data.frame_number, 
+                    engine_id,
+                    detector_id,
+                    engine_group->engine_name
+                );
+                
+                batch_frames.push_back(frame_data.frame);
+                batch_output_paths.push_back(output_path);
+                batch_frame_numbers.push_back(frame_data.frame_number);
             }
             
-            LOG_DEBUG("Detector", "Detection completed: " + output_path + 
-                     " (Video: " + std::to_string(frame_data.video_id) + 
-                     ", Frame: " + std::to_string(frame_data.frame_number) + 
-                     ", Engine: " + engine_group->engine_name +
-                     ", Detector: " + std::to_string(detector_id) + ")");
+            // Process batch if we have enough frames
+            if (static_cast<int>(batch_frames.size()) == batch_size) {
+                bool success = engine_group->detectors[detector_id]->detectBatch(
+                    batch_frames, batch_output_paths, batch_frame_numbers
+                );
+                
+                if (success) {
+                    {
+                        std::lock_guard<std::mutex> lock(stats_.stats_mutex);
+                        stats_.frames_detected[engine_id] += batch_size;
+                    }
+                    processed_count += batch_size;
+                    
+                    // Print progress every 10 batches to show continuous operation
+                    if (processed_count % (10 * batch_size) == 0) {
+                        LOG_INFO("Detector", "[RUNNING] Detector " + std::to_string(detector_id) + 
+                                 " (" + engine_group->engine_name + ") processed " + 
+                                 std::to_string(processed_count) + " frames (batch_size=" + 
+                                 std::to_string(batch_size) + ")");
+                    }
+                } else {
+                    {
+                        std::lock_guard<std::mutex> lock(stats_.stats_mutex);
+                        stats_.frames_failed[engine_id] += batch_size;
+                    }
+                    LOG_ERROR("Detector", "Batch detection failed for " + std::to_string(batch_size) + " frames");
+                }
+            }
         } else {
-            {
-                std::lock_guard<std::mutex> lock(stats_.stats_mutex);
-                stats_.frames_failed[engine_id]++;
+            // batch_size = 1: process frames one at a time (original behavior)
+            if (!engine_group->frame_queue->pop(frame_data, 100)) {
+                if (stop_flag_) break;
+                
+                // Log waiting status periodically (every 5 seconds)
+                auto now = std::chrono::steady_clock::now();
+                auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_wait_log).count();
+                if (elapsed >= 5) {
+                    LOG_INFO("Detector", "[WAITING] Detector " + std::to_string(detector_id) + 
+                             " (" + engine_group->engine_name + ") waiting for frames... " +
+                             "(Queue size: " + std::to_string(engine_group->frame_queue->size()) + ")");
+                    last_wait_log = now;
+                }
+                continue;
             }
-            LOG_ERROR("Detector", "Detection failed: " + output_path);
-        }
-        
-        // Also log every 50 frames with summary
-        if (processed_count % 50 == 0) {
-            LOG_DEBUG("Detector", "Detector " + std::to_string(detector_id) + 
-                     " (" + engine_group->engine_name + ") processed " + 
-                     std::to_string(processed_count) + " frames");
+            
+            // Generate output path with engine name
+            std::string output_path = generateOutputPath(
+                frame_data.video_id, 
+                frame_data.frame_number, 
+                engine_id,
+                detector_id,
+                engine_group->engine_name
+            );
+            
+            // Run YOLO detection on GPU (TensorRT) - frame will be preprocessed by detector
+            // Note: Multiple detector threads may write to the same file (same video+engine)
+            // File writes are protected by per-file mutex inside writeDetectionsToFile
+            bool success = engine_group->detectors[detector_id]->detect(
+                frame_data.frame, output_path, frame_data.frame_number
+            );
+            
+            if (success) {
+                {
+                    std::lock_guard<std::mutex> lock(stats_.stats_mutex);
+                    stats_.frames_detected[engine_id]++;
+                }
+                processed_count++;
+                
+                // Print progress every 10 frames to show continuous operation
+                if (processed_count % 10 == 0) {
+                    LOG_INFO("Detector", "[RUNNING] Detector " + std::to_string(detector_id) + 
+                             " (" + engine_group->engine_name + ") processed " + 
+                             std::to_string(processed_count) + " frames - " +
+                             "Video: " + std::to_string(frame_data.video_id) + 
+                             ", Frame: " + std::to_string(frame_data.frame_number));
+                }
+                
+                LOG_DEBUG("Detector", "Detection completed: " + output_path + 
+                         " (Video: " + std::to_string(frame_data.video_id) + 
+                         ", Frame: " + std::to_string(frame_data.frame_number) + 
+                         ", Engine: " + engine_group->engine_name +
+                         ", Detector: " + std::to_string(detector_id) + ")");
+            } else {
+                {
+                    std::lock_guard<std::mutex> lock(stats_.stats_mutex);
+                    stats_.frames_failed[engine_id]++;
+                }
+                LOG_ERROR("Detector", "Detection failed: " + output_path);
+            }
+            
+            // Also log every 50 frames with summary
+            if (processed_count % 50 == 0) {
+                LOG_DEBUG("Detector", "Detector " + std::to_string(detector_id) + 
+                         " (" + engine_group->engine_name + ") processed " + 
+                         std::to_string(processed_count) + " frames");
+            }
         }
     }
     
