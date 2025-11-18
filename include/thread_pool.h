@@ -68,7 +68,7 @@ private:
     std::thread monitor_thread_;
     
     std::atomic<bool> stop_flag_;
-    std::vector<std::atomic<bool>> video_processed_;
+    std::vector<bool> video_processed_;  // Use regular bool with mutex (atomic vectors are not resizable)
     std::mutex video_mutex_;
     
     mutable Statistics stats_;

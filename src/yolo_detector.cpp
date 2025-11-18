@@ -185,17 +185,7 @@ bool YOLODetector::detect(const std::vector<float>& input_data, const std::strin
     // Copy input data to GPU
     cudaMemcpyAsync(input_buffer_, input_data.data(), input_size_, cudaMemcpyHostToDevice, stream_);
     
-    // Get binding indices
-    int input_index = -1, output_index = -1;
-    int num_bindings = engine_->getNbBindings();
-    for (int i = 0; i < num_bindings; ++i) {
-        if (engine_->bindingIsInput(i)) {
-            input_index = i;
-        } else {
-            output_index = i;
-        }
-    }
-    
+    // Prepare bindings array (input at index 0, output at index 1)
     void* bindings[] = {input_buffer_, output_buffer_};
     
     // Run inference

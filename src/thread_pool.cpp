@@ -27,9 +27,9 @@ ThreadPool::ThreadPool(int num_readers,
     std::filesystem::create_directories(output_dir);
     
     // Initialize video processed flags
-    video_processed_.resize(video_paths.size());
-    for (size_t i = 0; i < video_paths.size(); ++i) {
-        video_processed_[i] = false;
+    {
+        std::lock_guard<std::mutex> lock(video_mutex_);
+        video_processed_.resize(video_paths.size(), false);
     }
     
     // Initialize engine groups (one per engine)
@@ -82,8 +82,11 @@ void ThreadPool::start() {
     }
     
     // Reset video processed flags
-    for (size_t i = 0; i < video_processed_.size(); ++i) {
-        video_processed_[i] = false;
+    {
+        std::lock_guard<std::mutex> lock(video_mutex_);
+        for (size_t i = 0; i < video_processed_.size(); ++i) {
+            video_processed_[i] = false;
+        }
     }
     
     LOG_INFO("ThreadPool", "Starting processing...");
@@ -162,7 +165,7 @@ void ThreadPool::waitForCompletion() {
 int ThreadPool::getNextVideo() {
     std::lock_guard<std::mutex> lock(video_mutex_);
     for (size_t i = 0; i < video_processed_.size(); ++i) {
-        if (!video_processed_[i].load()) {
+        if (!video_processed_[i]) {
             video_processed_[i] = true;
             return static_cast<int>(i);
         }
