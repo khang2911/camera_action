@@ -49,6 +49,10 @@ public:
         mutable std::mutex stats_mutex;
         std::vector<long long> frames_detected;  // per engine
         std::vector<long long> frames_failed;    // per engine
+        // Processing time tracking (in milliseconds)
+        std::atomic<long long> reader_total_time_ms{0};  // Total time spent reading frames
+        std::vector<long long> engine_total_time_ms;     // Total time per engine (detection)
+        std::vector<long long> engine_frame_count;      // Frame count per engine (for average calculation)
         std::chrono::steady_clock::time_point start_time;
     };
     
@@ -56,6 +60,9 @@ public:
     void getStatisticsSnapshot(long long& frames_read, long long& frames_preprocessed,
                                std::vector<long long>& frames_detected,
                                std::vector<long long>& frames_failed,
+                               long long& reader_total_time_ms,
+                               std::vector<long long>& engine_total_time_ms,
+                               std::vector<long long>& engine_frame_count,
                                std::chrono::steady_clock::time_point& start_time) const;
     
 private:

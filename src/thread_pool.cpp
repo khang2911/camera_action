@@ -20,6 +20,8 @@ ThreadPool::ThreadPool(int num_readers,
         std::lock_guard<std::mutex> lock(stats_.stats_mutex);
         stats_.frames_detected.resize(engine_configs.size(), 0);
         stats_.frames_failed.resize(engine_configs.size(), 0);
+        stats_.engine_total_time_ms.resize(engine_configs.size(), 0);
+        stats_.engine_frame_count.resize(engine_configs.size(), 0);
     }
     stats_.start_time = std::chrono::steady_clock::now();
     
@@ -82,11 +84,14 @@ void ThreadPool::start() {
     stats_.start_time = std::chrono::steady_clock::now();
     stats_.frames_read = 0;
     stats_.frames_preprocessed = 0;
+    stats_.reader_total_time_ms = 0;
     {
         std::lock_guard<std::mutex> lock(stats_.stats_mutex);
         for (size_t i = 0; i < stats_.frames_detected.size(); ++i) {
             stats_.frames_detected[i] = 0;
             stats_.frames_failed[i] = 0;
+            stats_.engine_total_time_ms[i] = 0;
+            stats_.engine_frame_count[i] = 0;
         }
     }
     
@@ -261,6 +266,8 @@ void ThreadPool::readerWorker(int reader_id) {
         cv::Mat frame;
         int frame_count = 0;
         while (!stop_flag_ && reader.readFrame(frame)) {
+            auto frame_start = std::chrono::steady_clock::now();
+            
             stats_.frames_read++;
             stats_.frames_preprocessed++;  // Count as preprocessed (will be done per-engine)
             
@@ -271,6 +278,10 @@ void ThreadPool::readerWorker(int reader_id) {
             for (auto& engine_group : engine_groups_) {
                 engine_group->frame_queue->push(frame_data);
             }
+            
+            auto frame_end = std::chrono::steady_clock::now();
+            auto frame_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(frame_end - frame_start).count();
+            stats_.reader_total_time_ms += frame_time_ms;
             
             frame_count++;
             
@@ -366,14 +377,19 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             
             // Process batch if we have enough frames
             if (static_cast<int>(batch_frames.size()) == batch_size) {
+                auto batch_start = std::chrono::steady_clock::now();
                 bool success = engine_group->detectors[detector_id]->detectBatch(
                     batch_frames, batch_output_paths, batch_frame_numbers
                 );
+                auto batch_end = std::chrono::steady_clock::now();
+                auto batch_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(batch_end - batch_start).count();
                 
                 if (success) {
                     {
                         std::lock_guard<std::mutex> lock(stats_.stats_mutex);
                         stats_.frames_detected[engine_id] += batch_size;
+                        stats_.engine_total_time_ms[engine_id] += batch_time_ms;
+                        stats_.engine_frame_count[engine_id] += batch_size;
                     }
                     processed_count += batch_size;
                     
@@ -421,14 +437,19 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             // Run YOLO detection on GPU (TensorRT) - frame will be preprocessed by detector
             // Note: Multiple detector threads may write to the same file (same video+engine)
             // File writes are protected by per-file mutex inside writeDetectionsToFile
+            auto detect_start = std::chrono::steady_clock::now();
             bool success = engine_group->detectors[detector_id]->detect(
                 frame_data.frame, output_path, frame_data.frame_number
             );
+            auto detect_end = std::chrono::steady_clock::now();
+            auto detect_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(detect_end - detect_start).count();
             
             if (success) {
                 {
                     std::lock_guard<std::mutex> lock(stats_.stats_mutex);
                     stats_.frames_detected[engine_id]++;
+                    stats_.engine_total_time_ms[engine_id] += detect_time_ms;
+                    stats_.engine_frame_count[engine_id]++;
                 }
                 processed_count++;
                 
@@ -510,15 +531,37 @@ void ThreadPool::monitorWorker() {
             for (size_t i = 0; i < engine_groups_.size(); ++i) {
                 long long detected = stats_.frames_detected[i];
                 long long failed = stats_.frames_failed[i];
+                long long total_time_ms = stats_.engine_total_time_ms[i];
+                long long frame_count = stats_.engine_frame_count[i];
+                
                 stats_oss << "Engine " << engine_groups_[i]->engine_name 
                           << ": Detected=" << detected 
                           << " | Failed=" << failed;
                 if (elapsed > 0) {
                     stats_oss << " | FPS=" << (detected / elapsed);
                 }
+                if (frame_count > 0) {
+                    double avg_time_ms = static_cast<double>(total_time_ms) / frame_count;
+                    stats_oss << " | AvgTime=" << std::fixed << std::setprecision(2) << avg_time_ms << "ms/frame";
+                    stats_oss << " | TotalTime=" << (total_time_ms / 1000.0) << "s";
+                }
                 stats_oss << std::endl;
             }
         }
+        
+        // Reader statistics
+        long long reader_time_ms = stats_.reader_total_time_ms.load();
+        long long reader_frames = stats_.frames_read.load();
+        stats_oss << "Reader: Frames=" << reader_frames;
+        if (elapsed > 0) {
+            stats_oss << " | FPS=" << (reader_frames / elapsed);
+        }
+        if (reader_frames > 0) {
+            double avg_reader_time_ms = static_cast<double>(reader_time_ms) / reader_frames;
+            stats_oss << " | AvgTime=" << std::fixed << std::setprecision(2) << avg_reader_time_ms << "ms/frame";
+            stats_oss << " | TotalTime=" << (reader_time_ms / 1000.0) << "s";
+        }
+        stats_oss << std::endl;
         
         LOG_STATS("Monitor", stats_oss.str());
     }
@@ -529,16 +572,24 @@ void ThreadPool::monitorWorker() {
 void ThreadPool::getStatisticsSnapshot(long long& frames_read, long long& frames_preprocessed,
                                       std::vector<long long>& frames_detected,
                                       std::vector<long long>& frames_failed,
+                                      long long& reader_total_time_ms,
+                                      std::vector<long long>& engine_total_time_ms,
+                                      std::vector<long long>& engine_frame_count,
                                       std::chrono::steady_clock::time_point& start_time) const {
     frames_read = stats_.frames_read.load();
     frames_preprocessed = stats_.frames_preprocessed.load();
+    reader_total_time_ms = stats_.reader_total_time_ms.load();
     {
         std::lock_guard<std::mutex> lock(stats_.stats_mutex);
         frames_detected.resize(stats_.frames_detected.size());
         frames_failed.resize(stats_.frames_failed.size());
+        engine_total_time_ms.resize(stats_.engine_total_time_ms.size());
+        engine_frame_count.resize(stats_.engine_frame_count.size());
         for (size_t i = 0; i < stats_.frames_detected.size(); ++i) {
             frames_detected[i] = stats_.frames_detected[i];
             frames_failed[i] = stats_.frames_failed[i];
+            engine_total_time_ms[i] = stats_.engine_total_time_ms[i];
+            engine_frame_count[i] = stats_.engine_frame_count[i];
         }
     }
     start_time = stats_.start_time;

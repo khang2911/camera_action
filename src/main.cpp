@@ -1,6 +1,8 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <iomanip>
+#include <sstream>
 #include "thread_pool.h"
 #include "config_parser.h"
 #include "logger.h"
@@ -127,10 +129,12 @@ int main(int argc, char* argv[]) {
     pool.waitForCompletion();
     
     // Print final statistics
-    long long frames_read, frames_preprocessed;
+    long long frames_read, frames_preprocessed, reader_total_time_ms;
     std::vector<long long> frames_detected, frames_failed;
+    std::vector<long long> engine_total_time_ms, engine_frame_count;
     std::chrono::steady_clock::time_point start_time;
-    pool.getStatisticsSnapshot(frames_read, frames_preprocessed, frames_detected, frames_failed, start_time);
+    pool.getStatisticsSnapshot(frames_read, frames_preprocessed, frames_detected, frames_failed,
+                               reader_total_time_ms, engine_total_time_ms, engine_frame_count, start_time);
     
     auto total_time = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::steady_clock::now() - start_time).count();
@@ -139,10 +143,28 @@ int main(int argc, char* argv[]) {
     LOG_INFO("Main", "Total runtime: " + std::to_string(total_time) + " seconds");
     LOG_INFO("Main", "Total frames read: " + std::to_string(frames_read));
     LOG_INFO("Main", "Total frames preprocessed: " + std::to_string(frames_preprocessed));
+    
+    // Reader timing statistics
+    if (frames_read > 0) {
+        double avg_reader_time_ms = static_cast<double>(reader_total_time_ms) / frames_read;
+        LOG_INFO("Main", "Reader: AvgTime=" + std::to_string(avg_reader_time_ms) + "ms/frame, " +
+                 "TotalTime=" + std::to_string(reader_total_time_ms / 1000.0) + "s");
+    }
+    
+    // Engine timing statistics
     for (size_t i = 0; i < engine_configs.size(); ++i) {
-        LOG_INFO("Main", "Engine " + engine_configs[i].name + 
-                 ": Detected=" + std::to_string(frames_detected[i]) +
-                 " | Failed=" + std::to_string(frames_failed[i]));
+        std::ostringstream engine_stats;
+        engine_stats << "Engine " << engine_configs[i].name 
+                     << ": Detected=" << frames_detected[i]
+                     << " | Failed=" << frames_failed[i];
+        
+        if (engine_frame_count[i] > 0) {
+            double avg_time_ms = static_cast<double>(engine_total_time_ms[i]) / engine_frame_count[i];
+            engine_stats << " | AvgTime=" << std::fixed << std::setprecision(2) << avg_time_ms << "ms/frame";
+            engine_stats << " | TotalTime=" << (engine_total_time_ms[i] / 1000.0) << "s";
+        }
+        
+        LOG_INFO("Main", engine_stats.str());
     }
     
     return 0;
