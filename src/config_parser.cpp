@@ -75,6 +75,13 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
                         engine_config.nms_threshold = 0.45f;  // Default to 0.45
                     }
                     
+                    // Parse GPU ID
+                    if (model_node["gpu_id"]) {
+                        engine_config.gpu_id = model_node["gpu_id"].as<int>();
+                    } else {
+                        engine_config.gpu_id = 0;  // Default to GPU 0
+                    }
+                    
                     engine_configs_.push_back(engine_config);
                 }
             }
@@ -119,6 +126,11 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
                 engine_config.nms_threshold = config["model"]["nms_threshold"].as<float>();
             } else {
                 engine_config.nms_threshold = 0.45f;  // Default to 0.45
+            }
+            if (config["model"]["gpu_id"]) {
+                engine_config.gpu_id = config["model"]["gpu_id"].as<int>();
+            } else {
+                engine_config.gpu_id = 0;  // Default to GPU 0
             }
             engine_config.name = "engine0";
             engine_configs_.push_back(engine_config);

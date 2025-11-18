@@ -12,6 +12,7 @@ models:
     input_height: 640                     # Input image height
     conf_threshold: 0.25                  # Confidence threshold (0.0-1.0)
     nms_threshold: 0.45                  # NMS IoU threshold (0.0-1.0)
+    gpu_id: 0                             # GPU device ID (0, 1, 2, etc.)
   - path: "/path/to/yolo_engine2.engine"
     num_detectors: 4
     name: "model2"
@@ -21,6 +22,7 @@ models:
     input_height: 640
     conf_threshold: 0.3
     nms_threshold: 0.5
+    gpu_id: 0
   - path: "/path/to/yolo_pose.engine"     # YOLO Pose model
     num_detectors: 4
     name: "pose_model"
@@ -30,6 +32,7 @@ models:
     input_height: 640
     conf_threshold: 0.25
     nms_threshold: 0.45
+    gpu_id: 1                             # Can use different GPU
 
 # Video Sources
 videos:

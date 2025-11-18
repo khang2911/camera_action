@@ -19,13 +19,16 @@ public:
 static TensorRTLogger gLogger;
 
 YOLODetector::YOLODetector(const std::string& engine_path, ModelType model_type, int batch_size,
-                           int input_width, int input_height, float conf_threshold, float nms_threshold)
+                           int input_width, int input_height, float conf_threshold, 
+                           float nms_threshold, int gpu_id)
     : engine_path_(engine_path), model_type_(model_type), batch_size_(batch_size),
-      input_width_(input_width), input_height_(input_height),
+      input_width_(input_width), input_height_(input_height), gpu_id_(gpu_id),
       runtime_(nullptr), engine_(nullptr), context_(nullptr), input_buffer_(nullptr), 
       output_buffer_(nullptr), input_size_(0), output_size_(0), output_height_(0), 
       output_width_(0), num_anchors_(0), num_classes_(0), output_channels_(0),
       conf_threshold_(conf_threshold), nms_threshold_(nms_threshold), max_detections_(300) {
+    // Set CUDA device before creating stream
+    cudaSetDevice(gpu_id_);
     cudaStreamCreate(&stream_);
     preprocessor_ = std::make_unique<Preprocessor>(input_width_, input_height_);
 }
@@ -159,6 +162,14 @@ void YOLODetector::freeBuffers() {
 }
 
 bool YOLODetector::initialize() {
+    // Set CUDA device before initialization
+    cudaError_t cuda_status = cudaSetDevice(gpu_id_);
+    if (cuda_status != cudaSuccess) {
+        std::cerr << "Error: Failed to set CUDA device " << gpu_id_ 
+                  << ": " << cudaGetErrorString(cuda_status) << std::endl;
+        return false;
+    }
+    
     if (!loadEngine()) {
         return false;
     }
@@ -184,6 +195,9 @@ bool YOLODetector::detect(const cv::Mat& frame, const std::string& output_path) 
         std::cerr << "Error: Detector not initialized" << std::endl;
         return false;
     }
+    
+    // Set CUDA device for this detector (important for multi-GPU setups)
+    cudaSetDevice(gpu_id_);
     
     // Preprocess frame for this engine's input size
     std::vector<float> input_data = preprocessor_->preprocessToFloat(frame);

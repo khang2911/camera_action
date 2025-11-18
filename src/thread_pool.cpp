@@ -47,7 +47,7 @@ ThreadPool::ThreadPool(int num_readers,
             auto detector = std::make_unique<YOLODetector>(
                 config.path, config.type, config.batch_size,
                 config.input_width, config.input_height,
-                config.conf_threshold, config.nms_threshold
+                config.conf_threshold, config.nms_threshold, config.gpu_id
             );
             if (!detector->initialize()) {
                 LOG_ERROR("ThreadPool", "Failed to initialize detector " + std::to_string(j) + 
@@ -60,6 +60,7 @@ ThreadPool::ThreadPool(int num_readers,
                          std::to_string(detector->getInputHeight()) +
                          ", conf_threshold=" + std::to_string(config.conf_threshold) +
                          ", nms_threshold=" + std::to_string(config.nms_threshold) +
+                         ", gpu_id=" + std::to_string(detector->getGpuId()) +
                          ") initialized for engine " + config.name);
             }
             engine_group->detectors.push_back(std::move(detector));
@@ -219,6 +220,15 @@ void ThreadPool::readerWorker(int reader_id) {
             }
             
             frame_count++;
+            
+            // Print progress every 20 frames to show continuous operation
+            if (frame_count % 20 == 0) {
+                LOG_INFO("Reader", "[RUNNING] Reader " + std::to_string(reader_id) + 
+                         " processing video " + std::to_string(video_id) + 
+                         " - Frame " + std::to_string(frame_count) + " read and queued");
+            }
+            
+            // Also log every 100 frames with more detail
             if (frame_count % 100 == 0) {
                 LOG_DEBUG("Reader", "Reader " + std::to_string(reader_id) + 
                          " processed " + std::to_string(frame_count) + " frames from video " + 
@@ -248,11 +258,22 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
     
     FrameData frame_data;
     int processed_count = 0;
+    auto last_wait_log = std::chrono::steady_clock::now();
     
     while (!stop_flag_) {
         // Pop preprocessed frame data from this engine's queue
         if (!engine_group->frame_queue->pop(frame_data, 100)) {
             if (stop_flag_) break;
+            
+            // Log waiting status periodically (every 5 seconds)
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_wait_log).count();
+            if (elapsed >= 5) {
+                LOG_INFO("Detector", "[WAITING] Detector " + std::to_string(detector_id) + 
+                         " (" + engine_group->engine_name + ") waiting for frames... " +
+                         "(Queue size: " + std::to_string(engine_group->frame_queue->size()) + ")");
+                last_wait_log = now;
+            }
             continue;
         }
         
@@ -276,6 +297,16 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 stats_.frames_detected[engine_id]++;
             }
             processed_count++;
+            
+            // Print progress every 10 frames to show continuous operation
+            if (processed_count % 10 == 0) {
+                LOG_INFO("Detector", "[RUNNING] Detector " + std::to_string(detector_id) + 
+                         " (" + engine_group->engine_name + ") processed " + 
+                         std::to_string(processed_count) + " frames - " +
+                         "Video: " + std::to_string(frame_data.video_id) + 
+                         ", Frame: " + std::to_string(frame_data.frame_number));
+            }
+            
             LOG_DEBUG("Detector", "Detection completed: " + output_path + 
                      " (Video: " + std::to_string(frame_data.video_id) + 
                      ", Frame: " + std::to_string(frame_data.frame_number) + 
@@ -289,6 +320,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             LOG_ERROR("Detector", "Detection failed: " + output_path);
         }
         
+        // Also log every 50 frames with summary
         if (processed_count % 50 == 0) {
             LOG_DEBUG("Detector", "Detector " + std::to_string(detector_id) + 
                      " (" + engine_group->engine_name + ") processed " + 

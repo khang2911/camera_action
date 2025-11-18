@@ -36,7 +36,7 @@ class YOLODetector {
 public:
     YOLODetector(const std::string& engine_path, ModelType model_type = ModelType::DETECTION, 
                  int batch_size = 1, int input_width = 640, int input_height = 640,
-                 float conf_threshold = 0.25f, float nms_threshold = 0.45f);
+                 float conf_threshold = 0.25f, float nms_threshold = 0.45f, int gpu_id = 0);
     ~YOLODetector();
     
     bool initialize();
@@ -46,6 +46,7 @@ public:
     int getBatchSize() const { return batch_size_; }
     int getInputWidth() const { return input_width_; }
     int getInputHeight() const { return input_height_; }
+    int getGpuId() const { return gpu_id_; }
     
 private:
     std::string engine_path_;
@@ -53,6 +54,7 @@ private:
     int batch_size_;
     int input_width_;
     int input_height_;
+    int gpu_id_;
     nvinfer1::IRuntime* runtime_;
     nvinfer1::ICudaEngine* engine_;
     nvinfer1::IExecutionContext* context_;

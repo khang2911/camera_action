@@ -110,7 +110,8 @@ int main(int argc, char* argv[]) {
                  ", input_size=" + std::to_string(engine_configs[i].input_width) + "x" + 
                  std::to_string(engine_configs[i].input_height) +
                  ", conf_threshold=" + std::to_string(engine_configs[i].conf_threshold) +
-                 ", nms_threshold=" + std::to_string(engine_configs[i].nms_threshold) + "]");
+                 ", nms_threshold=" + std::to_string(engine_configs[i].nms_threshold) +
+                 ", gpu_id=" + std::to_string(engine_configs[i].gpu_id) + "]");
     }
     LOG_INFO("Main", "Output directory: " + output_dir);
     LOG_INFO("Main", "Number of videos: " + std::to_string(video_paths.size()));
