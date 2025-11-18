@@ -3,7 +3,11 @@
 # Lines starting with # are treated as comments and ignored
 # Empty lines are also ignored
 
-/path/to/video1.mp4
-/path/to/video2.mp4
-/path/to/video3.mp4
+/workspace/khangtd6/longchau_vaccine/action_c/inputs/1.mp4
+/workspace/khangtd6/longchau_vaccine/action_c/inputs/2.mp4
+/workspace/khangtd6/longchau_vaccine/action_c/inputs/3.mp4
+/workspace/khangtd6/longchau_vaccine/action_c/inputs/4.mp4
+/workspace/khangtd6/longchau_vaccine/action_c/inputs/5.mp4
+/workspace/khangtd6/longchau_vaccine/action_c/inputs/6.mp4
+/workspace/khangtd6/longchau_vaccine/action_c/inputs/7.mp4
 
