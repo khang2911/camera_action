@@ -154,18 +154,71 @@ void ThreadPool::stop() {
 }
 
 void ThreadPool::waitForCompletion() {
-    // Wait for all frame queues to be empty and all readers done
-    bool all_empty = false;
-    while (!all_empty && !stop_flag_) {
-        all_empty = true;
+    LOG_INFO("ThreadPool", "Waiting for all processing to complete...");
+    
+    // Wait for all videos to be processed and all queues to be empty
+    bool all_done = false;
+    int consecutive_empty_checks = 0;
+    const int REQUIRED_EMPTY_CHECKS = 20;  // Wait 2 seconds (20 * 100ms) with empty queues
+    
+    while (!all_done && !stop_flag_) {
+        // Check if all videos have been processed
+        bool all_videos_processed = true;
+        {
+            std::lock_guard<std::mutex> lock(video_mutex_);
+            for (size_t i = 0; i < video_processed_.size(); ++i) {
+                if (!video_processed_[i]) {
+                    all_videos_processed = false;
+                    break;
+                }
+            }
+        }
+        
+        // Check if all queues are empty
+        bool all_queues_empty = true;
         for (auto& engine_group : engine_groups_) {
             if (!engine_group->frame_queue->empty()) {
-                all_empty = false;
+                all_queues_empty = false;
                 break;
             }
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        if (all_videos_processed && all_queues_empty) {
+            // Both conditions met, but wait a bit more to ensure detectors finish processing
+            consecutive_empty_checks++;
+            if (consecutive_empty_checks >= REQUIRED_EMPTY_CHECKS) {
+                // Queues have been empty for required time, processing should be done
+                all_done = true;
+                LOG_INFO("ThreadPool", "All videos processed and queues empty for " + 
+                         std::to_string(REQUIRED_EMPTY_CHECKS * 100) + "ms. Processing complete.");
+            } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        } else {
+            // Reset counter if conditions not met
+            consecutive_empty_checks = 0;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            
+            // Log status periodically
+            if (consecutive_empty_checks == 0) {
+                int videos_remaining = 0;
+                {
+                    std::lock_guard<std::mutex> lock(video_mutex_);
+                    for (size_t i = 0; i < video_processed_.size(); ++i) {
+                        if (!video_processed_[i]) videos_remaining++;
+                    }
+                }
+                size_t total_queue_size = 0;
+                for (auto& engine_group : engine_groups_) {
+                    total_queue_size += engine_group->frame_queue->size();
+                }
+                LOG_DEBUG("ThreadPool", "Waiting... Videos remaining: " + std::to_string(videos_remaining) + 
+                         ", Total queue size: " + std::to_string(total_queue_size));
+            }
+        }
     }
+    
+    LOG_INFO("ThreadPool", "All processing complete. Stopping all threads...");
     
     stop_flag_ = true;
     stop();
