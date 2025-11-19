@@ -102,8 +102,18 @@ def preprocess_batch(
     return tensors, scales, pads, orig_sizes, frame_indices, valid
 
 
-def dims_to_tuple(dims: trt.Dims) -> Tuple[int, ...]:
-    return tuple(dims.d[i] for i in range(dims.nbDims))
+def dims_to_tuple(dims) -> Tuple[int, ...]:
+    """
+    Convert TensorRT Dims or iterable into a tuple of ints.
+    Supports both legacy binding APIs and newer TensorRT 10 tuple results.
+    """
+    if isinstance(dims, (tuple, list)):
+        return tuple(int(x) for x in dims)
+    if hasattr(dims, "nbDims"):
+        return tuple(int(dims[i]) for i in range(dims.nbDims))
+    if hasattr(dims, "d"):
+        return tuple(int(x) for x in dims.d)
+    raise TypeError(f"Unsupported dims type: {type(dims)}")
 
 
 def allocate_buffers(engine: trt.ICudaEngine, context: trt.IExecutionContext):
