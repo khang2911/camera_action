@@ -608,7 +608,7 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         // Python does: output[0].T which transposes [channels, num_anchors] to [num_anchors, channels]
         // Then reads: predictions[:, 4] which is column 4 (channel 4) for all anchors
         // So we need to read as [num_anchors, channels] format: index = anchor * channels + channel
-        // Channel 0-3: bbox, Channel 4: confidence, Channel 5: class_score, Channel 6-56: keypoints
+        // Channel 0-3: bbox, Channel 4: confidence, Channel 5-56: keypoints (17 keypoints × 3 = 51 channels)
         int idx_x = i * output_channels_ + 0;  // anchor * channels + channel_x
         int idx_y = i * output_channels_ + 1;  // anchor * channels + channel_y
         int idx_w = i * output_channels_ + 2;  // anchor * channels + channel_w
@@ -645,14 +645,15 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         det.confidence = confidence;
         det.class_id = 0;  // ALL models are single-class (matching Python: class_id=0)
         
-        // Parse 17 keypoints (COCO format) - YOLOv11: in pixel coordinates, need to normalize
+        // Parse 17 keypoints (COCO format) - YOLOv11: in pixel coordinates
         // Matching Python: keypoints = output[:, 5:], reshaped to (17, 3)
-        // Keypoints start at channel 6 (after bbox + confidence + class_score)
+        // Keypoints start at channel 5 (after bbox + confidence)
+        // Format: [kpt0_x, kpt0_y, kpt0_conf, kpt1_x, kpt1_y, kpt1_conf, ..., kpt16_x, kpt16_y, kpt16_conf]
         // Raw output is in pixel coordinates relative to input_width_ x input_height_
-        // CRITICAL FIX: Read as [num_anchors, channels] format
+        // CRITICAL FIX: Read as [num_anchors, channels] format, starting from channel 5
         det.keypoints.resize(17);
         for (int k = 0; k < 17; ++k) {
-            int kpt_channel_base = 6 + k * 3;  // Channel for keypoint k (x, y, conf)
+            int kpt_channel_base = 5 + k * 3;  // Channel for keypoint k (x, y, conf) - starts at channel 5
             int idx_kpt_x = i * output_channels_ + kpt_channel_base;  // anchor * channels + channel
             int idx_kpt_y = i * output_channels_ + (kpt_channel_base + 1);
             int idx_kpt_conf = i * output_channels_ + (kpt_channel_base + 2);
@@ -660,11 +661,37 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
             if (idx_kpt_conf >= static_cast<int>(output_data.size())) break;
             
             // Keypoint coordinates are in pixel space (relative to preprocessed image)
-            // Reference script pattern: use raw pixel values directly
-            det.keypoints[k].x = output_data[idx_kpt_x];   // Pixel coordinates
-            det.keypoints[k].y = output_data[idx_kpt_y];
-            // Keypoint confidence: use raw value directly (NO SIGMOID, matching reference script)
-            det.keypoints[k].confidence = output_data[idx_kpt_conf];
+            // Python: keypoints[:, :, 0] and keypoints[:, :, 1] are x and y coordinates
+            float raw_x = output_data[idx_kpt_x];
+            float raw_y = output_data[idx_kpt_y];
+            float raw_conf = output_data[idx_kpt_conf];
+            
+            // Debug: Log first few keypoints to diagnose parsing issues
+            static bool logged_kpt_debug = false;
+            if (!logged_kpt_debug && i == 0 && k < 3) {
+                std::cerr << "[DEBUG Keypoint] Anchor " << i << ", Keypoint " << k 
+                          << ": raw_x=" << raw_x << ", raw_y=" << raw_y 
+                          << ", raw_conf=" << raw_conf
+                          << " (indices: x=" << idx_kpt_x << ", y=" << idx_kpt_y 
+                          << ", conf=" << idx_kpt_conf << ")" << std::endl;
+                if (k == 2) logged_kpt_debug = true;
+            }
+            
+            det.keypoints[k].x = raw_x;   // Pixel coordinates
+            det.keypoints[k].y = raw_y;   // Pixel coordinates
+            // Keypoint confidence: Python uses keypoints[:, :, 2] directly
+            // If values are very high (>100), they might be in a different format or need sigmoid
+            // For now, if > 1.0, assume it needs normalization (divide by 255 or similar)
+            if (raw_conf > 1.0f) {
+                // If confidence is very high, it might be in pixel space or need sigmoid
+                // Try dividing by 255 first (common normalization)
+                det.keypoints[k].confidence = raw_conf / 255.0f;
+                // Clamp to [0, 1]
+                det.keypoints[k].confidence = std::max(0.0f, std::min(1.0f, det.keypoints[k].confidence));
+            } else {
+                // Already in [0, 1] range
+                det.keypoints[k].confidence = raw_conf;
+            }
         }
         
         detections.push_back(det);
