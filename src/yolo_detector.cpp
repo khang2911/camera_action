@@ -433,11 +433,10 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         // Low confidence values may be due to preprocessing differences - need to investigate
         float confidence = output_data[idx_conf];
         
-        // Debug: Log first few raw confidence values to verify indexing
+        // Debug: Log first few raw confidence values (reduced for performance)
         static int conf_debug_count = 0;
-        if (conf_debug_count < 20 && i < 20) {
-            std::cout << "[DEBUG Conf] Anchor " << i << ": idx_conf=" << idx_conf 
-                      << ", conf=" << confidence << std::endl;
+        if (conf_debug_count < 5 && i < 5) {
+            std::cout << "[DEBUG Conf] Anchor " << i << ": conf=" << confidence << std::endl;
             conf_debug_count++;
         }
         
@@ -461,15 +460,12 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
             min_confidence_above_threshold = confidence;
         }
         
-        // Debug: Log first few detections that pass threshold
+        // Debug: Log first few detections (reduced for performance)
         static int debug_count = 0;
-        if (debug_count < 10) {
-            std::cout << "[DEBUG] Detection " << debug_count << " (Anchor " << i << "): "
-                      << "x_center=" << x_center 
-                      << ", y_center=" << y_center 
-                      << ", width=" << width 
-                      << ", height=" << height 
-                      << ", confidence=" << confidence << std::endl;
+        if (debug_count < 3) {
+            std::cout << "[DEBUG] Detection " << debug_count << ": "
+                      << "conf=" << confidence << ", bbox=[" 
+                      << x_center << "," << y_center << "," << width << "," << height << "]" << std::endl;
             debug_count++;
         }
         
@@ -484,29 +480,14 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         detections.push_back(det);
     }
     
-    // Log statistics
+    // Log statistics (reduced for performance)
     static int parse_call_count = 0;
     parse_call_count++;
-    if (parse_call_count <= 5) {  // Log first 5 calls
+    if (parse_call_count <= 3) {  // Log only first 3 calls
         std::cout << "[DEBUG Parse] Call " << parse_call_count << ": "
-                  << "Total anchors checked: " << total_anchors_checked
-                  << ", Above threshold (" << conf_threshold_ << "): " << anchors_above_threshold
-                  << ", Max confidence: " << max_confidence
-                  << ", Min confidence above threshold: " << (anchors_above_threshold > 0 ? min_confidence_above_threshold : 0.0f)
-                  << std::endl;
-        
-        // Log sample confidence distribution
-        if (!sample_confidences.empty()) {
-            std::sort(sample_confidences.begin(), sample_confidences.end());
-            std::cout << "[DEBUG Parse] Sample confidence stats (first 100): "
-                      << "min=" << sample_confidences[0]
-                      << ", max=" << sample_confidences.back()
-                      << ", median=" << sample_confidences[sample_confidences.size() / 2]
-                      << ", count_above_" << conf_threshold_ << "=" 
-                      << std::count_if(sample_confidences.begin(), sample_confidences.end(),
-                                       [this](float c) { return c >= conf_threshold_; })
-                      << std::endl;
-        }
+                  << "Anchors: " << total_anchors_checked
+                  << ", Above threshold: " << anchors_above_threshold
+                  << ", Max conf: " << max_confidence << std::endl;
     }
     
     return detections;
@@ -699,6 +680,22 @@ std::vector<Detection> YOLODetector::applyNMS(const std::vector<Detection>& dete
     
     size_t input_count = detections.size();
     
+    // Safety check: if too many detections, limit to top N by confidence to avoid NMS slowdown
+    const size_t MAX_DETECTIONS_BEFORE_NMS = 5000;
+    std::vector<Detection> detections_to_process = detections;
+    if (input_count > MAX_DETECTIONS_BEFORE_NMS) {
+        // Sort by confidence and take top N
+        std::partial_sort(detections_to_process.begin(), 
+                         detections_to_process.begin() + MAX_DETECTIONS_BEFORE_NMS,
+                         detections_to_process.end(),
+                         [](const Detection& a, const Detection& b) {
+                             return a.confidence > b.confidence;
+                         });
+        detections_to_process.resize(MAX_DETECTIONS_BEFORE_NMS);
+        std::cerr << "[WARN] Too many detections (" << input_count 
+                  << "), limiting to top " << MAX_DETECTIONS_BEFORE_NMS << " before NMS" << std::endl;
+    }
+    
     // Convert detections to xyxy format and calculate areas (matching Python implementation)
     struct BoxXYXY {
         float x1, y1, x2, y2;
@@ -706,14 +703,14 @@ std::vector<Detection> YOLODetector::applyNMS(const std::vector<Detection>& dete
         int original_index;
     };
     
-    std::vector<BoxXYXY> boxes_xyxy(detections.size());
+    std::vector<BoxXYXY> boxes_xyxy(detections_to_process.size());
     int invalid_boxes = 0;
-    for (size_t i = 0; i < detections.size(); ++i) {
+    for (size_t i = 0; i < detections_to_process.size(); ++i) {
         // Convert from center format [x_center, y_center, width, height] to xyxy
-        float x_center = detections[i].bbox[0];
-        float y_center = detections[i].bbox[1];
-        float width = detections[i].bbox[2];
-        float height = detections[i].bbox[3];
+        float x_center = detections_to_process[i].bbox[0];
+        float y_center = detections_to_process[i].bbox[1];
+        float width = detections_to_process[i].bbox[2];
+        float height = detections_to_process[i].bbox[3];
         
         boxes_xyxy[i].x1 = x_center - width / 2.0f;
         boxes_xyxy[i].y1 = y_center - height / 2.0f;
@@ -729,19 +726,18 @@ std::vector<Detection> YOLODetector::applyNMS(const std::vector<Detection>& dete
     }
     
     // Sort by confidence (descending) - matching Python: order = scores.argsort()[::-1]
-    std::vector<int> order(detections.size());
+    std::vector<int> order(detections_to_process.size());
     std::iota(order.begin(), order.end(), 0);
     std::sort(order.begin(), order.end(), [&](int a, int b) {
-        return detections[a].confidence > detections[b].confidence;
+        return detections_to_process[a].confidence > detections_to_process[b].confidence;
     });
     
-    // NMS algorithm matching Python implementation
+    // Optimized NMS algorithm matching Python implementation
+    // Use erase-remove idiom for better performance
     std::vector<int> keep;
-    int iterations = 0;
-    int total_suppressed = 0;
+    keep.reserve(detections_to_process.size());  // Reserve space to avoid reallocations
     
     while (!order.empty()) {
-        iterations++;
         int i = order[0];
         keep.push_back(i);
         
@@ -749,10 +745,10 @@ std::vector<Detection> YOLODetector::applyNMS(const std::vector<Detection>& dete
             break;
         }
         
-        // Calculate IoU with remaining boxes
-        std::vector<float> ious;
-        std::vector<int> valid_inds;
-        int suppressed_this_iter = 0;
+        // Calculate IoU with remaining boxes and filter in-place
+        // More efficient: calculate IoU and remove suppressed boxes in one pass
+        std::vector<int> new_order;
+        new_order.reserve(order.size());  // Reserve to avoid reallocations
         
         for (size_t j = 1; j < order.size(); ++j) {
             int idx = order[j];
@@ -768,52 +764,32 @@ std::vector<Detection> YOLODetector::applyNMS(const std::vector<Detection>& dete
             float intersection = w * h;
             
             // IoU = intersection / (area[i] + area[others] - intersection)
-            float iou = intersection / (boxes_xyxy[i].area + boxes_xyxy[idx].area - intersection);
-            ious.push_back(iou);
-            valid_inds.push_back(j);
+            float union_area = boxes_xyxy[i].area + boxes_xyxy[idx].area - intersection;
+            float iou = (union_area > 0.0f) ? (intersection / union_area) : 0.0f;
             
-            if (iou > nms_threshold_) {
-                suppressed_this_iter++;
+            // Keep boxes with IoU <= threshold (matching Python: inds = np.where(iou <= iou_threshold)[0])
+            if (iou <= nms_threshold_) {
+                new_order.push_back(idx);
             }
         }
-        
-        total_suppressed += suppressed_this_iter;
-        
-        // Keep boxes with IoU <= threshold (matching Python: inds = np.where(iou <= iou_threshold)[0])
-        std::vector<int> new_order;
-        for (size_t k = 0; k < ious.size(); ++k) {
-            if (ious[k] <= nms_threshold_) {
-                new_order.push_back(order[valid_inds[k]]);
-            }
-        }
-        order = new_order;
+        order = std::move(new_order);  // Move assignment is more efficient
     }
     
     // Build result from kept indices
     std::vector<Detection> result;
     result.reserve(keep.size());
     for (int idx : keep) {
-        result.push_back(detections[idx]);
+        result.push_back(detections_to_process[idx]);
     }
     
-    // Log NMS statistics
+    // Log NMS statistics (reduced logging for performance)
     static int nms_call_count = 0;
     nms_call_count++;
-    if (nms_call_count <= 5) {  // Log first 5 calls
+    if (nms_call_count <= 3) {  // Log only first 3 calls
         std::cout << "[DEBUG NMS] Call " << nms_call_count << ": "
-                  << "Input detections: " << input_count
-                  << ", Invalid boxes: " << invalid_boxes
-                  << ", After NMS (threshold=" << nms_threshold_ << "): " << result.size()
-                  << ", Suppressed: " << total_suppressed
-                  << ", Iterations: " << iterations << std::endl;
-        
-        if (!result.empty()) {
-            std::cout << "[DEBUG NMS] Top 5 detections after NMS: ";
-            for (size_t i = 0; i < std::min(5UL, result.size()); ++i) {
-                std::cout << "conf=" << result[i].confidence << " ";
-            }
-            std::cout << std::endl;
-        }
+                  << "Input: " << input_count
+                  << ", After NMS: " << result.size()
+                  << " (threshold=" << nms_threshold_ << ")" << std::endl;
     }
     
     return result;
@@ -902,15 +878,14 @@ bool YOLODetector::writeDetectionsToFile(const std::vector<Detection>& detection
     int num_dets = static_cast<int>(detections.size());
     out_file.write(reinterpret_cast<const char*>(&num_dets), sizeof(int));
     
-    // Log detection count (first 20 frames)
+    // Log detection count (reduced for performance)
     static int write_call_count = 0;
     static std::mutex write_log_mutex;
     {
         std::lock_guard<std::mutex> lock(write_log_mutex);
         write_call_count++;
-        if (write_call_count <= 20) {
-            std::cout << "[DEBUG Write] Frame " << frame_number << ": Writing " << num_dets 
-                      << " detections to " << output_path << std::endl;
+        if (write_call_count <= 5) {  // Log only first 5 writes
+            std::cout << "[DEBUG Write] Frame " << frame_number << ": " << num_dets << " detections" << std::endl;
         }
     }
     
