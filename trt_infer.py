@@ -30,6 +30,15 @@ LOGGER = logging.getLogger("trt_infer")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 
+def draw_detections(frame: np.ndarray, detections: List[dict], color=(0, 255, 0)) -> np.ndarray:
+    """Draw bounding boxes and scores on a frame."""
+    for det in detections:
+        x1, y1, x2, y2 = det["bbox"]
+        score = det["score"]
+        cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
+        cv2.putText(frame, f"{score:.2f}", (int(x1), max(int(y1) - 5, 0)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
+    return frame
 def preprocess_frame(
     frame_bgr: np.ndarray,
     input_w: int,
@@ -187,6 +196,7 @@ def main():
     parser.add_argument("--start-frame", type=int, default=0, help="Start frame index (inclusive)")
     parser.add_argument("--end-frame", type=int, default=-1, help="End frame index (inclusive, -1 = till end)")
     parser.add_argument("--max-frames", type=int, default=-1, help="Early stop after processing this many frames (per video)")
+    parser.add_argument("--save-frames", help="Directory to save frames with detections drawn")
     parser.add_argument("--input-width", type=int, required=True, help="Model input width")
     parser.add_argument("--input-height", type=int, required=True, help="Model input height")
     parser.add_argument("--conf-threshold", type=float, default=0.2, help="Confidence threshold")
@@ -225,6 +235,12 @@ def main():
             orig_size=(frame.shape[1], frame.shape[0]),
         )
         LOGGER.info("Detections: %s", detections if detections else "None")
+        if detections and args.save_frames:
+            os.makedirs(args.save_frames, exist_ok=True)
+            draw_frame = draw_detections(frame.copy(), detections)
+            out_path = os.path.join(args.save_frames, "frame_image.jpg")
+            cv2.imwrite(out_path, draw_frame)
+            LOGGER.info("Saved visualization: %s", out_path)
         return
 
     # Video path
@@ -242,6 +258,7 @@ def main():
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
 
     processed = 0
+    frame_outputs = []
     while True:
         frame_idx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
         if end_frame is not None and frame_idx > end_frame:
@@ -274,6 +291,13 @@ def main():
             LOGGER.info("  bbox=%s score=%.3f", det["bbox"], det["score"])
 
         processed += 1
+        frame_outputs.append((frame_idx, frame, detections))
+        if args.save_frames and detections:
+            os.makedirs(args.save_frames, exist_ok=True)
+            out_path = os.path.join(args.save_frames, f"frame_{frame_idx:06d}.jpg")
+            draw_frame = draw_detections(frame.copy(), detections)
+            cv2.imwrite(out_path, draw_frame)
+            LOGGER.info("Saved visualization: %s", out_path)
 
     cap.release()
 
