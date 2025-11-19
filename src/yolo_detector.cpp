@@ -369,25 +369,26 @@ bool YOLODetector::runWithPreprocessedBatch(
     size_t single_input_elements = input_elements_;
     
     // Debug: Check input data before copying (first batch only, first few values)
-    static bool logged_input_debug = false;
-    if (!logged_input_debug && !inputs.empty() && !inputs[0]->empty()) {
-        std::cout << "[DEBUG Input] Batch size: " << batch_size_ << std::endl;
-        std::cout << "[DEBUG Input] input_size_: " << input_size_ << " bytes" << std::endl;
-        std::cout << "[DEBUG Input] single_input_bytes: " << single_input_bytes << " bytes" << std::endl;
-        std::cout << "[DEBUG Input] input_elements_: " << input_elements_ << " elements" << std::endl;
-        std::cout << "[DEBUG Input] Expected per-frame size: " << (single_input_bytes / sizeof(float)) << " elements" << std::endl;
-        std::cout << "[DEBUG Input] Actual input[0] size: " << inputs[0]->size() << " elements" << std::endl;
-        std::cout << "[DEBUG Input] First 10 values of input[0]: ";
+    // Use a per-engine static flag to log once per engine
+    static thread_local bool logged_input_debug = false;
+    if (!logged_input_debug && !inputs.empty() && inputs[0] && !inputs[0]->empty()) {
+        std::cerr << "[DEBUG Input] Batch size: " << batch_size_ << std::endl;
+        std::cerr << "[DEBUG Input] input_size_: " << input_size_ << " bytes" << std::endl;
+        std::cerr << "[DEBUG Input] single_input_bytes: " << single_input_bytes << " bytes" << std::endl;
+        std::cerr << "[DEBUG Input] input_elements_: " << input_elements_ << " elements" << std::endl;
+        std::cerr << "[DEBUG Input] Expected per-frame size: " << (single_input_bytes / sizeof(float)) << " elements" << std::endl;
+        std::cerr << "[DEBUG Input] Actual input[0] size: " << inputs[0]->size() << " elements" << std::endl;
+        std::cerr << "[DEBUG Input] First 10 values of input[0]: ";
         for (int i = 0; i < std::min(10, static_cast<int>(inputs[0]->size())); ++i) {
-            std::cout << (*inputs[0])[i] << " ";
+            std::cerr << (*inputs[0])[i] << " ";
         }
-        std::cout << std::endl;
-        if (batch_size_ > 1 && inputs.size() > 1) {
-            std::cout << "[DEBUG Input] First 10 values of input[1]: ";
+        std::cerr << std::endl;
+        if (batch_size_ > 1 && inputs.size() > 1 && inputs[1]) {
+            std::cerr << "[DEBUG Input] First 10 values of input[1]: ";
             for (int i = 0; i < std::min(10, static_cast<int>(inputs[1]->size())); ++i) {
-                std::cout << (*inputs[1])[i] << " ";
+                std::cerr << (*inputs[1])[i] << " ";
             }
-            std::cout << std::endl;
+            std::cerr << std::endl;
         }
         logged_input_debug = true;
     }

@@ -49,7 +49,7 @@ threads:
 output:
   dir: "/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins/"      # Output directory for binary result files
 
-git# Debug Configuration
+# Debug Configuration
 debug:
   enabled: true                    # Enable debug mode (process limited frames for testing)
   max_frames_per_video: 32          # Maximum frames to process per video (0 = no limit, only used if enabled=true)

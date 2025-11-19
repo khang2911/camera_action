@@ -551,7 +551,11 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     engine_group->preprocessor->preprocessToFloat(frame_data.frame, *tensor);
                 }
                 
-                batch_tensors.push_back(tensor);
+                // CRITICAL FIX: Make a deep copy of the preprocessed data to prevent buffer reuse corruption
+                // The shared_ptr might point to a buffer that gets reused by the preprocessor worker
+                // before the batch is processed. By making a copy, we ensure the data is stable.
+                auto tensor_copy = std::make_shared<std::vector<float>>(*tensor);
+                batch_tensors.push_back(tensor_copy);
                 batch_output_paths.push_back(output_path);
                 batch_frame_numbers.push_back(frame_data.frame_number);
                 batch_original_widths.push_back(frame_data.original_width);
