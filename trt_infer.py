@@ -199,6 +199,7 @@ def main():
     parser.add_argument("--save-frames", help="Directory to save frames with detections drawn")
     parser.add_argument("--input-width", type=int, required=True, help="Model input width")
     parser.add_argument("--input-height", type=int, required=True, help="Model input height")
+    parser.add_argument("--batch-size", type=int, default=1, help="Batch size (<= engine max)")
     parser.add_argument("--conf-threshold", type=float, default=0.2, help="Confidence threshold")
     parser.add_argument("--nms-threshold", type=float, default=0.55, help="NMS IoU threshold")
 
