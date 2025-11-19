@@ -329,60 +329,27 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         int offset = i * output_channels_;
         if (offset + output_channels_ - 1 >= static_cast<int>(output_data.size())) break;
         
-        // Extract bbox coordinates (normalized 0-1)
-        float x_center_raw = output_data[offset + 0];
-        float y_center_raw = output_data[offset + 1];
-        float width_raw = output_data[offset + 2];
-        float height_raw = output_data[offset + 3];
-        
-        // Apply sigmoid to bbox coordinates if they're logits (some YOLO versions)
-        // Most modern YOLO outputs are already in [0,1] range, but check if they need sigmoid
-        float x_center = x_center_raw;
-        float y_center = y_center_raw;
-        float width = width_raw;
-        float height = height_raw;
-        
-        // If coordinates are outside [0,1] range, they might be logits - apply sigmoid
-        // Otherwise, assume they're already normalized
-        if (x_center_raw < 0.0f || x_center_raw > 1.0f || 
-            y_center_raw < 0.0f || y_center_raw > 1.0f) {
-            // Coordinates might be logits, apply sigmoid
-            x_center = 1.0f / (1.0f + std::exp(-x_center_raw));
-            y_center = 1.0f / (1.0f + std::exp(-y_center_raw));
-        }
-        if (width_raw < 0.0f || width_raw > 1.0f || 
-            height_raw < 0.0f || height_raw > 1.0f) {
-            width = 1.0f / (1.0f + std::exp(-width_raw));
-            height = 1.0f / (1.0f + std::exp(-height_raw));
-        }
+        // Extract bbox coordinates (YOLO11 outputs are already normalized 0-1, no sigmoid needed)
+        // Matching Python postprocess: boxes = predictions[:, :4] (direct use, no sigmoid)
+        float x_center = output_data[offset + 0];
+        float y_center = output_data[offset + 1];
+        float width = output_data[offset + 2];
+        float height = output_data[offset + 3];
         
         float objectness = 1.0f;
         int class_start_offset = 4;
         
         if (has_objectness) {
-            // Older format: has separate objectness channel
-            float objectness_raw = output_data[offset + 4];
-            // Check if objectness needs sigmoid (if outside [0,1])
-            if (objectness_raw < 0.0f || objectness_raw > 1.0f) {
-                objectness = 1.0f / (1.0f + std::exp(-objectness_raw));
-            } else {
-                objectness = objectness_raw;
-            }
+            // YOLO11 with objectness: use directly (matching Python: confidences = predictions[:, 4])
+            objectness = output_data[offset + 4];
             class_start_offset = 5;
         }
         
-        // Find class with highest score
+        // Find class with highest score (YOLO11 outputs are already normalized, no sigmoid needed)
         float max_class_score = -std::numeric_limits<float>::max();
         int best_class = -1;
         for (int c = 0; c < num_classes_; ++c) {
-            float class_score_raw = output_data[offset + class_start_offset + c];
-            // Check if class score needs sigmoid
-            float class_score;
-            if (class_score_raw < 0.0f || class_score_raw > 1.0f) {
-                class_score = 1.0f / (1.0f + std::exp(-class_score_raw));
-            } else {
-                class_score = class_score_raw;
-            }
+            float class_score = output_data[offset + class_start_offset + c];
             
             if (class_score > max_class_score) {
                 max_class_score = class_score;
@@ -390,8 +357,9 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
             }
         }
         
-        // Calculate final confidence: objectness * class_score
-        float confidence = objectness * max_class_score;
+        // Calculate final confidence: use objectness directly (matching Python: confidences = predictions[:, 4])
+        // For models without objectness channel, use max class score
+        float confidence = has_objectness ? objectness : max_class_score;
         
         // Apply confidence threshold
         if (confidence < conf_threshold_) {
@@ -424,30 +392,17 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         int offset = i * output_channels_;
         if (offset + output_channels_ - 1 >= static_cast<int>(output_data.size())) break;
         
-        // Extract bbox coordinates (normalized 0-1)
-        float x_center_raw = output_data[offset + 0];
-        float y_center_raw = output_data[offset + 1];
-        float width_raw = output_data[offset + 2];
-        float height_raw = output_data[offset + 3];
-        float objectness_raw = output_data[offset + 4];
-        float class_score_raw = output_data[offset + 5];
+        // Extract bbox coordinates (YOLO11 outputs are already normalized 0-1, no sigmoid needed)
+        // Matching Python postprocess_pose: boxes = output[:, :4], scores = output[:, 4] (direct use)
+        float x_center = output_data[offset + 0];
+        float y_center = output_data[offset + 1];
+        float width = output_data[offset + 2];
+        float height = output_data[offset + 3];
+        float objectness = output_data[offset + 4];
+        float class_score = output_data[offset + 5];
         
-        // Apply sigmoid only if values are outside [0,1] range (logits)
-        float x_center = (x_center_raw < 0.0f || x_center_raw > 1.0f) 
-                        ? 1.0f / (1.0f + std::exp(-x_center_raw)) : x_center_raw;
-        float y_center = (y_center_raw < 0.0f || y_center_raw > 1.0f)
-                        ? 1.0f / (1.0f + std::exp(-y_center_raw)) : y_center_raw;
-        float width = (width_raw < 0.0f || width_raw > 1.0f)
-                     ? 1.0f / (1.0f + std::exp(-width_raw)) : width_raw;
-        float height = (height_raw < 0.0f || height_raw > 1.0f)
-                      ? 1.0f / (1.0f + std::exp(-height_raw)) : height_raw;
-        float objectness = (objectness_raw < 0.0f || objectness_raw > 1.0f)
-                          ? 1.0f / (1.0f + std::exp(-objectness_raw)) : objectness_raw;
-        float class_score = (class_score_raw < 0.0f || class_score_raw > 1.0f)
-                           ? 1.0f / (1.0f + std::exp(-class_score_raw)) : class_score_raw;
-        
-        // Calculate final confidence: objectness * class_score
-        float confidence = objectness * class_score;
+        // Calculate final confidence: use objectness directly (matching Python: scores = output[:, 4])
+        float confidence = objectness;
         
         // Apply confidence threshold
         if (confidence < conf_threshold_) {
@@ -462,21 +417,14 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         det.confidence = confidence;
         det.class_id = 0;  // Usually single class for pose models
         
-        // Parse 17 keypoints (COCO format)
+        // Parse 17 keypoints (COCO format) - YOLO11 outputs are already normalized, no sigmoid needed
+        // Matching Python: keypoints = output[:, 5:] (direct use, reshaped to (17, 3))
         det.keypoints.resize(17);
         for (int k = 0; k < 17; ++k) {
             int kpt_offset = offset + 6 + k * 3;
-            float kpt_x_raw = output_data[kpt_offset + 0];
-            float kpt_y_raw = output_data[kpt_offset + 1];
-            float kpt_conf_raw = output_data[kpt_offset + 2];
-            
-            // Apply sigmoid only if values are outside [0,1] range
-            det.keypoints[k].x = (kpt_x_raw < 0.0f || kpt_x_raw > 1.0f)
-                                 ? 1.0f / (1.0f + std::exp(-kpt_x_raw)) : kpt_x_raw;
-            det.keypoints[k].y = (kpt_y_raw < 0.0f || kpt_y_raw > 1.0f)
-                                 ? 1.0f / (1.0f + std::exp(-kpt_y_raw)) : kpt_y_raw;
-            det.keypoints[k].confidence = (kpt_conf_raw < 0.0f || kpt_conf_raw > 1.0f)
-                                         ? 1.0f / (1.0f + std::exp(-kpt_conf_raw)) : kpt_conf_raw;
+            det.keypoints[k].x = output_data[kpt_offset + 0];
+            det.keypoints[k].y = output_data[kpt_offset + 1];
+            det.keypoints[k].confidence = output_data[kpt_offset + 2];
         }
         
         detections.push_back(det);
