@@ -32,8 +32,9 @@ def run_command(cmd: List[str], env=None, cwd=None, label: str = ""):
 
 
 def sorted_bin_files(directory: str) -> List[str]:
-    pattern = os.path.join(directory, "*.bin")
-    files = sorted(glob.glob(pattern))
+    pattern = os.path.join(directory, "**", "*.bin")
+    files = glob.glob(pattern, recursive=True)
+    files.sort(key=lambda p: os.path.basename(p))
     return files
 
 

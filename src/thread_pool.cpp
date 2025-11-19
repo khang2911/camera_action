@@ -6,6 +6,7 @@
 #include <sstream>
 #include <iomanip>
 #include <filesystem>
+#include <cstdlib>
 #include <chrono>
 #include <thread>
 
@@ -59,6 +60,36 @@ ThreadPool::ThreadPool(int num_readers,
       debug_mode_(debug_mode),
       max_frames_per_video_(max_frames_per_video),
       stop_flag_(false) {
+    
+    const char* input_dump_env = std::getenv("CPP_INPUT_DUMP_DIR");
+    if (input_dump_env && input_dump_env[0] != '\0') {
+        input_dump_dir_ = input_dump_env;
+        dump_inputs_enabled_ = true;
+        std::error_code ec;
+        std::filesystem::create_directories(input_dump_dir_, ec);
+        LOG_INFO("ThreadPool", "C++ input tensor dumps enabled: " + input_dump_dir_);
+    }
+    
+    const char* output_dump_env = std::getenv("CPP_OUTPUT_DUMP_DIR");
+    if (output_dump_env && output_dump_env[0] != '\0') {
+        output_dump_dir_ = output_dump_env;
+        dump_outputs_enabled_ = true;
+        std::error_code ec;
+        std::filesystem::create_directories(output_dump_dir_, ec);
+        LOG_INFO("ThreadPool", "C++ output tensor dumps enabled: " + output_dump_dir_);
+    }
+    
+    const char* max_frames_env = std::getenv("CPP_MAX_FRAMES");
+    if (max_frames_env && max_frames_env[0] != '\0') {
+        try {
+            global_frame_limit_ = std::stoi(max_frames_env);
+        } catch (...) {
+            global_frame_limit_ = -1;
+        }
+        if (global_frame_limit_ > 0) {
+            LOG_INFO("ThreadPool", "Global frame limit enabled: " + std::to_string(global_frame_limit_));
+        }
+    }
     
     // Log debug mode status
     if (debug_mode_) {
@@ -118,6 +149,12 @@ ThreadPool::ThreadPool(int num_readers,
                          ", gpu_id=" + std::to_string(detector->getGpuId()) +
                          ") initialized for engine " + config.name);
             }
+            std::string dump_prefix = config.name + "_det" + std::to_string(j);
+            detector->setDumpDirectories(
+                dump_inputs_enabled_ ? input_dump_dir_ : "",
+                dump_outputs_enabled_ ? output_dump_dir_ : "",
+                dump_prefix
+            );
             engine_group->detectors.push_back(std::move(detector));
         }
         
@@ -342,6 +379,14 @@ void ThreadPool::readerWorker(int reader_id) {
         cv::Mat frame;
         int frame_count = 0;
         while (!stop_flag_ && reader.readFrame(frame)) {
+            if (global_frame_limit_ > 0) {
+                int idx = global_frames_processed_.fetch_add(1);
+                if (idx >= global_frame_limit_) {
+                    global_frames_processed_.fetch_sub(1);
+                    stop_flag_ = true;
+                    break;
+                }
+            }
             // Check debug mode limit - stop if we've already processed max_frames_per_video frames
             // frame_count is the number of frames already processed, so check BEFORE processing this one
             if (debug_mode_ && max_frames_per_video_ > 0 && frame_count >= max_frames_per_video_) {

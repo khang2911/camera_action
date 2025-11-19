@@ -9,6 +9,8 @@
 #include <filesystem>
 #include <unordered_map>
 #include <mutex>
+#include <sstream>
+#include <iomanip>
 
 // Simple TensorRT Logger implementation
 class TensorRTLogger : public nvinfer1::ILogger {
@@ -57,6 +59,71 @@ YOLODetector::~YOLODetector() {
     if (stream_) {
         cudaStreamDestroy(stream_);
     }
+}
+
+void YOLODetector::setDumpDirectories(const std::string& input_dir,
+                                      const std::string& output_dir,
+                                      const std::string& prefix) {
+    dump_prefix_ = prefix.empty() ? "detector" : prefix;
+    dump_batch_counter_.store(0);
+    
+    if (!input_dir.empty()) {
+        std::filesystem::path path = std::filesystem::path(input_dir) / dump_prefix_;
+        std::error_code ec;
+        std::filesystem::create_directories(path, ec);
+        input_dump_dir_ = path.string();
+        dump_inputs_enabled_ = true;
+    } else {
+        input_dump_dir_.clear();
+        dump_inputs_enabled_ = false;
+    }
+    
+    if (!output_dir.empty()) {
+        std::filesystem::path path = std::filesystem::path(output_dir) / dump_prefix_;
+        std::error_code ec;
+        std::filesystem::create_directories(path, ec);
+        output_dump_dir_ = path.string();
+        dump_outputs_enabled_ = true;
+    } else {
+        output_dump_dir_.clear();
+        dump_outputs_enabled_ = false;
+    }
+}
+
+void YOLODetector::dumpInputBatch(const std::vector<std::shared_ptr<std::vector<float>>>& inputs,
+                                  int batch_idx) {
+    if (!dump_inputs_enabled_ || input_dump_dir_.empty()) {
+        return;
+    }
+    std::ostringstream oss;
+    oss << input_dump_dir_ << "/inputs_batch" << std::setw(6) << std::setfill('0') << batch_idx << ".bin";
+    std::ofstream ofs(oss.str(), std::ios::binary);
+    if (!ofs) {
+        std::cerr << "[YOLODetector] Failed to open input dump file: " << oss.str() << std::endl;
+        return;
+    }
+    for (int b = 0; b < batch_size_; ++b) {
+        if (!inputs[b]) continue;
+        const auto& tensor = *inputs[b];
+        if (tensor.size() < input_elements_) continue;
+        ofs.write(reinterpret_cast<const char*>(tensor.data()),
+                  static_cast<std::streamsize>(tensor.size() * sizeof(float)));
+    }
+}
+
+void YOLODetector::dumpOutputBatch(const std::vector<float>& output_data, int batch_idx) {
+    if (!dump_outputs_enabled_ || output_dump_dir_.empty()) {
+        return;
+    }
+    std::ostringstream oss;
+    oss << output_dump_dir_ << "/outputs_batch" << std::setw(6) << std::setfill('0') << batch_idx << ".bin";
+    std::ofstream ofs(oss.str(), std::ios::binary);
+    if (!ofs) {
+        std::cerr << "[YOLODetector] Failed to open output dump file: " << oss.str() << std::endl;
+        return;
+    }
+    ofs.write(reinterpret_cast<const char*>(output_data.data()),
+              static_cast<std::streamsize>(output_data.size() * sizeof(float)));
 }
 
 bool YOLODetector::loadEngine() {
@@ -283,6 +350,15 @@ bool YOLODetector::runWithPreprocessedBatch(
         return false;
     }
     
+    int dump_idx = -1;
+    if (dump_inputs_enabled_ || dump_outputs_enabled_) {
+        dump_idx = dump_batch_counter_.fetch_add(1);
+    }
+    
+    if (dump_inputs_enabled_ && dump_idx >= 0) {
+        dumpInputBatch(inputs, dump_idx);
+    }
+    
     // Ensure correct device is active before copying data
     cudaSetDevice(gpu_id_);
     
@@ -301,7 +377,8 @@ bool YOLODetector::runWithPreprocessedBatch(
                         stream_);
     }
     
-    return runInference(output_paths, frame_numbers, original_widths, original_heights);
+    bool ok = runInference(output_paths, frame_numbers, original_widths, original_heights);
+    return ok;
 }
 
 std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<float>& output_data) {
@@ -869,7 +946,8 @@ bool YOLODetector::writeDetectionsToFile(const std::vector<Detection>& detection
 bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
                                 const std::vector<int>& frame_numbers,
                                 const std::vector<int>& original_widths,
-                                const std::vector<int>& original_heights) {
+                                const std::vector<int>& original_heights,
+                                int dump_batch_index) {
     if (static_cast<int>(output_paths.size()) != batch_size_ ||
         static_cast<int>(frame_numbers.size()) != batch_size_) {
         std::cerr << "Error: Output metadata batch size mismatch (expected "
@@ -893,6 +971,10 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
     std::vector<float> output_data(output_size_ / sizeof(float));
     cudaMemcpyAsync(output_data.data(), output_buffer_, output_size_, cudaMemcpyDeviceToHost, stream_);
     cudaStreamSynchronize(stream_);
+    
+    if (dump_outputs_enabled_ && dump_batch_index >= 0) {
+        dumpOutputBatch(output_data, dump_batch_index);
+    }
     
     size_t output_per_frame = static_cast<size_t>(num_anchors_) * output_channels_;
     size_t expected_total_output = static_cast<size_t>(batch_size_) * output_per_frame;
@@ -1022,10 +1104,19 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
         return false;
     }
     
+    int dump_idx = -1;
+    if (dump_outputs_enabled_) {
+        dump_idx = dump_batch_counter_.fetch_add(1);
+    }
+    
     // Copy output from GPU to CPU
     std::vector<float> output_data(output_size_ / sizeof(float));
     cudaMemcpyAsync(output_data.data(), output_buffer_, output_size_, cudaMemcpyDeviceToHost, stream_);
     cudaStreamSynchronize(stream_);
+    
+    if (dump_outputs_enabled_ && dump_idx >= 0) {
+        dumpOutputBatch(output_data, dump_idx);
+    }
     
     size_t output_per_frame = static_cast<size_t>(num_anchors_) * output_channels_;
     size_t expected_total_output = static_cast<size_t>(batch_size_) * output_per_frame;
