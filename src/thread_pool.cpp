@@ -61,6 +61,11 @@ ThreadPool::ThreadPool(int num_readers,
       max_frames_per_video_(max_frames_per_video),
       stop_flag_(false) {
     
+    // Tensor dump features (CPP_INPUT_DUMP_DIR, CPP_OUTPUT_DUMP_DIR, CPP_MAX_FRAMES) 
+    // are only used for cross-checking with trt_infer_cpp, not in the main application.
+    // These are disabled by default - only enable if explicitly needed for debugging.
+    // To enable: set environment variables before running.
+    
     const char* input_dump_env = std::getenv("CPP_INPUT_DUMP_DIR");
     if (input_dump_env && input_dump_env[0] != '\0') {
         input_dump_dir_ = input_dump_env;
@@ -68,6 +73,8 @@ ThreadPool::ThreadPool(int num_readers,
         std::error_code ec;
         std::filesystem::create_directories(input_dump_dir_, ec);
         LOG_INFO("ThreadPool", "C++ input tensor dumps enabled: " + input_dump_dir_);
+    } else {
+        dump_inputs_enabled_ = false;
     }
     
     const char* output_dump_env = std::getenv("CPP_OUTPUT_DUMP_DIR");
@@ -77,6 +84,8 @@ ThreadPool::ThreadPool(int num_readers,
         std::error_code ec;
         std::filesystem::create_directories(output_dump_dir_, ec);
         LOG_INFO("ThreadPool", "C++ output tensor dumps enabled: " + output_dump_dir_);
+    } else {
+        dump_outputs_enabled_ = false;
     }
     
     const char* max_frames_env = std::getenv("CPP_MAX_FRAMES");
@@ -88,7 +97,11 @@ ThreadPool::ThreadPool(int num_readers,
         }
         if (global_frame_limit_ > 0) {
             LOG_INFO("ThreadPool", "Global frame limit enabled: " + std::to_string(global_frame_limit_));
+        } else {
+            global_frame_limit_ = -1;  // Disable if invalid
         }
+    } else {
+        global_frame_limit_ = -1;  // No global limit by default
     }
     
     // Log debug mode status
@@ -379,21 +392,23 @@ void ThreadPool::readerWorker(int reader_id) {
         cv::Mat frame;
         int frame_count = 0;
         while (!stop_flag_ && reader.readFrame(frame)) {
-            if (global_frame_limit_ > 0) {
-                int idx = global_frames_processed_.fetch_add(1);
-                if (idx >= global_frame_limit_) {
-                    global_frames_processed_.fetch_sub(1);
-                    stop_flag_ = true;
-                    break;
-                }
-            }
-            // Check debug mode limit - stop if we've already processed max_frames_per_video frames
+            // Check debug mode limit first (takes priority over global limit)
             // frame_count is the number of frames already processed, so check BEFORE processing this one
             if (debug_mode_ && max_frames_per_video_ > 0 && frame_count >= max_frames_per_video_) {
                 LOG_INFO("Reader", "[DEBUG MODE] Reader " + std::to_string(reader_id) + 
                          " stopping after processing " + std::to_string(frame_count) + " frames" +
                          " (max_frames_per_video=" + std::to_string(max_frames_per_video_) + ")");
                 break;
+            }
+            
+            // Check global frame limit (only if debug mode limit doesn't apply)
+            if (!debug_mode_ && global_frame_limit_ > 0) {
+                int idx = global_frames_processed_.fetch_add(1);
+                if (idx >= global_frame_limit_) {
+                    global_frames_processed_.fetch_sub(1);
+                    stop_flag_ = true;
+                    break;
+                }
             }
             
             auto frame_start = std::chrono::steady_clock::now();
