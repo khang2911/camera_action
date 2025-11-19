@@ -146,15 +146,15 @@ void YOLODetector::allocateBuffers() {
                 num_anchors_ = output_width_;
             }
             
-            // YOLOv11 format determination:
+            // YOLOv11 format determination - ALL models are single-class:
             if (model_type_ == ModelType::POSE) {
                 // YOLOv11 Pose: 56 channels = 4(bbox) + 1(confidence) + 1(class) + 17*3(keypoints)
                 // Format: [x_center, y_center, width, height, confidence, class_score, 17*3 keypoints]
-                num_classes_ = 1;  // Single class for pose
+                num_classes_ = 1;  // All models are single-class (class_id=0)
             } else {
                 // YOLOv11 Detection: 5 channels = 4(bbox) + 1(confidence)
                 // Format: [x_center, y_center, width, height, confidence]
-                // Single class model (class_id=0)
+                // All models are single-class (class_id=0)
                 num_classes_ = 1;
             }
             
@@ -311,7 +311,7 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
     // - 5 channels total for single-class detection
     // - All values are already normalized [0,1], no sigmoid needed
     // - Python: predictions = output[0].T, boxes = predictions[:, :4], confidences = predictions[:, 4]
-    // - Single class model (class_id=0)
+    // - ALL models are single-class (class_id=0)
     
     for (int i = 0; i < num_anchors_; ++i) {
         int offset = i * output_channels_;
@@ -339,7 +339,7 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         det.bbox[2] = width;      // width (normalized 0-1)
         det.bbox[3] = height;      // height (normalized 0-1)
         det.confidence = confidence;
-        det.class_id = 0;  // YOLOv11 detection is single-class (matching Python: class_id=0)
+        det.class_id = 0;  // ALL models are single-class (matching Python: class_id=0)
         
         detections.push_back(det);
     }
@@ -384,7 +384,7 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         det.bbox[2] = width;       // width (normalized 0-1)
         det.bbox[3] = height;      // height (normalized 0-1)
         det.confidence = confidence;
-        det.class_id = 0;  // YOLOv11 pose is single-class (matching Python: class_id=0)
+        det.class_id = 0;  // ALL models are single-class (matching Python: class_id=0)
         
         // Parse 17 keypoints (COCO format) - YOLOv11: already normalized, no sigmoid
         // Matching Python: keypoints = output[:, 5:], reshaped to (17, 3)
