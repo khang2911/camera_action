@@ -346,17 +346,18 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         float width = output_data[idx_w];
         float height = output_data[idx_h];
         
-        // Extract confidence (YOLOv11: use raw value directly, NO SIGMOID)
-        // Reference script: float conf = conf_ptr[i]; (no sigmoid applied)
-        // Confidence is already in the correct format [0,1] or as logit
-        float confidence = output_data[idx_conf];
+        // Extract confidence (YOLOv11: raw output shows logit values, need sigmoid)
+        // Raw output shows values like 1.49012e-07 which are logits, not probabilities
+        // Apply sigmoid to convert logits to probabilities [0,1]
+        float raw_confidence = output_data[idx_conf];
+        float confidence = 1.0f / (1.0f + std::exp(-raw_confidence));
         
-        // Track statistics
+        // Track statistics (on sigmoid value for threshold comparison)
         if (confidence > max_confidence) {
             max_confidence = confidence;
         }
         
-        // Sample first 100 confidence values for debugging
+        // Sample first 100 confidence values for debugging (both raw and sigmoid)
         if (sample_confidences.size() < 100) {
             sample_confidences.push_back(confidence);
         }
@@ -401,7 +402,7 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         std::cout << "[DEBUG Parse] Call " << parse_call_count << ": "
                   << "Total anchors checked: " << total_anchors_checked
                   << ", Above threshold (" << conf_threshold_ << "): " << anchors_above_threshold
-                  << ", Max confidence: " << max_confidence
+                  << ", Max confidence (after sigmoid): " << max_confidence
                   << ", Min confidence above threshold: " << (anchors_above_threshold > 0 ? min_confidence_above_threshold : 0.0f)
                   << std::endl;
         
@@ -505,10 +506,11 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         float width = output_data[idx_w];
         float height = output_data[idx_h];
         
-        // Extract confidence (YOLOv11: use raw value directly, NO SIGMOID)
-        // Reference script: float conf = conf_ptr[i]; (no sigmoid applied)
-        // Confidence is already in the correct format
-        float confidence = output_data[idx_conf];
+        // Extract confidence (YOLOv11: raw output shows logit values, need sigmoid)
+        // Raw output shows values like 1.49012e-07 which are logits, not probabilities
+        // Apply sigmoid to convert logits to probabilities [0,1]
+        float raw_confidence = output_data[idx_conf];
+        float confidence = 1.0f / (1.0f + std::exp(-raw_confidence));
         
         // Apply confidence threshold (matching Python: mask = scores > self.conf_threshold)
         if (confidence < conf_threshold_) {
