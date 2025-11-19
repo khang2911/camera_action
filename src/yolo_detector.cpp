@@ -361,8 +361,7 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         static int conf_debug_count = 0;
         if (conf_debug_count < 20 && i < 20) {
             std::cout << "[DEBUG Conf] Anchor " << i << ": idx_conf=" << idx_conf 
-                      << ", raw_conf=" << raw_confidence 
-                      << ", processed_conf=" << confidence << std::endl;
+                      << ", conf=" << confidence << std::endl;
             conf_debug_count++;
         }
         
