@@ -325,13 +325,16 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
     std::vector<float> sample_confidences;
     
     for (int i = 0; i < num_anchors_; ++i) {
-        // For anchor i, channel c: index = c * num_anchors_ + i
+        // CRITICAL FIX: TensorRT outputs [batch, channels, num_anchors]
+        // Python does: output[0].T which transposes [channels, num_anchors] to [num_anchors, channels]
+        // Then reads: predictions[:, 4] which is column 4 (channel 4) for all anchors
+        // So we need to read as [num_anchors, channels] format: index = anchor * channels + channel
         // Channel 0: x_center, Channel 1: y_center, Channel 2: width, Channel 3: height, Channel 4: confidence
-        int idx_x = 0 * num_anchors_ + i;
-        int idx_y = 1 * num_anchors_ + i;
-        int idx_w = 2 * num_anchors_ + i;
-        int idx_h = 3 * num_anchors_ + i;
-        int idx_conf = 4 * num_anchors_ + i;
+        int idx_x = i * output_channels_ + 0;  // anchor * channels + channel_x
+        int idx_y = i * output_channels_ + 1;  // anchor * channels + channel_y
+        int idx_w = i * output_channels_ + 2;  // anchor * channels + channel_w
+        int idx_h = i * output_channels_ + 3;  // anchor * channels + channel_h
+        int idx_conf = i * output_channels_ + 4;  // anchor * channels + channel_conf
         
         if (idx_conf >= static_cast<int>(output_data.size())) break;
         
@@ -511,13 +514,16 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
     // Python does: predictions = output[0].T to get [num_anchors, channels]
     // So we need to read as: output_data[channel_idx * num_anchors_ + anchor_idx]
     for (int i = 0; i < num_anchors_; ++i) {
-        // For anchor i, channel c: index = c * num_anchors_ + i
+        // CRITICAL FIX: TensorRT outputs [batch, channels, num_anchors]
+        // Python does: output[0].T which transposes [channels, num_anchors] to [num_anchors, channels]
+        // Then reads: predictions[:, 4] which is column 4 (channel 4) for all anchors
+        // So we need to read as [num_anchors, channels] format: index = anchor * channels + channel
         // Channel 0-3: bbox, Channel 4: confidence, Channel 5: class_score, Channel 6-56: keypoints
-        int idx_x = 0 * num_anchors_ + i;
-        int idx_y = 1 * num_anchors_ + i;
-        int idx_w = 2 * num_anchors_ + i;
-        int idx_h = 3 * num_anchors_ + i;
-        int idx_conf = 4 * num_anchors_ + i;
+        int idx_x = i * output_channels_ + 0;  // anchor * channels + channel_x
+        int idx_y = i * output_channels_ + 1;  // anchor * channels + channel_y
+        int idx_w = i * output_channels_ + 2;  // anchor * channels + channel_w
+        int idx_h = i * output_channels_ + 3;  // anchor * channels + channel_h
+        int idx_conf = i * output_channels_ + 4;  // anchor * channels + channel_conf
         
         if (idx_conf >= static_cast<int>(output_data.size())) break;
         
@@ -553,12 +559,13 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         // Matching Python: keypoints = output[:, 5:], reshaped to (17, 3)
         // Keypoints start at channel 6 (after bbox + confidence + class_score)
         // Raw output is in pixel coordinates relative to input_width_ x input_height_
+        // CRITICAL FIX: Read as [num_anchors, channels] format
         det.keypoints.resize(17);
         for (int k = 0; k < 17; ++k) {
             int kpt_channel_base = 6 + k * 3;  // Channel for keypoint k (x, y, conf)
-            int idx_kpt_x = kpt_channel_base * num_anchors_ + i;
-            int idx_kpt_y = (kpt_channel_base + 1) * num_anchors_ + i;
-            int idx_kpt_conf = (kpt_channel_base + 2) * num_anchors_ + i;
+            int idx_kpt_x = i * output_channels_ + kpt_channel_base;  // anchor * channels + channel
+            int idx_kpt_y = i * output_channels_ + (kpt_channel_base + 1);
+            int idx_kpt_conf = i * output_channels_ + (kpt_channel_base + 2);
             
             if (idx_kpt_conf >= static_cast<int>(output_data.size())) break;
             
@@ -1388,31 +1395,25 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
             return false;
         }
         
+        // CRITICAL FIX: TensorRT outputs [batch, channels, num_anchors] = [batch, 5, 8400]
+        // Python does: output[0] gets [channels, num_anchors] = [5, 8400], then .T transposes to [num_anchors, channels] = [8400, 5]
+        // So we need to transpose the extracted batch data from [channels, num_anchors] to [num_anchors, channels]
+        
+        // Extract batch data in [channels, num_anchors] format
+        std::vector<float> batch_data_channels_first(output_per_frame);
         std::copy(output_data.begin() + batch_offset,
                   output_data.begin() + batch_offset + output_per_frame,
-                  frame_output.begin());
+                  batch_data_channels_first.begin());
         
-        // Python: predictions = output[0].T
-        // The Python code transposes, but let's understand the actual TensorRT output format:
-        // TensorRT outputs [batch, num_anchors, channels] which when flattened is [batch*num_anchors*channels]
-        // For a single batch, we extract [num_anchors, channels] format
-        // 
-        // In Python: output[0] gets [num_anchors, channels], then .T makes it [channels, num_anchors]
-        // Then predictions[:, :4] selects all channels and first 4 anchors? That doesn't make sense.
-        //
-        // Actually, looking at postprocess_pose: if output.shape[0] == 56, it transposes
-        // This suggests the output might be [channels, num_anchors] initially, and transpose makes it [num_anchors, channels]
-        // Then output[:, :4] gives [num_anchors, 4] which is correct!
-        //
-        // So the issue might be: TensorRT outputs [channels, num_anchors] but we're reading it as [num_anchors, channels]
-        // OR TensorRT outputs [num_anchors, channels] and Python transposes it to [channels, num_anchors] then back?
-        //
-        // Let me check: if TensorRT outputs [num_anchors, channels] (which is what we're reading),
-        // and Python does output[0].T to get [channels, num_anchors], then predictions[:, :4] would be wrong.
-        //
-        // I think the real issue is that we should NOT transpose, because TensorRT already outputs [num_anchors, channels]
-        // and that's the format we need. The Python transpose might be for a different output format.
-        // Let's use the non-transposed format directly.
+        // Transpose from [channels, num_anchors] to [num_anchors, channels] to match Python's output[0].T
+        // frame_output[anchor * channels + channel] = batch_data_channels_first[channel * num_anchors + anchor]
+        for (int anchor = 0; anchor < num_anchors_; ++anchor) {
+            for (int channel = 0; channel < output_channels_; ++channel) {
+                int src_idx = channel * num_anchors_ + anchor;  // [channels, num_anchors] format
+                int dst_idx = anchor * output_channels_ + channel;  // [num_anchors, channels] format
+                frame_output[dst_idx] = batch_data_channels_first[src_idx];
+            }
+        }
         std::vector<Detection> detections;
         if (model_type_ == ModelType::POSE) {
             detections = parseRawPoseOutput(frame_output);
