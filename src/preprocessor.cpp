@@ -50,9 +50,13 @@ cv::Mat Preprocessor::preprocess(const cv::Mat& frame) {
 void Preprocessor::preprocessToFloat(const cv::Mat& frame, std::vector<float>& output) {
     cv::Mat processed = preprocess(frame);
     
-    // Convert to RGB format and flatten to CHW format for TensorRT
+    // Convert BGR to RGB (OpenCV uses BGR by default, but model expects RGB)
+    cv::Mat rgb;
+    cv::cvtColor(processed, rgb, cv::COLOR_BGR2RGB);
+    
+    // Flatten to CHW format for TensorRT: [C, H, W]
     std::vector<cv::Mat> channels;
-    cv::split(processed, channels);
+    cv::split(rgb, channels);
     
     // TensorRT expects CHW format: [C, H, W]
     const size_t total_size = static_cast<size_t>(target_width_) * target_height_ * 3;

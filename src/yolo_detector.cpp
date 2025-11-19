@@ -352,9 +352,8 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         // Extract confidence (YOLOv11: use raw value directly, matching Python postprocess)
         // Python code: predictions = output[0].T, then confidences = predictions[:, 4]
         // Python does NOT apply sigmoid: valid_indices = confidences > self.conf_threshold
-        // From ONNX inspection: raw values are ~0.00013, which are very low
-        // The ONNX model has a sigmoid node, but it appears to be applied to class scores, not confidence
         // We match Python behavior: use raw values directly (no sigmoid)
+        // Low confidence values may be due to preprocessing differences - need to investigate
         float confidence = output_data[idx_conf];
         
         // Debug: Log first few raw confidence values to verify indexing
@@ -525,6 +524,7 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         // Extract confidence (YOLOv11: use raw value directly, matching Python postprocess_pose)
         // Python code: scores = output[:, 4] (no sigmoid applied)
         // Match Python behavior: use raw values directly
+        // Low confidence values may be due to preprocessing differences - need to investigate
         float confidence = output_data[idx_conf];
         
         // Apply confidence threshold (matching Python: mask = scores > self.conf_threshold)
