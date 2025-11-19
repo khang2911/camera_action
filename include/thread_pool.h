@@ -51,7 +51,9 @@ public:
                int num_preprocessors,
                const std::vector<VideoClip>& video_clips,
                const std::vector<EngineConfig>& engine_configs,
-               const std::string& output_dir);
+               const std::string& output_dir,
+               bool debug_mode = false,
+               int max_frames_per_video = 0);
     
     ~ThreadPool();
     
@@ -91,6 +93,8 @@ private:
     std::vector<VideoClip> video_clips_;
     std::vector<std::unique_ptr<EngineGroup>> engine_groups_;
     std::string output_dir_;
+    bool debug_mode_;
+    int max_frames_per_video_;
     
     std::vector<std::thread> reader_threads_;
     std::vector<std::thread> preprocessor_threads_;

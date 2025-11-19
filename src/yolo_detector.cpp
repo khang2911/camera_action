@@ -151,8 +151,20 @@ void YOLODetector::allocateBuffers() {
                 // Pose: 56 channels = 4(bbox) + 1(objectness) + 1(class) + 17*3(keypoints)
                 num_classes_ = 1;  // Usually single class for pose
             } else {
-                // Detection: channels = 4(bbox) + 1(objectness) + num_classes
-                num_classes_ = output_channels_ - 5;
+                // Detection: could be:
+                // - Older format: 4(bbox) + 1(objectness) + num_classes = num_classes + 5
+                // - Newer format (YOLOv8+): 4(bbox) + num_classes = num_classes + 4
+                // Try to detect format based on output_channels_
+                if (output_channels_ >= 5) {
+                    // Assume older format first (with objectness)
+                    num_classes_ = output_channels_ - 5;
+                    // If that gives 0 or negative, try newer format
+                    if (num_classes_ <= 0 && output_channels_ >= 4) {
+                        num_classes_ = output_channels_ - 4;
+                    }
+                } else {
+                    num_classes_ = 1;  // Fallback
+                }
             }
             
             for (int j = 0; j < dims.nbDims; ++j) {
@@ -304,30 +316,74 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
     std::vector<Detection> detections;
     
     // Raw YOLO detection format: [batch, num_anchors, num_classes + 5]
-    // Each anchor: [x_center, y_center, width, height, objectness, class_scores...]
-    // Coordinates are typically normalized (0-1) or in grid coordinates
+    // Modern YOLO (v8+) format: [x_center, y_center, width, height, class_scores...]
+    // Older YOLO format: [x_center, y_center, width, height, objectness, class_scores...]
+    // Coordinates are typically normalized (0-1) relative to input image size
+    
+    // Check if we have objectness channel (older format) or not (newer format)
+    // If output_channels_ == num_classes_ + 4, then no objectness (newer format)
+    // If output_channels_ == num_classes_ + 5, then has objectness (older format)
+    bool has_objectness = (output_channels_ == num_classes_ + 5);
     
     for (int i = 0; i < num_anchors_; ++i) {
         int offset = i * output_channels_;
         if (offset + output_channels_ - 1 >= static_cast<int>(output_data.size())) break;
         
-        // Extract bbox and objectness
-        float x_center = output_data[offset + 0];
-        float y_center = output_data[offset + 1];
-        float width = output_data[offset + 2];
-        float height = output_data[offset + 3];
-        float objectness_raw = output_data[offset + 4];
+        // Extract bbox coordinates (normalized 0-1)
+        float x_center_raw = output_data[offset + 0];
+        float y_center_raw = output_data[offset + 1];
+        float width_raw = output_data[offset + 2];
+        float height_raw = output_data[offset + 3];
         
-        // Apply sigmoid to objectness (YOLO outputs are typically logits)
-        float objectness = 1.0f / (1.0f + std::exp(-objectness_raw));
+        // Apply sigmoid to bbox coordinates if they're logits (some YOLO versions)
+        // Most modern YOLO outputs are already in [0,1] range, but check if they need sigmoid
+        float x_center = x_center_raw;
+        float y_center = y_center_raw;
+        float width = width_raw;
+        float height = height_raw;
+        
+        // If coordinates are outside [0,1] range, they might be logits - apply sigmoid
+        // Otherwise, assume they're already normalized
+        if (x_center_raw < 0.0f || x_center_raw > 1.0f || 
+            y_center_raw < 0.0f || y_center_raw > 1.0f) {
+            // Coordinates might be logits, apply sigmoid
+            x_center = 1.0f / (1.0f + std::exp(-x_center_raw));
+            y_center = 1.0f / (1.0f + std::exp(-y_center_raw));
+        }
+        if (width_raw < 0.0f || width_raw > 1.0f || 
+            height_raw < 0.0f || height_raw > 1.0f) {
+            width = 1.0f / (1.0f + std::exp(-width_raw));
+            height = 1.0f / (1.0f + std::exp(-height_raw));
+        }
+        
+        float objectness = 1.0f;
+        int class_start_offset = 4;
+        
+        if (has_objectness) {
+            // Older format: has separate objectness channel
+            float objectness_raw = output_data[offset + 4];
+            // Check if objectness needs sigmoid (if outside [0,1])
+            if (objectness_raw < 0.0f || objectness_raw > 1.0f) {
+                objectness = 1.0f / (1.0f + std::exp(-objectness_raw));
+            } else {
+                objectness = objectness_raw;
+            }
+            class_start_offset = 5;
+        }
         
         // Find class with highest score
         float max_class_score = -std::numeric_limits<float>::max();
         int best_class = -1;
         for (int c = 0; c < num_classes_; ++c) {
-            float class_score_raw = output_data[offset + 5 + c];
-            // Apply sigmoid to class score
-            float class_score = 1.0f / (1.0f + std::exp(-class_score_raw));
+            float class_score_raw = output_data[offset + class_start_offset + c];
+            // Check if class score needs sigmoid
+            float class_score;
+            if (class_score_raw < 0.0f || class_score_raw > 1.0f) {
+                class_score = 1.0f / (1.0f + std::exp(-class_score_raw));
+            } else {
+                class_score = class_score_raw;
+            }
+            
             if (class_score > max_class_score) {
                 max_class_score = class_score;
                 best_class = c;
@@ -343,10 +399,10 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         }
         
         Detection det;
-        det.bbox[0] = x_center;   // x_center (normalized or absolute)
-        det.bbox[1] = y_center;   // y_center
-        det.bbox[2] = width;      // width
-        det.bbox[3] = height;     // height
+        det.bbox[0] = x_center;   // x_center (normalized 0-1)
+        det.bbox[1] = y_center;   // y_center (normalized 0-1)
+        det.bbox[2] = width;      // width (normalized 0-1)
+        det.bbox[3] = height;      // height (normalized 0-1)
         det.confidence = confidence;
         det.class_id = best_class;
         
@@ -368,17 +424,27 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         int offset = i * output_channels_;
         if (offset + output_channels_ - 1 >= static_cast<int>(output_data.size())) break;
         
-        // Extract bbox, objectness, and class
-        float x_center = output_data[offset + 0];
-        float y_center = output_data[offset + 1];
-        float width = output_data[offset + 2];
-        float height = output_data[offset + 3];
+        // Extract bbox coordinates (normalized 0-1)
+        float x_center_raw = output_data[offset + 0];
+        float y_center_raw = output_data[offset + 1];
+        float width_raw = output_data[offset + 2];
+        float height_raw = output_data[offset + 3];
         float objectness_raw = output_data[offset + 4];
         float class_score_raw = output_data[offset + 5];
         
-        // Apply sigmoid to objectness and class score (YOLO outputs are typically logits)
-        float objectness = 1.0f / (1.0f + std::exp(-objectness_raw));
-        float class_score = 1.0f / (1.0f + std::exp(-class_score_raw));
+        // Apply sigmoid only if values are outside [0,1] range (logits)
+        float x_center = (x_center_raw < 0.0f || x_center_raw > 1.0f) 
+                        ? 1.0f / (1.0f + std::exp(-x_center_raw)) : x_center_raw;
+        float y_center = (y_center_raw < 0.0f || y_center_raw > 1.0f)
+                        ? 1.0f / (1.0f + std::exp(-y_center_raw)) : y_center_raw;
+        float width = (width_raw < 0.0f || width_raw > 1.0f)
+                     ? 1.0f / (1.0f + std::exp(-width_raw)) : width_raw;
+        float height = (height_raw < 0.0f || height_raw > 1.0f)
+                      ? 1.0f / (1.0f + std::exp(-height_raw)) : height_raw;
+        float objectness = (objectness_raw < 0.0f || objectness_raw > 1.0f)
+                          ? 1.0f / (1.0f + std::exp(-objectness_raw)) : objectness_raw;
+        float class_score = (class_score_raw < 0.0f || class_score_raw > 1.0f)
+                           ? 1.0f / (1.0f + std::exp(-class_score_raw)) : class_score_raw;
         
         // Calculate final confidence: objectness * class_score
         float confidence = objectness * class_score;
@@ -389,10 +455,10 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         }
         
         Detection det;
-        det.bbox[0] = x_center;   // x_center
-        det.bbox[1] = y_center;   // y_center
-        det.bbox[2] = width;      // width
-        det.bbox[3] = height;     // height
+        det.bbox[0] = x_center;   // x_center (normalized 0-1)
+        det.bbox[1] = y_center;   // y_center (normalized 0-1)
+        det.bbox[2] = width;       // width (normalized 0-1)
+        det.bbox[3] = height;      // height (normalized 0-1)
         det.confidence = confidence;
         det.class_id = 0;  // Usually single class for pose models
         
@@ -400,9 +466,17 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         det.keypoints.resize(17);
         for (int k = 0; k < 17; ++k) {
             int kpt_offset = offset + 6 + k * 3;
-            det.keypoints[k].x = output_data[kpt_offset + 0];
-            det.keypoints[k].y = output_data[kpt_offset + 1];
-            det.keypoints[k].confidence = output_data[kpt_offset + 2];
+            float kpt_x_raw = output_data[kpt_offset + 0];
+            float kpt_y_raw = output_data[kpt_offset + 1];
+            float kpt_conf_raw = output_data[kpt_offset + 2];
+            
+            // Apply sigmoid only if values are outside [0,1] range
+            det.keypoints[k].x = (kpt_x_raw < 0.0f || kpt_x_raw > 1.0f)
+                                 ? 1.0f / (1.0f + std::exp(-kpt_x_raw)) : kpt_x_raw;
+            det.keypoints[k].y = (kpt_y_raw < 0.0f || kpt_y_raw > 1.0f)
+                                 ? 1.0f / (1.0f + std::exp(-kpt_y_raw)) : kpt_y_raw;
+            det.keypoints[k].confidence = (kpt_conf_raw < 0.0f || kpt_conf_raw > 1.0f)
+                                         ? 1.0f / (1.0f + std::exp(-kpt_conf_raw)) : kpt_conf_raw;
         }
         
         detections.push_back(det);
@@ -632,8 +706,32 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
                      ? original_heights[b] : 0;
         
         if (orig_w > 0 && orig_h > 0) {
+            // Debug: Log scaling info for first detection (once per batch)
+            static bool logged_scaling_info = false;
+            if (!logged_scaling_info && detections.size() > 0) {
+                std::cout << "[YOLODetector] Scaling detections: original=" << orig_w << "x" << orig_h 
+                          << ", preprocessed=" << input_width_ << "x" << input_height_ << std::endl;
+                logged_scaling_info = true;
+            }
+            
             for (auto& det : detections) {
                 scaleDetectionToOriginal(det, orig_w, orig_h);
+            }
+        } else {
+            // Warning: No original dimensions provided, bbox coordinates are in normalized [0,1] format
+            // relative to preprocessed image (input_width_ x input_height_)
+            // This means they need to be scaled manually or the scaling step was skipped
+            if (detections.size() > 0) {
+                static bool warned = false;
+                if (!warned) {
+                    std::cerr << "Warning: No original frame dimensions provided for scaling. "
+                              << "Bbox coordinates are normalized [0,1] relative to preprocessed image ("
+                              << input_width_ << "x" << input_height_ << "). "
+                              << "Detections may appear incorrectly scaled." << std::endl;
+                    std::cerr << "  Frame " << frame_numbers[b] << " has " << detections.size() 
+                              << " detections but orig_w=" << orig_w << ", orig_h=" << orig_h << std::endl;
+                    warned = true;
+                }
             }
         }
         
@@ -648,31 +746,34 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
 
 void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, int original_height) {
     if (original_width <= 0 || original_height <= 0) {
-        return;  // Cannot scale without valid dimensions
+        // Cannot scale without valid dimensions - coordinates remain normalized [0,1]
+        return;
     }
     
     // YOLO outputs are normalized (0-1) relative to preprocessed image (input_width_ x input_height_)
     // Preprocessor adds padding to maintain aspect ratio, then resizes to target size
     
     // Calculate scale factor used during preprocessing (same as in Preprocessor::addPadding)
+    // This is the factor by which the original image was scaled down to fit in the target size
     float scale = std::min(static_cast<float>(input_width_) / original_width,
                           static_cast<float>(input_height_) / original_height);
     
     // Calculate dimensions after scaling (before padding)
-    int scaled_w = static_cast<int>(original_width * scale);
-    int scaled_h = static_cast<int>(original_height * scale);
+    float scaled_w = original_width * scale;
+    float scaled_h = original_height * scale;
     
     // Calculate padding offsets (centered padding)
-    int pad_w = (input_width_ - scaled_w) / 2;
-    int pad_h = (input_height_ - scaled_h) / 2;
+    float pad_w = (input_width_ - scaled_w) / 2.0f;
+    float pad_h = (input_height_ - scaled_h) / 2.0f;
     
     // Convert normalized coordinates (0-1) to pixel coordinates in preprocessed image
+    // det.bbox values are in [0,1] range relative to input_width_ x input_height_
     float x_center_prep = det.bbox[0] * input_width_;
     float y_center_prep = det.bbox[1] * input_height_;
     float width_prep = det.bbox[2] * input_width_;
     float height_prep = det.bbox[3] * input_height_;
     
-    // Remove padding offset
+    // Remove padding offset to get coordinates in the scaled (unpadded) region
     float x_center_scaled = x_center_prep - pad_w;
     float y_center_scaled = y_center_prep - pad_h;
     
@@ -688,7 +789,7 @@ void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, 
     width_orig = std::max(0.0f, std::min(static_cast<float>(original_width), width_orig));
     height_orig = std::max(0.0f, std::min(static_cast<float>(original_height), height_orig));
     
-    // Update bbox (still in center-width-height format)
+    // Update bbox (still in center-width-height format, now in original image pixel coordinates)
     det.bbox[0] = x_center_orig;
     det.bbox[1] = y_center_orig;
     det.bbox[2] = width_orig;

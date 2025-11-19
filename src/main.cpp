@@ -120,8 +120,21 @@ int main(int argc, char* argv[]) {
     LOG_INFO("Main", "Output directory: " + output_dir);
     LOG_INFO("Main", "Number of videos: " + std::to_string(video_clips.size()));
     
+    // Get debug mode settings
+    bool debug_mode = config.isDebugMode();
+    int max_frames_per_video = config.getMaxFramesPerVideo();
+    if (debug_mode) {
+        LOG_INFO("Main", "=== DEBUG MODE ENABLED ===");
+        if (max_frames_per_video > 0) {
+            LOG_INFO("Main", "Max frames per video: " + std::to_string(max_frames_per_video));
+        } else {
+            LOG_INFO("Main", "No frame limit (processing all frames)");
+        }
+    }
+    
     // Create thread pool
-    ThreadPool pool(num_readers, num_preprocessors, video_clips, engine_configs, output_dir);
+    ThreadPool pool(num_readers, num_preprocessors, video_clips, engine_configs, output_dir,
+                    debug_mode, max_frames_per_video);
     
     // Start processing
     LOG_INFO("Main", "Starting processing...");

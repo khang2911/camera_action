@@ -242,11 +242,12 @@ def visualize_video(video_path, detection_file, output_path, start_frame=0, end_
         if frame_number >= end_frame:
             break
         
-        # Get detections for this frame (frame numbers are 1-indexed in output)
-        # Adjust if your system uses 0-indexed or 1-indexed
-        detections = detections_by_frame.get(frame_number + 1, {}).get('detections', [])
-        if not detections:
-            detections = detections_by_frame.get(frame_number, {}).get('detections', [])
+        # Get detections for this frame
+        # Detection files use 1-indexed frame numbers (first frame is frame 1)
+        # Video frames are 0-indexed (first frame is frame 0)
+        # So we need to add 1 to match detection file frame numbers
+        detection_frame_key = frame_number + 1
+        detections = detections_by_frame.get(detection_frame_key, {}).get('detections', [])
         
         if detections:
             frames_with_detections += 1
@@ -271,12 +272,29 @@ def visualize_video(video_path, detection_file, output_path, start_frame=0, end_
     return True
 
 def main():
-    parser = argparse.ArgumentParser(description='Visualize YOLO detections on video')
+    parser = argparse.ArgumentParser(
+        description='Visualize YOLO detections on video',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Note: Frame numbers in detection files are 1-indexed (first frame is frame 1).
+Use inspect_detections.py to find the frame range in your detection file:
+  python3 inspect_detections.py <detection_file>
+
+Examples:
+  # Visualize all frames
+  python3 visualize_detections.py video.mp4 detections.bin output.mp4
+  
+  # Visualize specific frame range
+  python3 visualize_detections.py video.mp4 detections.bin output.mp4 --start_frame 100 --end_frame 200
+        """
+    )
     parser.add_argument('video_path', type=str, help='Path to input video file')
     parser.add_argument('detection_file', type=str, help='Path to binary detection file')
     parser.add_argument('output_path', type=str, help='Path to output video file')
-    parser.add_argument('--start_frame', type=int, default=0, help='Start frame number (default: 0)')
-    parser.add_argument('--end_frame', type=int, default=None, help='End frame number (default: all)')
+    parser.add_argument('--start_frame', type=int, default=0, 
+                       help='Start frame number (0-indexed for video, default: 0). Note: Detection files use 1-indexed frames.')
+    parser.add_argument('--end_frame', type=int, default=None, 
+                       help='End frame number (0-indexed for video, default: all frames)')
     
     args = parser.parse_args()
     

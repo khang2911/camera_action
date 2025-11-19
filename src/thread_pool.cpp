@@ -48,11 +48,15 @@ ThreadPool::ThreadPool(int num_readers,
                        int num_preprocessors,
                        const std::vector<VideoClip>& video_clips,
                        const std::vector<EngineConfig>& engine_configs,
-                       const std::string& output_dir)
+                       const std::string& output_dir,
+                       bool debug_mode,
+                       int max_frames_per_video)
     : num_readers_(num_readers),
       num_preprocessors_(num_preprocessors > 0 ? num_preprocessors : num_readers),
       video_clips_(video_clips),
       output_dir_(output_dir),
+      debug_mode_(debug_mode),
+      max_frames_per_video_(max_frames_per_video),
       stop_flag_(false) {
     
     // Initialize statistics
@@ -331,6 +335,14 @@ void ThreadPool::readerWorker(int reader_id) {
         cv::Mat frame;
         int frame_count = 0;
         while (!stop_flag_ && reader.readFrame(frame)) {
+            // Check debug mode limit
+            if (debug_mode_ && max_frames_per_video_ > 0 && frame_count >= max_frames_per_video_) {
+                LOG_INFO("Reader", "[DEBUG MODE] Reader " + std::to_string(reader_id) + 
+                         " stopping at frame " + std::to_string(frame_count) + 
+                         " (max_frames_per_video=" + std::to_string(max_frames_per_video_) + ")");
+                break;
+            }
+            
             auto frame_start = std::chrono::steady_clock::now();
             
             stats_.frames_read++;

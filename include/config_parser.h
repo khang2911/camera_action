@@ -48,6 +48,8 @@ public:
     int getNumReaders() const { return num_readers_; }
     int getNumPreprocessors() const { return num_preprocessors_; }
     std::string getOutputDir() const { return output_dir_; }
+    bool isDebugMode() const { return debug_mode_; }
+    int getMaxFramesPerVideo() const { return max_frames_per_video_; }
     
     // Backward compatibility getters
     std::string getModelPath() const { 
@@ -93,6 +95,8 @@ private:
     int num_preprocessors_;
     std::string output_dir_;
     double time_padding_seconds_ = 0.0;
+    bool debug_mode_ = false;
+    int max_frames_per_video_ = 0;  // 0 means no limit
     
     void loadVideoListFromFile(const std::string& path);
     void loadPlainVideoList(std::istream& stream);
