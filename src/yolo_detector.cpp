@@ -997,6 +997,13 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
             for (int channel = 0; channel < output_channels_; ++channel) {
                 int src_idx = channel * num_anchors_ + anchor;  // [channels, num_anchors] format
                 int dst_idx = anchor * output_channels_ + channel;  // [num_anchors, channels] format
+                if (src_idx >= static_cast<int>(batch_data_channels_first.size()) || 
+                    dst_idx >= static_cast<int>(frame_output.size())) {
+                    std::cerr << "Error: Transpose index out of bounds in runInference! src_idx=" << src_idx 
+                              << ", dst_idx=" << dst_idx << ", batch_data size=" << batch_data_channels_first.size()
+                              << ", frame_output size=" << frame_output.size() << std::endl;
+                    return false;
+                }
                 frame_output[dst_idx] = batch_data_channels_first[src_idx];
             }
         }
