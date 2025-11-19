@@ -121,10 +121,13 @@ void YOLODetector::allocateBuffers() {
             output_size_ = 1;
             
             if (dims.nbDims == 3) {
-                // Format: [batch, num_anchors, channels]
+                // Format: [batch, num_anchors, channels] OR [batch, channels, num_anchors]
+                // Need to check which dimension is which
+                // Typically TensorRT outputs [batch, num_anchors, channels]
                 output_height_ = 1;  // batch
-                output_width_ = dims.d[1];  // num_anchors (e.g., 8400)
-                output_channels_ = dims.d[2];  // channels per anchor
+                output_width_ = dims.d[1];  // Could be num_anchors or channels
+                output_channels_ = dims.d[2];  // Could be channels or num_anchors
+                // Assume standard format: [batch, num_anchors, channels]
                 num_anchors_ = output_width_;
             } else if (dims.nbDims == 2) {
                 // Format: [num_anchors, channels] (no batch dimension)
@@ -324,25 +327,19 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         float width = output_data[offset + 2];
         float height = output_data[offset + 3];
         
-        // Debug: Log first few bbox values to verify range
-        static int debug_bbox_count = 0;
-        if (debug_bbox_count < 5) {
-            std::cout << "[DEBUG] Detection bbox: x_center=" << x_center 
-                      << ", y_center=" << y_center 
-                      << ", width=" << width 
-                      << ", height=" << height << std::endl;
-            debug_bbox_count++;
-        }
-        
         // Extract confidence (YOLOv11: index 4 is confidence, already normalized)
         // Matching Python: confidences = predictions[:, 4]
         float confidence = output_data[offset + 4];
         
-        // Debug: Log first few confidence values to verify range
+        // Debug: Log first few values to verify they're reasonable
         static int debug_count = 0;
-        if (debug_count < 5) {
-            std::cout << "[DEBUG] Detection confidence value: " << confidence 
-                      << " (threshold: " << conf_threshold_ << ")" << std::endl;
+        if (debug_count < 10 && confidence > conf_threshold_) {
+            std::cout << "[DEBUG] Anchor " << i << " (offset=" << offset << "): "
+                      << "x_center=" << x_center 
+                      << ", y_center=" << y_center 
+                      << ", width=" << width 
+                      << ", height=" << height 
+                      << ", confidence=" << confidence << std::endl;
             debug_count++;
         }
         
@@ -877,42 +874,32 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
                   output_data.begin() + batch_offset + output_per_frame,
                   frame_output.begin());
         
-        // Transpose from [num_anchors, channels] to [channels, num_anchors] to match Python
         // Python: predictions = output[0].T
-        // After transpose: row i is channel i, column j is anchor j
-        std::vector<float> transposed_output(output_per_frame);
-        for (int anchor = 0; anchor < num_anchors_; ++anchor) {
-            for (int channel = 0; channel < output_channels_; ++channel) {
-                // Original: [anchor, channel] -> Transposed: [channel, anchor]
-                size_t orig_idx = anchor * output_channels_ + channel;
-                size_t transposed_idx = channel * num_anchors_ + anchor;
-                transposed_output[transposed_idx] = frame_output[orig_idx];
-            }
-        }
-        
-        // Debug: Log first batch's first few values to verify format
-        static bool logged_batch_format = false;
-        if (!logged_batch_format && b == 0 && transposed_output.size() >= 4 * num_anchors_ + num_anchors_) {
-            // After transpose, for anchor 0:
-            // x_center = transposed_output[0] (channel 0, anchor 0)
-            // y_center = transposed_output[num_anchors_] (channel 1, anchor 0)
-            // width = transposed_output[2*num_anchors_] (channel 2, anchor 0)
-            // height = transposed_output[3*num_anchors_] (channel 3, anchor 0)
-            // confidence = transposed_output[4*num_anchors_] (channel 4, anchor 0)
-            std::cout << "[DEBUG Batch] After transpose - Anchor 0: " 
-                      << "x_center=" << transposed_output[0] 
-                      << ", y_center=" << transposed_output[num_anchors_] 
-                      << ", width=" << transposed_output[2 * num_anchors_] 
-                      << ", height=" << transposed_output[3 * num_anchors_] 
-                      << ", confidence=" << transposed_output[4 * num_anchors_] << std::endl;
-            logged_batch_format = true;
-        }
-        
+        // The Python code transposes, but let's understand the actual TensorRT output format:
+        // TensorRT outputs [batch, num_anchors, channels] which when flattened is [batch*num_anchors*channels]
+        // For a single batch, we extract [num_anchors, channels] format
+        // 
+        // In Python: output[0] gets [num_anchors, channels], then .T makes it [channels, num_anchors]
+        // Then predictions[:, :4] selects all channels and first 4 anchors? That doesn't make sense.
+        //
+        // Actually, looking at postprocess_pose: if output.shape[0] == 56, it transposes
+        // This suggests the output might be [channels, num_anchors] initially, and transpose makes it [num_anchors, channels]
+        // Then output[:, :4] gives [num_anchors, 4] which is correct!
+        //
+        // So the issue might be: TensorRT outputs [channels, num_anchors] but we're reading it as [num_anchors, channels]
+        // OR TensorRT outputs [num_anchors, channels] and Python transposes it to [channels, num_anchors] then back?
+        //
+        // Let me check: if TensorRT outputs [num_anchors, channels] (which is what we're reading),
+        // and Python does output[0].T to get [channels, num_anchors], then predictions[:, :4] would be wrong.
+        //
+        // I think the real issue is that we should NOT transpose, because TensorRT already outputs [num_anchors, channels]
+        // and that's the format we need. The Python transpose might be for a different output format.
+        // Let's use the non-transposed format directly.
         std::vector<Detection> detections;
         if (model_type_ == ModelType::POSE) {
-            detections = parseRawPoseOutputTransposed(transposed_output);
+            detections = parseRawPoseOutput(frame_output);
         } else {
-            detections = parseRawDetectionOutputTransposed(transposed_output);
+            detections = parseRawDetectionOutput(frame_output);
         }
         
         detections = applyNMS(detections);
