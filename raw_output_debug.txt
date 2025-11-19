@@ -46,7 +46,10 @@ Reference code format: [channels, num_anchors]
   float* h_ptr  = output + 3 * num_preds;  // output[3*8400 + i] = output[25200 + i]
   float* conf_ptr = output + 4 * num_preds; // output[4*8400 + i] = output[33600 + i]
 
-Our indexing (assuming [channels, num_anchors]):
+Our indexing (assuming [channels, num_anchors] for batch 0):
+Full output_data size: 672000 (contains all 16 batches)
+For batch 0, indices are: channel * 8400 + anchor (no batch offset needed for batch 0)
+
 Anchor 0 (indices 0,8400,16800,25200,33600): cx=4.80859, cy=9.3125, w=8.71094, h=16.9375, conf=1.49012e-07
 Anchor 1 (indices 1,8401,16801,25201,33601): cx=22.9688, cy=9.84375, w=43.875, h=18.875, conf=0
 Anchor 2 (indices 2,8402,16802,25202,33602): cx=23.125, cy=9.82812, w=44.375, h=18.5938, conf=0
@@ -57,6 +60,14 @@ Anchor 6 (indices 6,8406,16806,25206,33606): cx=52.6562, cy=4.625, w=38.9375, h=
 Anchor 7 (indices 7,8407,16807,25207,33607): cx=60.875, cy=4.61328, w=38.75, h=8.61719, conf=0
 Anchor 8 (indices 8,8408,16808,25208,33608): cx=68.875, cy=4.60547, w=38.8125, h=8.60156, conf=0
 Anchor 9 (indices 9,8409,16809,25209,33609): cx=76.875, cy=4.59375, w=38.8125, h=8.57812, conf=0
+
+
+Testing batch 1 extraction (to verify batch offset):
+Batch 1 offset: 42000
+Batch 1, Anchor 0 (should use indices with batch offset):
+  Anchor 0 (indices 42000,50400,58800,67200,75600): cx=4.80859, cy=9.3125, w=8.71094, h=16.9375, conf=1.49012e-07
+  Anchor 1 (indices 42001,50401,58801,67201,75601): cx=22.9688, cy=9.84375, w=43.875, h=18.875, conf=0
+  Anchor 2 (indices 42002,50402,58802,67202,75602): cx=23.125, cy=9.82812, w=44.375, h=18.5938, conf=0
 
 
 Alternative format test (assuming [num_anchors, channels]):

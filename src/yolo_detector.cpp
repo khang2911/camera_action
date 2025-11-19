@@ -1045,19 +1045,33 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
             raw_file << "output_height_: " << output_height_ << "\n";
             raw_file << "output_width_: " << output_width_ << "\n\n";
             
-            // Log actual TensorRT output dimensions
+            // Log actual TensorRT output dimensions and binding info
             // Find output binding index
             int output_binding_idx = -1;
+            raw_file << "Engine Binding Information:\n";
+            raw_file << "  Total bindings: " << engine_->getNbBindings() << "\n";
             for (int i = 0; i < engine_->getNbBindings(); ++i) {
-                if (!engine_->bindingIsInput(i)) {
+                const char* name = engine_->getBindingName(i);
+                bool is_input = engine_->bindingIsInput(i);
+                auto dims = engine_->getBindingDimensions(i);
+                raw_file << "  Binding " << i << ": name=\"" << (name ? name : "NULL") 
+                         << "\", is_input=" << (is_input ? "true" : "false")
+                         << ", nbDims=" << dims.nbDims << ", dims=[";
+                for (int j = 0; j < dims.nbDims; ++j) {
+                    raw_file << dims.d[j];
+                    if (j < dims.nbDims - 1) raw_file << ",";
+                }
+                raw_file << "]\n";
+                
+                if (!is_input) {
                     output_binding_idx = i;
-                    break;
                 }
             }
+            raw_file << "\n";
             
             if (output_binding_idx >= 0) {
                 auto out_dims = context_->getBindingDimensions(output_binding_idx);
-                raw_file << "TensorRT Output Dimensions (from engine, binding " << output_binding_idx << "):\n";
+                raw_file << "TensorRT Output Dimensions (from context, binding " << output_binding_idx << "):\n";
                 raw_file << "  nbDims: " << out_dims.nbDims << "\n";
                 for (int i = 0; i < out_dims.nbDims; ++i) {
                     raw_file << "  dims[" << i << "]: " << out_dims.d[i] << "\n";
@@ -1071,6 +1085,12 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
                 for (int i = 0; i < engine_dims.nbDims; ++i) {
                     raw_file << "  dims[" << i << "]: " << engine_dims.d[i] << "\n";
                 }
+                raw_file << "\n";
+                
+                // Check if dimensions are dynamic
+                raw_file << "Binding Type Information:\n";
+                raw_file << "  Has dynamic shapes: " << (engine_->hasImplicitBatchDimension() ? "yes (implicit)" : "no") << "\n";
+                raw_file << "  Binding format: " << (engine_->getBindingFormat(output_binding_idx, nvinfer1::TensorFormat::kLINEAR) == nvinfer1::TensorFormat::kLINEAR ? "LINEAR" : "other") << "\n";
                 raw_file << "\n";
             } else {
                 raw_file << "Warning: Could not find output binding index\n\n";
@@ -1168,6 +1188,67 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
                              << ", w=" << output_data[idx_w]
                              << ", h=" << output_data[idx_h]
                              << ", conf=" << output_data[idx_conf] << "\n";
+                }
+            }
+            
+            // CRITICAL TEST: Extract batch 0 data and read it EXACTLY as reference code would
+            raw_file << "\n\n=== CRITICAL TEST: Reading batch 0 data as reference code would ===\n";
+            raw_file << "Reference code (batch_size=1):\n";
+            raw_file << "  int num_preds = 8400;\n";
+            raw_file << "  float* cx_ptr = output + 0 * num_preds;  // output[0]\n";
+            raw_file << "  float* cy_ptr = output + 1 * num_preds;  // output[8400]\n";
+            raw_file << "  float* w_ptr  = output + 2 * num_preds;  // output[16800]\n";
+            raw_file << "  float* h_ptr  = output + 3 * num_preds;  // output[25200]\n";
+            raw_file << "  float* conf_ptr = output + 4 * num_preds; // output[33600]\n";
+            raw_file << "  for (int i = 0; i < num_preds; i++) {\n";
+            raw_file << "    float conf = conf_ptr[i];  // output[33600 + i]\n";
+            raw_file << "    float cx = cx_ptr[i];      // output[i]\n";
+            raw_file << "    ...\n";
+            raw_file << "  }\n\n";
+            
+            raw_file << "For our batch 0 (offset=0), reading as reference code:\n";
+            for (int i = 0; i < std::min(10, num_anchors_); ++i) {
+                // Reference code indexing (for batch 0, offset is 0)
+                int ref_cx_idx = 0 * num_anchors_ + i;      // output[0 + i]
+                int ref_cy_idx = 1 * num_anchors_ + i;      // output[8400 + i]
+                int ref_w_idx = 2 * num_anchors_ + i;       // output[16800 + i]
+                int ref_h_idx = 3 * num_anchors_ + i;       // output[25200 + i]
+                int ref_conf_idx = 4 * num_anchors_ + i;    // output[33600 + i]
+                
+                if (ref_conf_idx < static_cast<int>(output_data.size())) {
+                    raw_file << "Anchor " << i << ":\n";
+                    raw_file << "  ref_cx_idx=" << ref_cx_idx << " -> cx=" << output_data[ref_cx_idx] << "\n";
+                    raw_file << "  ref_cy_idx=" << ref_cy_idx << " -> cy=" << output_data[ref_cy_idx] << "\n";
+                    raw_file << "  ref_w_idx=" << ref_w_idx << " -> w=" << output_data[ref_w_idx] << "\n";
+                    raw_file << "  ref_h_idx=" << ref_h_idx << " -> h=" << output_data[ref_h_idx] << "\n";
+                    raw_file << "  ref_conf_idx=" << ref_conf_idx << " -> conf=" << output_data[ref_conf_idx] << "\n";
+                }
+            }
+            
+            // Also test: what if TensorRT actually outputs [batch, num_anchors, channels]?
+            raw_file << "\n\n=== ALTERNATIVE TEST: What if format is [batch, num_anchors, channels]? ===\n";
+            raw_file << "If format is [batch, num_anchors, channels], then for batch 0:\n";
+            raw_file << "  index = batch * (num_anchors * channels) + anchor * channels + channel\n";
+            raw_file << "  For batch 0, anchor i, channel c: index = 0 * (8400 * 5) + i * 5 + c = i * 5 + c\n";
+            raw_file << "  Anchor 0, Channel 0 (cx): index = 0 * 5 + 0 = 0\n";
+            raw_file << "  Anchor 0, Channel 4 (conf): index = 0 * 5 + 4 = 4\n";
+            raw_file << "  Anchor 1, Channel 0 (cx): index = 1 * 5 + 0 = 5\n";
+            raw_file << "  Anchor 1, Channel 4 (conf): index = 1 * 5 + 4 = 9\n\n";
+            raw_file << "Values if format is [batch, num_anchors, channels]:\n";
+            for (int i = 0; i < std::min(5, num_anchors_); ++i) {
+                int alt_cx_idx = i * output_channels_ + 0;
+                int alt_cy_idx = i * output_channels_ + 1;
+                int alt_w_idx = i * output_channels_ + 2;
+                int alt_h_idx = i * output_channels_ + 3;
+                int alt_conf_idx = i * output_channels_ + 4;
+                if (alt_conf_idx < static_cast<int>(output_data.size())) {
+                    raw_file << "Anchor " << i << " (indices " << alt_cx_idx << "," << alt_cy_idx << "," 
+                             << alt_w_idx << "," << alt_h_idx << "," << alt_conf_idx << "): "
+                             << "cx=" << output_data[alt_cx_idx] 
+                             << ", cy=" << output_data[alt_cy_idx]
+                             << ", w=" << output_data[alt_w_idx]
+                             << ", h=" << output_data[alt_h_idx]
+                             << ", conf=" << output_data[alt_conf_idx] << "\n";
                 }
             }
             
