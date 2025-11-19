@@ -121,20 +121,18 @@ void YOLODetector::allocateBuffers() {
             output_size_ = 1;
             
             if (dims.nbDims == 3) {
-                // Format: [batch, num_anchors, channels] OR [batch, channels, num_anchors]
-                // Need to check which dimension is which
-                // Typically TensorRT outputs [batch, num_anchors, channels]
+                // Format: [batch, channels, num_anchors] (TensorRT format for YOLOv11)
+                // Python does: predictions = output[0].T, which transposes [channels, num_anchors] to [num_anchors, channels]
                 output_height_ = 1;  // batch
-                output_width_ = dims.d[1];  // Could be num_anchors or channels
-                output_channels_ = dims.d[2];  // Could be channels or num_anchors
-                // Assume standard format: [batch, num_anchors, channels]
-                num_anchors_ = output_width_;
+                output_channels_ = dims.d[1];  // channels (5 for detection, 56 for pose)
+                num_anchors_ = dims.d[2];  // num_anchors (e.g., 8400)
+                output_width_ = num_anchors_;  // For compatibility
             } else if (dims.nbDims == 2) {
-                // Format: [num_anchors, channels] (no batch dimension)
+                // Format: [channels, num_anchors] (no batch dimension)
                 output_height_ = 1;
-                output_width_ = dims.d[0];
-                output_channels_ = dims.d[1];
-                num_anchors_ = output_width_;
+                output_channels_ = dims.d[0];  // channels
+                num_anchors_ = dims.d[1];  // num_anchors
+                output_width_ = num_anchors_;  // For compatibility
             } else {
                 // Fallback: treat as flattened
                 output_height_ = 1;
@@ -316,33 +314,43 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
     // - Python: predictions = output[0].T, boxes = predictions[:, :4], confidences = predictions[:, 4]
     // - ALL models are single-class (class_id=0)
     
+    // TensorRT output format: [batch, channels, num_anchors]
+    // Python does: predictions = output[0].T to get [num_anchors, channels]
+    // So we need to read as: output_data[channel_idx * num_anchors_ + anchor_idx]
     for (int i = 0; i < num_anchors_; ++i) {
-        int offset = i * output_channels_;
-        if (offset + 4 >= static_cast<int>(output_data.size())) break;
+        // For anchor i, channel c: index = c * num_anchors_ + i
+        // Channel 0: x_center, Channel 1: y_center, Channel 2: width, Channel 3: height, Channel 4: confidence
+        int idx_x = 0 * num_anchors_ + i;
+        int idx_y = 1 * num_anchors_ + i;
+        int idx_w = 2 * num_anchors_ + i;
+        int idx_h = 3 * num_anchors_ + i;
+        int idx_conf = 4 * num_anchors_ + i;
+        
+        if (idx_conf >= static_cast<int>(output_data.size())) break;
         
         // Extract bbox coordinates (YOLOv11: already normalized 0-1, no sigmoid)
-        // Matching Python: boxes = predictions[:, :4]
-        float x_center = output_data[offset + 0];
-        float y_center = output_data[offset + 1];
-        float width = output_data[offset + 2];
-        float height = output_data[offset + 3];
+        // Matching Python: boxes = predictions[:, :4] where predictions = output[0].T
+        float x_center = output_data[idx_x];
+        float y_center = output_data[idx_y];
+        float width = output_data[idx_w];
+        float height = output_data[idx_h];
         
         // Extract confidence (YOLOv11: index 4 is confidence, already normalized)
         // Matching Python: confidences = predictions[:, 4]
-        float confidence = output_data[offset + 4];
+        float confidence = output_data[idx_conf];
         
         // Debug: Log first few values to verify they're reasonable
         static int debug_count = 0;
         if (debug_count < 20 && confidence > conf_threshold_) {
-            std::cout << "[DEBUG Raw] Anchor " << i << " (offset=" << offset << "): "
+            std::cout << "[DEBUG Raw] Anchor " << i << ": "
                       << "x_center=" << x_center 
                       << ", y_center=" << y_center 
                       << ", width=" << width 
                       << ", height=" << height 
                       << ", confidence=" << confidence 
-                      << " (raw values: [" << output_data[offset+0] << ", " 
-                      << output_data[offset+1] << ", " << output_data[offset+2] << ", " 
-                      << output_data[offset+3] << ", " << output_data[offset+4] << "])" << std::endl;
+                      << " (raw values: [" << output_data[idx_x] << ", " 
+                      << output_data[idx_y] << ", " << output_data[idx_w] << ", " 
+                      << output_data[idx_h] << ", " << output_data[idx_conf] << "])" << std::endl;
             debug_count++;
         }
         
@@ -425,20 +433,30 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
     // - Python: boxes = output[:, :4], scores = output[:, 4], keypoints = output[:, 5:]
     // - Keypoints reshaped to (num_detections, 17, 3) - 17 keypoints, each with [x, y, conf]
     
+    // TensorRT output format: [batch, channels, num_anchors]
+    // Python does: predictions = output[0].T to get [num_anchors, channels]
+    // So we need to read as: output_data[channel_idx * num_anchors_ + anchor_idx]
     for (int i = 0; i < num_anchors_; ++i) {
-        int offset = i * output_channels_;
-        if (offset + 55 >= static_cast<int>(output_data.size())) break;  // Need at least 56 values
+        // For anchor i, channel c: index = c * num_anchors_ + i
+        // Channel 0-3: bbox, Channel 4: confidence, Channel 5: class_score, Channel 6-56: keypoints
+        int idx_x = 0 * num_anchors_ + i;
+        int idx_y = 1 * num_anchors_ + i;
+        int idx_w = 2 * num_anchors_ + i;
+        int idx_h = 3 * num_anchors_ + i;
+        int idx_conf = 4 * num_anchors_ + i;
+        
+        if (idx_conf >= static_cast<int>(output_data.size())) break;
         
         // Extract bbox coordinates (YOLOv11: already normalized 0-1, no sigmoid)
-        // Matching Python: boxes = output[:, :4]
-        float x_center = output_data[offset + 0];
-        float y_center = output_data[offset + 1];
-        float width = output_data[offset + 2];
-        float height = output_data[offset + 3];
+        // Matching Python: boxes = output[:, :4] where output = output[0].T
+        float x_center = output_data[idx_x];
+        float y_center = output_data[idx_y];
+        float width = output_data[idx_w];
+        float height = output_data[idx_h];
         
         // Extract confidence (YOLOv11: index 4 is confidence, already normalized)
         // Matching Python: scores = output[:, 4]
-        float confidence = output_data[offset + 4];
+        float confidence = output_data[idx_conf];
         
         // Apply confidence threshold (matching Python: mask = scores > self.conf_threshold)
         if (confidence < conf_threshold_) {
@@ -455,12 +473,19 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         
         // Parse 17 keypoints (COCO format) - YOLOv11: already normalized, no sigmoid
         // Matching Python: keypoints = output[:, 5:], reshaped to (17, 3)
+        // Keypoints start at channel 6 (after bbox + confidence + class_score)
         det.keypoints.resize(17);
         for (int k = 0; k < 17; ++k) {
-            int kpt_offset = offset + 6 + k * 3;  // Start from index 6 (after bbox + confidence + class)
-            det.keypoints[k].x = output_data[kpt_offset + 0];
-            det.keypoints[k].y = output_data[kpt_offset + 1];
-            det.keypoints[k].confidence = output_data[kpt_offset + 2];
+            int kpt_channel_base = 6 + k * 3;  // Channel for keypoint k (x, y, conf)
+            int idx_kpt_x = kpt_channel_base * num_anchors_ + i;
+            int idx_kpt_y = (kpt_channel_base + 1) * num_anchors_ + i;
+            int idx_kpt_conf = (kpt_channel_base + 2) * num_anchors_ + i;
+            
+            if (idx_kpt_conf >= static_cast<int>(output_data.size())) break;
+            
+            det.keypoints[k].x = output_data[idx_kpt_x];
+            det.keypoints[k].y = output_data[idx_kpt_y];
+            det.keypoints[k].confidence = output_data[idx_kpt_conf];
         }
         
         detections.push_back(det);
@@ -872,29 +897,34 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
             
             // Write first batch's output
             raw_file << "Batch 0 Output (first " << std::min(100, static_cast<int>(output_per_frame)) << " values):\n";
-            raw_file << "Format: [anchor_idx * channels + channel_idx] = value\n";
-            raw_file << "For anchor i, channel c: index = i * " << output_channels_ << " + c\n\n";
+            raw_file << "Format: [channel_idx * num_anchors + anchor_idx] = value\n";
+            raw_file << "For anchor i, channel c: index = c * " << num_anchors_ << " + i\n\n";
             
-            for (int i = 0; i < std::min(100, static_cast<int>(num_anchors_)); ++i) {
-                int offset = i * output_channels_;
-                if (offset + output_channels_ <= static_cast<int>(output_data.size())) {
-                    raw_file << "Anchor " << i << " (offset=" << offset << "): ";
-                    for (int c = 0; c < output_channels_; ++c) {
-                        raw_file << "[" << c << "]=" << output_data[offset + c] << " ";
-                    }
-                    raw_file << "\n";
-                }
-            }
-            
-            // Also write in transposed view (channels x anchors)
-            raw_file << "\n\nTransposed View (channels x anchors) - first 5 channels, first 10 anchors:\n";
+            // Write in transposed view (channels x anchors) - this is the actual format
+            raw_file << "TensorRT Output Format (channels x anchors) - first " 
+                     << std::min(5, output_channels_) << " channels, first " 
+                     << std::min(10, num_anchors_) << " anchors:\n";
             raw_file << "Format: channel[channel_idx][anchor_idx] = value\n";
             for (int c = 0; c < std::min(5, output_channels_); ++c) {
                 raw_file << "Channel " << c << ": ";
                 for (int a = 0; a < std::min(10, num_anchors_); ++a) {
-                    int idx = a * output_channels_ + c;  // [anchor, channel] format
+                    int idx = c * num_anchors_ + a;  // [channel, anchor] format
                     if (idx < static_cast<int>(output_data.size())) {
                         raw_file << "[" << a << "]=" << output_data[idx] << " ";
+                    }
+                }
+                raw_file << "\n";
+            }
+            
+            // Also write per-anchor view (first 10 anchors, all channels)
+            raw_file << "\n\nPer-Anchor View (first 10 anchors, all " << output_channels_ << " channels):\n";
+            raw_file << "Format: anchor[anchor_idx][channel_idx] = value (transposed from TensorRT format)\n";
+            for (int a = 0; a < std::min(10, num_anchors_); ++a) {
+                raw_file << "Anchor " << a << ": ";
+                for (int c = 0; c < output_channels_; ++c) {
+                    int idx = c * num_anchors_ + a;  // [channel, anchor] format
+                    if (idx < static_cast<int>(output_data.size())) {
+                        raw_file << "[" << c << "]=" << output_data[idx] << " ";
                     }
                 }
                 raw_file << "\n";
