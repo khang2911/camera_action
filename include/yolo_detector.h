@@ -109,6 +109,11 @@ private:
     std::vector<Detection> parseRawDetectionOutput(const std::vector<float>& output_data);
     std::vector<Detection> parseRawPoseOutput(const std::vector<float>& output_data);
     
+    // Parse transposed output format (matching Python: output[0].T)
+    // Input is [channels, num_anchors] format after transpose
+    std::vector<Detection> parseRawDetectionOutputTransposed(const std::vector<float>& output_data);
+    std::vector<Detection> parseRawPoseOutputTransposed(const std::vector<float>& output_data);
+    
     // Apply NMS to detections
     std::vector<Detection> applyNMS(const std::vector<Detection>& detections);
     

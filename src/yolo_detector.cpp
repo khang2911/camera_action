@@ -324,9 +324,27 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         float width = output_data[offset + 2];
         float height = output_data[offset + 3];
         
+        // Debug: Log first few bbox values to verify range
+        static int debug_bbox_count = 0;
+        if (debug_bbox_count < 5) {
+            std::cout << "[DEBUG] Detection bbox: x_center=" << x_center 
+                      << ", y_center=" << y_center 
+                      << ", width=" << width 
+                      << ", height=" << height << std::endl;
+            debug_bbox_count++;
+        }
+        
         // Extract confidence (YOLOv11: index 4 is confidence, already normalized)
         // Matching Python: confidences = predictions[:, 4]
         float confidence = output_data[offset + 4];
+        
+        // Debug: Log first few confidence values to verify range
+        static int debug_count = 0;
+        if (debug_count < 5) {
+            std::cout << "[DEBUG] Detection confidence value: " << confidence 
+                      << " (threshold: " << conf_threshold_ << ")" << std::endl;
+            debug_count++;
+        }
         
         // Apply confidence threshold (matching Python: valid_indices = confidences > self.conf_threshold)
         if (confidence < conf_threshold_) {
@@ -340,6 +358,55 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         det.bbox[3] = height;      // height (normalized 0-1)
         det.confidence = confidence;
         det.class_id = 0;  // ALL models are single-class (matching Python: class_id=0)
+        
+        detections.push_back(det);
+    }
+    
+    return detections;
+}
+
+std::vector<Detection> YOLODetector::parseRawDetectionOutputTransposed(const std::vector<float>& output_data) {
+    std::vector<Detection> detections;
+    
+    // YOLOv11 Detection Format (matching Python postprocess after transpose):
+    // After transpose: [channels, num_anchors] format
+    // - Channel 0: x_center for all anchors
+    // - Channel 1: y_center for all anchors
+    // - Channel 2: width for all anchors
+    // - Channel 3: height for all anchors
+    // - Channel 4: confidence for all anchors
+    // Python: predictions = output[0].T, boxes = predictions[:, :4], confidences = predictions[:, 4]
+    
+    for (int i = 0; i < num_anchors_; ++i) {
+        // After transpose, data is [channels, num_anchors]
+        // For anchor i: x_center is at [0*num_anchors + i], y_center at [1*num_anchors + i], etc.
+        float x_center = output_data[0 * num_anchors_ + i];
+        float y_center = output_data[1 * num_anchors_ + i];
+        float width = output_data[2 * num_anchors_ + i];
+        float height = output_data[3 * num_anchors_ + i];
+        float confidence = output_data[4 * num_anchors_ + i];
+        
+        // Debug: Log first few values
+        static int debug_count = 0;
+        if (debug_count < 5) {
+            std::cout << "[DEBUG Transposed] Anchor " << i << ": x_center=" << x_center 
+                      << ", y_center=" << y_center << ", width=" << width 
+                      << ", height=" << height << ", confidence=" << confidence << std::endl;
+            debug_count++;
+        }
+        
+        // Apply confidence threshold
+        if (confidence < conf_threshold_) {
+            continue;
+        }
+        
+        Detection det;
+        det.bbox[0] = x_center;   // x_center (normalized 0-1)
+        det.bbox[1] = y_center;   // y_center (normalized 0-1)
+        det.bbox[2] = width;      // width (normalized 0-1)
+        det.bbox[3] = height;      // height (normalized 0-1)
+        det.confidence = confidence;
+        det.class_id = 0;  // ALL models are single-class
         
         detections.push_back(det);
     }
@@ -394,6 +461,53 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
             det.keypoints[k].x = output_data[kpt_offset + 0];
             det.keypoints[k].y = output_data[kpt_offset + 1];
             det.keypoints[k].confidence = output_data[kpt_offset + 2];
+        }
+        
+        detections.push_back(det);
+    }
+    
+    return detections;
+}
+
+std::vector<Detection> YOLODetector::parseRawPoseOutputTransposed(const std::vector<float>& output_data) {
+    std::vector<Detection> detections;
+    
+    // YOLOv11 Pose Format (matching Python postprocess_pose after transpose):
+    // After transpose: [channels, num_anchors] format
+    // - Channel 0-3: bbox (x_center, y_center, width, height)
+    // - Channel 4: confidence
+    // - Channel 5: class_score
+    // - Channel 6-56: keypoints (17 keypoints × 3 values each)
+    // Python: output = output[0].T, boxes = output[:, :4], scores = output[:, 4]
+    
+    for (int i = 0; i < num_anchors_; ++i) {
+        // After transpose, data is [channels, num_anchors]
+        float x_center = output_data[0 * num_anchors_ + i];
+        float y_center = output_data[1 * num_anchors_ + i];
+        float width = output_data[2 * num_anchors_ + i];
+        float height = output_data[3 * num_anchors_ + i];
+        float confidence = output_data[4 * num_anchors_ + i];
+        
+        // Apply confidence threshold
+        if (confidence < conf_threshold_) {
+            continue;
+        }
+        
+        Detection det;
+        det.bbox[0] = x_center;   // x_center (normalized 0-1)
+        det.bbox[1] = y_center;   // y_center (normalized 0-1)
+        det.bbox[2] = width;       // width (normalized 0-1)
+        det.bbox[3] = height;      // height (normalized 0-1)
+        det.confidence = confidence;
+        det.class_id = 0;  // ALL models are single-class
+        
+        // Parse 17 keypoints - after transpose, keypoints are in channels 6-56
+        det.keypoints.resize(17);
+        for (int k = 0; k < 17; ++k) {
+            int kpt_channel_base = 6 + k * 3;  // Start from channel 6
+            det.keypoints[k].x = output_data[kpt_channel_base * num_anchors_ + i];
+            det.keypoints[k].y = output_data[(kpt_channel_base + 1) * num_anchors_ + i];
+            det.keypoints[k].confidence = output_data[(kpt_channel_base + 2) * num_anchors_ + i];
         }
         
         detections.push_back(det);
@@ -745,17 +859,60 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
     all_detections.resize(batch_size_);
     
     for (int b = 0; b < batch_size_; ++b) {
+        // Extract output for this batch item
+        // TensorRT output format: [batch, num_anchors, channels] flattened as [batch*num_anchors*channels]
+        // Python does: output[i:i+1] which gets [1, num_anchors, channels], then .T transposes to [channels, num_anchors]
+        // But we read it directly as [num_anchors, channels] which should be correct
         std::vector<float> frame_output(output_per_frame);
         size_t batch_offset = static_cast<size_t>(b) * output_per_frame;
+        
+        if (batch_offset + output_per_frame > output_data.size()) {
+            std::cerr << "Error: Batch " << b << " offset out of bounds. "
+                      << "batch_offset=" << batch_offset << ", output_per_frame=" << output_per_frame
+                      << ", output_data.size()=" << output_data.size() << std::endl;
+            return false;
+        }
+        
         std::copy(output_data.begin() + batch_offset,
                   output_data.begin() + batch_offset + output_per_frame,
                   frame_output.begin());
         
+        // Transpose from [num_anchors, channels] to [channels, num_anchors] to match Python
+        // Python: predictions = output[0].T
+        // After transpose: row i is channel i, column j is anchor j
+        std::vector<float> transposed_output(output_per_frame);
+        for (int anchor = 0; anchor < num_anchors_; ++anchor) {
+            for (int channel = 0; channel < output_channels_; ++channel) {
+                // Original: [anchor, channel] -> Transposed: [channel, anchor]
+                size_t orig_idx = anchor * output_channels_ + channel;
+                size_t transposed_idx = channel * num_anchors_ + anchor;
+                transposed_output[transposed_idx] = frame_output[orig_idx];
+            }
+        }
+        
+        // Debug: Log first batch's first few values to verify format
+        static bool logged_batch_format = false;
+        if (!logged_batch_format && b == 0 && transposed_output.size() >= 4 * num_anchors_ + num_anchors_) {
+            // After transpose, for anchor 0:
+            // x_center = transposed_output[0] (channel 0, anchor 0)
+            // y_center = transposed_output[num_anchors_] (channel 1, anchor 0)
+            // width = transposed_output[2*num_anchors_] (channel 2, anchor 0)
+            // height = transposed_output[3*num_anchors_] (channel 3, anchor 0)
+            // confidence = transposed_output[4*num_anchors_] (channel 4, anchor 0)
+            std::cout << "[DEBUG Batch] After transpose - Anchor 0: " 
+                      << "x_center=" << transposed_output[0] 
+                      << ", y_center=" << transposed_output[num_anchors_] 
+                      << ", width=" << transposed_output[2 * num_anchors_] 
+                      << ", height=" << transposed_output[3 * num_anchors_] 
+                      << ", confidence=" << transposed_output[4 * num_anchors_] << std::endl;
+            logged_batch_format = true;
+        }
+        
         std::vector<Detection> detections;
         if (model_type_ == ModelType::POSE) {
-            detections = parseRawPoseOutput(frame_output);
+            detections = parseRawPoseOutputTransposed(transposed_output);
         } else {
-            detections = parseRawDetectionOutput(frame_output);
+            detections = parseRawDetectionOutputTransposed(transposed_output);
         }
         
         detections = applyNMS(detections);
@@ -896,17 +1053,31 @@ void YOLODetector::drawDetections(cv::Mat& frame, const std::vector<Detection>& 
         // Get color for this class
         cv::Scalar color = class_colors[det.class_id % class_colors.size()];
         
-        // Convert normalized bbox [x_center, y_center, width, height] from [0,1] to pixel coordinates
-        float x_center_norm = det.bbox[0];  // Normalized [0,1]
-        float y_center_norm = det.bbox[1];  // Normalized [0,1]
-        float width_norm = det.bbox[2];     // Normalized [0,1]
-        float height_norm = det.bbox[3];    // Normalized [0,1]
+        // Get bbox coordinates - check if they're already in pixel space or normalized
+        float x_center_raw = det.bbox[0];
+        float y_center_raw = det.bbox[1];
+        float width_raw = det.bbox[2];
+        float height_raw = det.bbox[3];
         
-        // Convert to pixel coordinates in preprocessed frame
-        float x_center = x_center_norm * input_width_;
-        float y_center = y_center_norm * input_height_;
-        float width = width_norm * input_width_;
-        float height = height_norm * input_height_;
+        // Determine if coordinates are normalized [0,1] or in pixel space
+        // If values are > 1.0, they're likely in pixel space; otherwise normalized
+        bool is_normalized = (x_center_raw <= 1.0f && y_center_raw <= 1.0f && 
+                             width_raw <= 1.0f && height_raw <= 1.0f);
+        
+        float x_center, y_center, width, height;
+        if (is_normalized) {
+            // Normalized [0,1] - convert to pixel coordinates
+            x_center = x_center_raw * input_width_;
+            y_center = y_center_raw * input_height_;
+            width = width_raw * input_width_;
+            height = height_raw * input_height_;
+        } else {
+            // Already in pixel space - use directly (but clamp to reasonable bounds)
+            x_center = std::max(0.0f, std::min(static_cast<float>(input_width_), x_center_raw));
+            y_center = std::max(0.0f, std::min(static_cast<float>(input_height_), y_center_raw));
+            width = std::max(0.0f, std::min(static_cast<float>(input_width_), width_raw));
+            height = std::max(0.0f, std::min(static_cast<float>(input_height_), height_raw));
+        }
         
         // Convert from center format to corner format
         int x1 = static_cast<int>(x_center - width / 2.0f);
@@ -923,9 +1094,20 @@ void YOLODetector::drawDetections(cv::Mat& frame, const std::vector<Detection>& 
         // Draw bounding box
         cv::rectangle(frame, cv::Point(x1, y1), cv::Point(x2, y2), color, 2);
         
-        // Draw label
+        // Draw label - handle confidence display
+        // YOLOv11 should output confidence in [0,1] range, but check if it's already a percentage
+        float display_confidence;
+        if (det.confidence > 1.0f) {
+            // Confidence is already a percentage (0-100), use directly
+            display_confidence = det.confidence;
+        } else {
+            // Confidence is in [0,1] range, convert to percentage
+            display_confidence = det.confidence * 100.0f;
+        }
+        // Clamp to reasonable range [0, 100]
+        display_confidence = std::max(0.0f, std::min(100.0f, display_confidence));
         std::string label = "Class " + std::to_string(det.class_id) + 
-                           " (" + std::to_string(static_cast<int>(det.confidence * 100)) + "%)";
+                           " (" + std::to_string(static_cast<int>(display_confidence)) + "%)";
         int baseline = 0;
         cv::Size text_size = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
         cv::rectangle(frame, 
@@ -937,13 +1119,21 @@ void YOLODetector::drawDetections(cv::Mat& frame, const std::vector<Detection>& 
         
         // Draw keypoints and skeleton for pose models
         if (model_type_ == ModelType::POSE && !det.keypoints.empty()) {
-            // Draw keypoints (also in normalized [0,1] coordinates)
+            // Draw keypoints - check if coordinates are normalized or in pixel space
             for (size_t i = 0; i < det.keypoints.size() && i < 17; ++i) {
                 const auto& kpt = det.keypoints[i];
                 if (kpt.confidence > 0.1f) {  // Only draw visible keypoints
-                    // Convert normalized coordinates to pixel coordinates
-                    int kpt_x = static_cast<int>(kpt.x * input_width_);
-                    int kpt_y = static_cast<int>(kpt.y * input_height_);
+                    // Check if keypoint coordinates are normalized [0,1] or in pixel space
+                    int kpt_x, kpt_y;
+                    if (kpt.x <= 1.0f && kpt.y <= 1.0f) {
+                        // Normalized - convert to pixel coordinates
+                        kpt_x = static_cast<int>(kpt.x * input_width_);
+                        kpt_y = static_cast<int>(kpt.y * input_height_);
+                    } else {
+                        // Already in pixel space - use directly
+                        kpt_x = static_cast<int>(kpt.x);
+                        kpt_y = static_cast<int>(kpt.y);
+                    }
                     kpt_x = std::max(0, std::min(kpt_x, frame.cols - 1));
                     kpt_y = std::max(0, std::min(kpt_y, frame.rows - 1));
                     cv::circle(frame, cv::Point(kpt_x, kpt_y), 3, color, -1);
@@ -957,11 +1147,21 @@ void YOLODetector::drawDetections(cv::Mat& frame, const std::vector<Detection>& 
                     const auto& kpt1 = det.keypoints[conn.first];
                     const auto& kpt2 = det.keypoints[conn.second];
                     if (kpt1.confidence > 0.1f && kpt2.confidence > 0.1f) {
-                        // Convert normalized coordinates to pixel coordinates
-                        int x1_kpt = static_cast<int>(kpt1.x * input_width_);
-                        int y1_kpt = static_cast<int>(kpt1.y * input_height_);
-                        int x2_kpt = static_cast<int>(kpt2.x * input_width_);
-                        int y2_kpt = static_cast<int>(kpt2.y * input_height_);
+                        // Check if keypoint coordinates are normalized [0,1] or in pixel space
+                        int x1_kpt, y1_kpt, x2_kpt, y2_kpt;
+                        if (kpt1.x <= 1.0f && kpt1.y <= 1.0f && kpt2.x <= 1.0f && kpt2.y <= 1.0f) {
+                            // Normalized - convert to pixel coordinates
+                            x1_kpt = static_cast<int>(kpt1.x * input_width_);
+                            y1_kpt = static_cast<int>(kpt1.y * input_height_);
+                            x2_kpt = static_cast<int>(kpt2.x * input_width_);
+                            y2_kpt = static_cast<int>(kpt2.y * input_height_);
+                        } else {
+                            // Already in pixel space - use directly
+                            x1_kpt = static_cast<int>(kpt1.x);
+                            y1_kpt = static_cast<int>(kpt1.y);
+                            x2_kpt = static_cast<int>(kpt2.x);
+                            y2_kpt = static_cast<int>(kpt2.y);
+                        }
                         x1_kpt = std::max(0, std::min(x1_kpt, frame.cols - 1));
                         y1_kpt = std::max(0, std::min(y1_kpt, frame.rows - 1));
                         x2_kpt = std::max(0, std::min(x2_kpt, frame.cols - 1));
