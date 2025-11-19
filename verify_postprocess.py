@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Verify YOLO post-processing by replaying raw TensorRT outputs (from dumps)
+Verify YOLO post-processing by replaying raw TensorRT outputs (from Python dumps)
 and comparing them with the detections saved by the C++ pipeline.
 
 Typical workflow:
   1. Run `run_cross_check.py --compare-target outputs ...` to dump tensors
-  2. Run this script, pointing to the dumped `outputs_batchXXXXXX.bin`
-     files and (optionally) a C++ binary results file.
+  2. Run this script:
+     - `--raw-output`: Point to Python TensorRT output dumps (cross_check/python_outputs/)
+     - `--cpp-bin`: Point to C++ final detection binary file (the .bin file written by writeDetectionsToFile)
 """
 
 from __future__ import annotations
@@ -457,7 +458,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--raw-output",
         required=True,
-        help="Path to outputs_batch*.bin (file or directory)",
+        help="Path to Python TensorRT output dumps (outputs_batch*.bin files from cross_check/python_outputs/)",
     )
     parser.add_argument(
         "--frames",
@@ -486,7 +487,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--nms-threshold", type=float, default=0.45)
     parser.add_argument(
         "--cpp-bin",
-        help="Optional path to the C++ binary detections file for comparison",
+        help="Optional path to the C++ final detection binary file (postprocessed .bin file written by writeDetectionsToFile)",
     )
     parser.add_argument(
         "--match-iou",
@@ -501,12 +502,14 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
+    # Load Python TensorRT raw output dumps (from cross_check/python_outputs/)
     files = list_output_bins(args.raw_output)
     if not files:
         raise FileNotFoundError(
             f"No outputs_batch*.bin files found under {args.raw_output}"
         )
 
+    # Reconstruct detections by applying Python postprocess to raw outputs
     python_results = process_raw_outputs(
         files=files,
         frames=args.frames,
@@ -520,8 +523,9 @@ def main() -> None:
         nms_threshold=args.nms_threshold,
         start_frame=args.start_frame,
     )
-    summarize_results(python_results, label="Reconstructed (Python)")
+    summarize_results(python_results, label="Reconstructed (Python postprocess)")
 
+    # Compare with C++ final detection binary file (postprocessed results)
     if args.cpp_bin:
         model_type, cpp_results = parse_cpp_binary(args.cpp_bin)
         print(f"[INFO] Parsed C++ binary ({args.cpp_bin}), model_type={model_type}")
