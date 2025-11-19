@@ -1407,10 +1407,22 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
         
         // Transpose from [channels, num_anchors] to [num_anchors, channels] to match Python's output[0].T
         // frame_output[anchor * channels + channel] = batch_data_channels_first[channel * num_anchors + anchor]
+        // 
+        // Example for Anchor 0:
+        //   Before: Channel 0, Anchor 0 at index 0 -> After: Anchor 0, Channel 0 at index 0 (same)
+        //   Before: Channel 1, Anchor 0 at index num_anchors -> After: Anchor 0, Channel 1 at index 1
+        //   Before: Channel 4, Anchor 0 at index 4*num_anchors -> After: Anchor 0, Channel 4 at index 4
         for (int anchor = 0; anchor < num_anchors_; ++anchor) {
             for (int channel = 0; channel < output_channels_; ++channel) {
                 int src_idx = channel * num_anchors_ + anchor;  // [channels, num_anchors] format
                 int dst_idx = anchor * output_channels_ + channel;  // [num_anchors, channels] format
+                if (src_idx >= static_cast<int>(batch_data_channels_first.size()) || 
+                    dst_idx >= static_cast<int>(frame_output.size())) {
+                    std::cerr << "Error: Transpose index out of bounds! src_idx=" << src_idx 
+                              << ", dst_idx=" << dst_idx << ", batch_data size=" << batch_data_channels_first.size()
+                              << ", frame_output size=" << frame_output.size() << std::endl;
+                    return false;
+                }
                 frame_output[dst_idx] = batch_data_channels_first[src_idx];
             }
         }
@@ -1418,14 +1430,49 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
         // Debug: Verify transpose worked - check first anchor's values
         static bool transpose_debug_logged = false;
         if (!transpose_debug_logged && b == 0) {
-            std::cout << "[DEBUG Transpose] After transpose, Anchor 0: "
-                      << "cx=" << frame_output[0 * output_channels_ + 0] << " (should be 8.59375), "
-                      << "cy=" << frame_output[0 * output_channels_ + 1] << " (should be 11.4375), "
-                      << "conf=" << frame_output[0 * output_channels_ + 4] << " (should be 32.375 or similar)" << std::endl;
-            std::cout << "[DEBUG Transpose] Before transpose, Anchor 0: "
-                      << "cx=" << batch_data_channels_first[0 * num_anchors_ + 0] << ", "
-                      << "cy=" << batch_data_channels_first[1 * num_anchors_ + 0] << ", "
-                      << "conf=" << batch_data_channels_first[4 * num_anchors_ + 0] << std::endl;
+            // Before transpose: [channels, num_anchors] format
+            // Channel 0, Anchor 0: index = 0 * num_anchors + 0 = 0
+            // Channel 1, Anchor 0: index = 1 * num_anchors + 0 = num_anchors
+            // Channel 4, Anchor 0: index = 4 * num_anchors + 0 = 4 * num_anchors
+            float before_cx = batch_data_channels_first[0 * num_anchors_ + 0];
+            float before_cy = batch_data_channels_first[1 * num_anchors_ + 0];
+            float before_conf = batch_data_channels_first[4 * num_anchors_ + 0];
+            
+            // After transpose: [num_anchors, channels] format
+            // Anchor 0, Channel 0: index = 0 * output_channels + 0 = 0
+            // Anchor 0, Channel 1: index = 0 * output_channels + 1 = 1
+            // Anchor 0, Channel 4: index = 0 * output_channels + 4 = 4
+            float after_cx = frame_output[0 * output_channels_ + 0];
+            float after_cy = frame_output[0 * output_channels_ + 1];
+            float after_conf = frame_output[0 * output_channels_ + 4];
+            
+            std::cout << "[DEBUG Transpose] num_anchors_=" << num_anchors_ << ", output_channels_=" << output_channels_ << std::endl;
+            std::cout << "[DEBUG Transpose] Before transpose [channels, num_anchors]: "
+                      << "cx=" << before_cx << " (idx=" << (0 * num_anchors_ + 0) << "), "
+                      << "cy=" << before_cy << " (idx=" << (1 * num_anchors_ + 0) << "), "
+                      << "conf=" << before_conf << " (idx=" << (4 * num_anchors_ + 0) << ")" << std::endl;
+            std::cout << "[DEBUG Transpose] After transpose [num_anchors, channels]: "
+                      << "cx=" << after_cx << " (idx=" << (0 * output_channels_ + 0) << "), "
+                      << "cy=" << after_cy << " (idx=" << (0 * output_channels_ + 1) << "), "
+                      << "conf=" << after_conf << " (idx=" << (0 * output_channels_ + 4) << ")" << std::endl;
+            
+            // Also check what the transpose should produce
+            // After transpose, Anchor 0, Channel 0 should equal Channel 0, Anchor 0 (before) - both at index 0
+            // After transpose, Anchor 0, Channel 1 should equal Channel 1, Anchor 0 (before) - different indices!
+            // After transpose, Anchor 0, Channel 4 should equal Channel 4, Anchor 0 (before) - different indices!
+            std::cout << "[DEBUG Transpose] Expected after transpose: "
+                      << "cx=" << before_cx << " (should equal Channel 0, Anchor 0), "
+                      << "cy=" << before_cy << " (should equal Channel 1, Anchor 0), "
+                      << "conf=" << before_conf << " (should equal Channel 4, Anchor 0)" << std::endl;
+            
+            // Verify the transpose by checking a different anchor
+            // Anchor 1, Channel 0 should equal Channel 0, Anchor 1 (before)
+            float anchor1_ch0_before = batch_data_channels_first[0 * num_anchors_ + 1];  // Channel 0, Anchor 1
+            float anchor1_ch0_after = frame_output[1 * output_channels_ + 0];  // Anchor 1, Channel 0
+            std::cout << "[DEBUG Transpose] Anchor 1, Channel 0: before=" << anchor1_ch0_before 
+                      << " (Channel 0, Anchor 1), after=" << anchor1_ch0_after 
+                      << " (Anchor 1, Channel 0) - should be equal!" << std::endl;
+            
             transpose_debug_logged = true;
         }
         std::vector<Detection> detections;
