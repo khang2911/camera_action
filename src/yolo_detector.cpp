@@ -1089,8 +1089,8 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
                 
                 // Check if dimensions are dynamic
                 raw_file << "Binding Type Information:\n";
-                raw_file << "  Has dynamic shapes: " << (engine_->hasImplicitBatchDimension() ? "yes (implicit)" : "no") << "\n";
-                raw_file << "  Binding format: " << (engine_->getBindingFormat(output_binding_idx, nvinfer1::TensorFormat::kLINEAR) == nvinfer1::TensorFormat::kLINEAR ? "LINEAR" : "other") << "\n";
+                raw_file << "  Has implicit batch dimension: " << (engine_->hasImplicitBatchDimension() ? "yes" : "no") << "\n";
+                raw_file << "  Note: TensorRT output format is LINEAR (row-major) by default\n";
                 raw_file << "\n";
             } else {
                 raw_file << "Warning: Could not find output binding index\n\n";
