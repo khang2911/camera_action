@@ -346,23 +346,22 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         float width = output_data[idx_w];
         float height = output_data[idx_h];
         
-        // Extract confidence (YOLOv11: raw output shows logit values, need sigmoid)
-        // Raw output shows values like 1.49012e-07 which are logits, not probabilities
-        // Apply sigmoid to convert logits to probabilities [0,1]
-        float raw_confidence = output_data[idx_conf];
-        float confidence = 1.0f / (1.0f + std::exp(-raw_confidence));
+        // Extract confidence (YOLOv11: use raw value directly, matching reference code)
+        // Reference code: float conf = conf_ptr[i]; if (conf < confThreshold) continue;
+        // No sigmoid applied - confidence is already in the correct format
+        float confidence = output_data[idx_conf];
         
-        // Track statistics (on sigmoid value for threshold comparison)
+        // Track statistics
         if (confidence > max_confidence) {
             max_confidence = confidence;
         }
         
-        // Sample first 100 confidence values for debugging (both raw and sigmoid)
+        // Sample first 100 confidence values for debugging
         if (sample_confidences.size() < 100) {
             sample_confidences.push_back(confidence);
         }
         
-        // Apply confidence threshold (matching Python: valid_indices = confidences > self.conf_threshold)
+        // Apply confidence threshold (matching reference code and Python: valid_indices = confidences > self.conf_threshold)
         if (confidence < conf_threshold_) {
             continue;
         }
@@ -402,7 +401,7 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         std::cout << "[DEBUG Parse] Call " << parse_call_count << ": "
                   << "Total anchors checked: " << total_anchors_checked
                   << ", Above threshold (" << conf_threshold_ << "): " << anchors_above_threshold
-                  << ", Max confidence (after sigmoid): " << max_confidence
+                  << ", Max confidence: " << max_confidence
                   << ", Min confidence above threshold: " << (anchors_above_threshold > 0 ? min_confidence_above_threshold : 0.0f)
                   << std::endl;
         
@@ -1040,19 +1039,40 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
             raw_file << "For anchor i, channel c: index = c * " << num_anchors_ << " + i\n\n";
             
             // Write in transposed view (channels x anchors) - this is the actual format
+            // Reference code: float* cx_ptr = output + 0 * num_preds; means format is [channels, num_anchors]
             raw_file << "TensorRT Output Format (channels x anchors) - first " 
                      << std::min(5, output_channels_) << " channels, first " 
                      << std::min(10, num_anchors_) << " anchors:\n";
             raw_file << "Format: channel[channel_idx][anchor_idx] = value\n";
+            raw_file << "Reference code format: float* cx_ptr = output + 0 * num_preds; (channel-first)\n";
             for (int c = 0; c < std::min(5, output_channels_); ++c) {
                 raw_file << "Channel " << c << ": ";
                 for (int a = 0; a < std::min(10, num_anchors_); ++a) {
-                    int idx = c * num_anchors_ + a;  // [channel, anchor] format
+                    int idx = c * num_anchors_ + a;  // [channel, anchor] format - matches reference code
                     if (idx < static_cast<int>(output_data.size())) {
                         raw_file << "[" << a << "]=" << output_data[idx] << " ";
                     }
                 }
                 raw_file << "\n";
+            }
+            
+            // Also verify by reading as reference code does
+            raw_file << "\n\nVerification using reference code indexing (first 5 anchors):\n";
+            raw_file << "Reference: float* cx_ptr = output + 0 * num_preds; cx_ptr[i] = output[i]\n";
+            raw_file << "Reference: float* conf_ptr = output + 4 * num_preds; conf_ptr[i] = output[4*8400 + i]\n";
+            for (int i = 0; i < std::min(5, num_anchors_); ++i) {
+                int idx_cx = 0 * num_anchors_ + i;      // output[i]
+                int idx_cy = 1 * num_anchors_ + i;      // output[8400 + i]
+                int idx_w = 2 * num_anchors_ + i;       // output[16800 + i]
+                int idx_h = 3 * num_anchors_ + i;       // output[25200 + i]
+                int idx_conf = 4 * num_anchors_ + i;    // output[33600 + i]
+                if (idx_conf < static_cast<int>(output_data.size())) {
+                    raw_file << "Anchor " << i << ": cx=" << output_data[idx_cx] 
+                             << ", cy=" << output_data[idx_cy]
+                             << ", w=" << output_data[idx_w]
+                             << ", h=" << output_data[idx_h]
+                             << ", conf=" << output_data[idx_conf] << "\n";
+                }
             }
             
             // Also write per-anchor view (first 10 anchors, all channels)
