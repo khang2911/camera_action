@@ -46,10 +46,11 @@ def main():
     parser.add_argument("--input-height", type=int, required=True, help="Model input height")
     parser.add_argument("--batch-size", type=int, default=16, help="Batch size (matches C++)")
     parser.add_argument("--python-script", default="trt_infer.py", help="Path to trt_infer.py")
-    parser.add_argument("--cpp-binary", default="./build/AICameraSolution", help="Path to C++ executable")
-    parser.add_argument("--cpp-config", default="config.yaml", help="Config file for C++ executable")
-    parser.add_argument("--cpp-extra-args", nargs=argparse.REMAINDER,
-                        help="Extra args passed to the C++ binary (append after '--')")
+    parser.add_argument("--cpp-binary", default="./build/trt_infer_cpp", help="Path to C++ cross-check executable")
+    parser.add_argument("--cpp-engine", help="TensorRT engine path for C++ script (default: same as --engine)")
+    parser.add_argument("--cpp-gpu-id", type=int, default=0, help="GPU ID for C++ script")
+    parser.add_argument("--cpp-model-type", default="detection", choices=["detection", "pose"],
+                        help="Model type for C++ script")
     parser.add_argument("--dump-dir", default="cross_check", help="Base directory to store dumps")
     parser.add_argument("--compare-shape", help="Shape for compare_tensors (e.g. '16x3x864x864')")
     parser.add_argument("--compare-dtype", default="float32", help="Element dtype for compare_tensors")
@@ -85,16 +86,22 @@ def main():
     ]
     run_command(python_cmd, label="python")
 
-    # 2) Run C++ binary (expects it to honor env vars to dump tensors)
-    cpp_cmd = [os.path.abspath(args.cpp_binary), "--config", args.cpp_config]
-    if args.cpp_extra_args:
-        cpp_cmd.extend(args.cpp_extra_args)
-
-    cpp_env = os.environ.copy()
-    cpp_env["CPP_INPUT_DUMP_DIR"] = cpp_input_dir
-    cpp_env["CPP_OUTPUT_DUMP_DIR"] = cpp_output_dir
-    cpp_env["CPP_MAX_FRAMES"] = str(args.max_frames)
-    run_command(cpp_cmd, env=cpp_env, label="cpp")
+    # 2) Run C++ cross-check tool
+    cpp_engine = args.cpp_engine if args.cpp_engine else args.engine
+    cpp_cmd = [
+        os.path.abspath(args.cpp_binary),
+        "--engine", cpp_engine,
+        "--video", args.video,
+        "--input-width", str(args.input_width),
+        "--input-height", str(args.input_height),
+        "--batch-size", str(args.batch_size),
+        "--gpu-id", str(args.cpp_gpu_id),
+        "--model-type", args.cpp_model_type,
+        "--max-frames", str(args.max_frames),
+        "--dump-input-dir", cpp_input_dir,
+        "--dump-output-dir", cpp_output_dir,
+    ]
+    run_command(cpp_cmd, label="cpp")
 
     # 3) Compare tensors
     target = args.compare_target
