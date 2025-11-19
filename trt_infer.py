@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
 """
-Minimal TensorRT inference script that mirrors the C++ detector pipeline.
-Usage:
+TensorRT inference script that mirrors the C++ detector pipeline.
+Supports single-image or video inference with optional frame ranges.
+
+Examples:
+  Single image:
     python3 trt_infer.py --engine hand.engine --image sample.jpg \
+                         --input-width 864 --input-height 864
+
+  Video frames 100-200:
+    python3 trt_infer.py --engine hand.engine --video sample.mp4 \
                          --input-width 864 --input-height 864 \
-                         --conf-threshold 0.2 --nms-threshold 0.55
+                         --start-frame 100 --end-frame 200
 """
 
 import argparse
 import logging
 import os
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 
 import cv2
 import numpy as np
@@ -23,36 +30,38 @@ LOGGER = logging.getLogger("trt_infer")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 
-def preprocess_image(
-    image_path: str,
+def preprocess_frame(
+    frame_bgr: np.ndarray,
     input_w: int,
     input_h: int,
 ) -> Tuple[np.ndarray, float, Tuple[int, int]]:
-    """Resize with padding (fill=114), convert BGR->RGB, normalize, CHW."""
-    if not os.path.exists(image_path):
-        raise FileNotFoundError(image_path)
+    """
+    Resize with padding (fill=0), convert BGR->RGB, normalize, CHW.
+    Matches the current C++ preprocessing pipeline.
+    """
+    if frame_bgr is None or frame_bgr.size == 0:
+        raise RuntimeError("Empty frame provided to preprocess_frame")
 
-    img = cv2.imread(image_path)
-    if img is None:
-        raise RuntimeError(f"Failed to read image: {image_path}")
-    img_h, img_w = img.shape[:2]
+    img_h, img_w = frame_bgr.shape[:2]
+    # Convert to RGB first, then letterbox resize
+    rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
 
     scale = min(input_w / img_w, input_h / img_h)
     new_w, new_h = int(img_w * scale), int(img_h * scale)
-    resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+    resized = cv2.resize(rgb, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
 
     pad_w = (input_w - new_w) // 2
     pad_h = (input_h - new_h) // 2
 
-    padded = np.full((input_h, input_w, 3), 114, dtype=np.uint8)
+    padded = np.zeros((input_h, input_w, 3), dtype=np.uint8)
     padded[pad_h:pad_h + new_h, pad_w:pad_w + new_w] = resized
 
-    rgb = cv2.cvtColor(padded, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-    chw = rgb.transpose(2, 0, 1)[None, ...]  # shape: [1,3,H,W]
+    normalized = padded.astype(np.float32) / 255.0
+    chw = normalized.transpose(2, 0, 1)[None, ...]  # shape: [1,3,H,W]
     return chw, scale, (pad_h, pad_w)
 
 
-def allocate_buffers(engine: trt.ICudaEngine):
+def allocate_buffers(engine: trt.ICudaEngine, context: trt.IExecutionContext):
     """Allocate host/device buffers for all bindings."""
     inputs = []
     outputs = []
@@ -62,7 +71,8 @@ def allocate_buffers(engine: trt.ICudaEngine):
     for binding in engine:
         idx = engine.get_binding_index(binding)
         dtype = trt.nptype(engine.get_binding_dtype(binding))
-        volume = trt.volume(engine.get_binding_shape(idx))
+        shape = context.get_binding_shape(idx)
+        volume = trt.volume(shape)
         host_mem = cuda.pagelocked_empty(volume, dtype)
         device_mem = cuda.mem_alloc(host_mem.nbytes)
         bindings.append(int(device_mem))
@@ -172,13 +182,20 @@ def postprocess(
 def main():
     parser = argparse.ArgumentParser(description="TensorRT inference script matching C++ pipeline.")
     parser.add_argument("--engine", required=True, help="Path to TensorRT engine")
-    parser.add_argument("--image", required=True, help="Path to input image (BGR)")
+    parser.add_argument("--image", help="Path to input image (BGR)")
+    parser.add_argument("--video", help="Path to input video")
+    parser.add_argument("--start-frame", type=int, default=0, help="Start frame index (inclusive)")
+    parser.add_argument("--end-frame", type=int, default=-1, help="End frame index (inclusive, -1 = till end)")
+    parser.add_argument("--max-frames", type=int, default=-1, help="Early stop after processing this many frames (per video)")
     parser.add_argument("--input-width", type=int, required=True, help="Model input width")
     parser.add_argument("--input-height", type=int, required=True, help="Model input height")
     parser.add_argument("--conf-threshold", type=float, default=0.2, help="Confidence threshold")
     parser.add_argument("--nms-threshold", type=float, default=0.55, help="NMS IoU threshold")
 
     args = parser.parse_args()
+
+    if bool(args.image) == bool(args.video):
+        parser.error("Please specify exactly one of --image or --video.")
 
     LOGGER.info("Loading TensorRT engine: %s", args.engine)
     runtime = trt.Runtime(trt.Logger(trt.Logger.WARNING))
@@ -188,27 +205,77 @@ def main():
     context = engine.create_execution_context()
     context.set_binding_shape(0, (1, 3, args.input_height, args.input_width))
 
-    inputs, outputs, bindings, stream = allocate_buffers(engine)
+    inputs, outputs, bindings, stream = allocate_buffers(engine, context)
 
-    tensor, scale, pad = preprocess_image(args.image, args.input_width, args.input_height)
-    orig_img = cv2.imread(args.image)
-    orig_h, orig_w = orig_img.shape[:2]
+    if args.image:
+        if not os.path.exists(args.image):
+            raise FileNotFoundError(args.image)
+        frame = cv2.imread(args.image)
+        tensor, scale, pad = preprocess_frame(frame, args.input_width, args.input_height)
+        np.copyto(inputs[0]["host"], tensor.ravel())
+        raw_outputs = do_inference(context, bindings, inputs, outputs, stream)
+        out_shape = tuple(context.get_binding_shape(outputs[0]["index"]))
+        output = raw_outputs[0].reshape(out_shape)
+        detections = postprocess(
+            output,
+            conf_thresh=args.conf_threshold,
+            nms_thresh=args.nms_threshold,
+            scale=scale,
+            pad=pad,
+            orig_size=(frame.shape[1], frame.shape[0]),
+        )
+        LOGGER.info("Detections: %s", detections if detections else "None")
+        return
 
-    np.copyto(inputs[0]["host"], tensor.ravel())
-    raw_outputs = do_inference(context, bindings, inputs, outputs, stream)
+    # Video path
+    cap = cv2.VideoCapture(args.video)
+    if not cap.isOpened():
+        raise RuntimeError(f"Failed to open video: {args.video}")
 
-    # Assume single output
-    output = raw_outputs[0].reshape(1, engine.get_binding_shape(1)[1], engine.get_binding_shape(1)[2])
-    detections = postprocess(
-        output,
-        conf_thresh=args.conf_threshold,
-        nms_thresh=args.nms_threshold,
-        scale=scale,
-        pad=pad,
-        orig_size=(orig_w, orig_h),
-    )
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) if cap.get(cv2.CAP_PROP_FRAME_COUNT) > 0 else -1
+    LOGGER.info("Processing video %s (%s frames)", args.video, total_frames if total_frames >= 0 else "unknown")
 
-    LOGGER.info("Detections: %s", detections if detections else "None")
+    # Seek to start frame if needed
+    start_frame = max(0, args.start_frame)
+    end_frame = args.end_frame if args.end_frame >= 0 else (total_frames - 1 if total_frames > 0 else None)
+    if start_frame > 0:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+
+    processed = 0
+    while True:
+        frame_idx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+        if end_frame is not None and frame_idx > end_frame:
+            LOGGER.info("Reached end frame (%d)", end_frame)
+            break
+        if args.max_frames > 0 and processed >= args.max_frames:
+            LOGGER.info("Reached max frames limit (%d)", args.max_frames)
+            break
+
+        ret, frame = cap.read()
+        if not ret:
+            LOGGER.info("End of video or failed to read frame")
+            break
+
+        tensor, scale, pad = preprocess_frame(frame, args.input_width, args.input_height)
+        np.copyto(inputs[0]["host"], tensor.ravel())
+        raw_outputs = do_inference(context, bindings, inputs, outputs, stream)
+        out_shape = tuple(context.get_binding_shape(outputs[0]["index"]))
+        output = raw_outputs[0].reshape(out_shape)
+        detections = postprocess(
+            output,
+            conf_thresh=args.conf_threshold,
+            nms_thresh=args.nms_threshold,
+            scale=scale,
+            pad=pad,
+            orig_size=(frame.shape[1], frame.shape[0]),
+        )
+        LOGGER.info("Frame %d: %d detections", frame_idx, len(detections))
+        for det in detections:
+            LOGGER.info("  bbox=%s score=%.3f", det["bbox"], det["score"])
+
+        processed += 1
+
+    cap.release()
 
 
 if __name__ == "__main__":
