@@ -64,11 +64,12 @@ public:
                             const std::string& prefix);
     
     // Run inference and return detections (for debug mode)
-    bool runInferenceWithDetections(const std::vector<std::string>& output_paths,
-                                     const std::vector<int>& frame_numbers,
-                                     const std::vector<int>& original_widths,
-                                     const std::vector<int>& original_heights,
-                                     std::vector<std::vector<Detection>>& all_detections);
+    bool runInferenceWithDetections(const std::vector<std::shared_ptr<std::vector<float>>>& inputs,
+                                    const std::vector<std::string>& output_paths,
+                                    const std::vector<int>& frame_numbers,
+                                    const std::vector<int>& original_widths,
+                                    const std::vector<int>& original_heights,
+                                    std::vector<std::vector<Detection>>& all_detections);
     
     // Draw detections on frame (for debug visualization)
     void drawDetections(cv::Mat& frame, const std::vector<Detection>& detections);
@@ -133,6 +134,8 @@ private:
                       const std::vector<int>& original_widths = {},
                       const std::vector<int>& original_heights = {},
                       int dump_batch_index = -1);
+    
+    bool copyInputsToDevice(const std::vector<std::shared_ptr<std::vector<float>>>& inputs);
     
     // Scale detection coordinates from preprocessed image to original frame
     void scaleDetectionToOriginal(Detection& det, int original_width, int original_height);

@@ -361,15 +361,27 @@ bool YOLODetector::runWithPreprocessedBatch(
         dumpInputBatch(inputs, dump_idx);
     }
     
+    if (!copyInputsToDevice(inputs)) {
+        return false;
+    }
+    
+    bool ok = runInference(output_paths, frame_numbers, original_widths, original_heights, dump_idx);
+    return ok;
+}
+
+bool YOLODetector::copyInputsToDevice(const std::vector<std::shared_ptr<std::vector<float>>>& inputs) {
+    if (static_cast<int>(inputs.size()) != batch_size_) {
+        std::cerr << "Error: copyInputsToDevice expected " << batch_size_
+                  << " inputs, received " << inputs.size() << std::endl;
+        return false;
+    }
+    
     // Ensure correct device is active before copying data
     cudaSetDevice(gpu_id_);
     
-    // Copy each preprocessed tensor into the GPU input buffer
     size_t single_input_bytes = input_size_ / batch_size_;
-    size_t single_input_elements = input_elements_;
     
     // Debug: Check input data before copying (first batch only, first few values)
-    // Use a per-engine static flag to log once per engine
     static thread_local bool logged_input_debug = false;
     if (!logged_input_debug && !inputs.empty() && inputs[0] && !inputs[0]->empty()) {
         std::cerr << "[DEBUG Input] Batch size: " << batch_size_ << std::endl;
@@ -400,7 +412,6 @@ bool YOLODetector::runWithPreprocessedBatch(
             return false;
         }
         
-        // Verify the input data size matches exactly
         if (inputs[b]->size() != input_elements_) {
             std::cerr << "Warning: Input " << b << " size mismatch. Expected " << input_elements_ 
                       << " elements, got " << inputs[b]->size() << ". Using first " << input_elements_ << " elements." << std::endl;
@@ -413,11 +424,8 @@ bool YOLODetector::runWithPreprocessedBatch(
                         stream_);
     }
     
-    // Synchronize stream to ensure all input copies complete before inference
     cudaStreamSynchronize(stream_);
-    
-    bool ok = runInference(output_paths, frame_numbers, original_widths, original_heights, dump_idx);
-    return ok;
+    return true;
 }
 
 std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<float>& output_data) {
@@ -1131,12 +1139,14 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
     return true;
 }
 
-bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& output_paths,
+bool YOLODetector::runInferenceWithDetections(const std::vector<std::shared_ptr<std::vector<float>>>& inputs,
+                                              const std::vector<std::string>& output_paths,
                                                const std::vector<int>& frame_numbers,
                                                const std::vector<int>& original_widths,
                                                const std::vector<int>& original_heights,
                                                std::vector<std::vector<Detection>>& all_detections) {
-    if (static_cast<int>(output_paths.size()) != batch_size_ ||
+    if (static_cast<int>(inputs.size()) != batch_size_ ||
+        static_cast<int>(output_paths.size()) != batch_size_ ||
         static_cast<int>(frame_numbers.size()) != batch_size_) {
         std::cerr << "Error: Output metadata batch size mismatch (expected "
                   << batch_size_ << ")" << std::endl;
@@ -1146,6 +1156,18 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
     // Set CUDA device for this detector (important for multi-GPU setups)
     cudaSetDevice(gpu_id_);
     
+    int dump_idx = -1;
+    if (dump_inputs_enabled_ || dump_outputs_enabled_) {
+        dump_idx = dump_batch_counter_.fetch_add(1);
+    }
+    if (dump_inputs_enabled_ && dump_idx >= 0) {
+        dumpInputBatch(inputs, dump_idx);
+    }
+    
+    if (!copyInputsToDevice(inputs)) {
+        return false;
+    }
+    
     void* bindings[] = {input_buffer_, output_buffer_};
     
     // Run inference
@@ -1153,11 +1175,6 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
     if (!success) {
         std::cerr << "Error: Inference execution failed" << std::endl;
         return false;
-    }
-    
-    int dump_idx = -1;
-    if (dump_outputs_enabled_) {
-        dump_idx = dump_batch_counter_.fetch_add(1);
     }
     
     // Copy output from GPU to CPU

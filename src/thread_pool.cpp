@@ -577,6 +577,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 if (debug_mode_) {
                     // In debug mode, get detections to draw on images
                     success = engine_group->detectors[detector_id]->runInferenceWithDetections(
+                        batch_tensors,
                         batch_output_paths, batch_frame_numbers,
                         batch_original_widths, batch_original_heights,
                         batch_detections
@@ -685,7 +686,9 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             if (debug_mode_) {
                 // In debug mode, get detections to draw on image
                 std::vector<std::vector<Detection>> all_detections;
+                std::vector<std::shared_ptr<std::vector<float>>> single_input = {tensor};
                 success = engine_group->detectors[detector_id]->runInferenceWithDetections(
+                    single_input,
                     {output_path}, {frame_data.frame_number},
                     {frame_data.original_width}, {frame_data.original_height},
                     all_detections
