@@ -328,16 +328,22 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         
         if (idx_conf >= static_cast<int>(output_data.size())) break;
         
-        // Extract bbox coordinates (YOLOv11: already normalized 0-1, no sigmoid)
+        // Extract bbox coordinates (YOLOv11: in pixel coordinates relative to input size, need to normalize)
         // Matching Python: boxes = predictions[:, :4] where predictions = output[0].T
-        float x_center = output_data[idx_x];
-        float y_center = output_data[idx_y];
-        float width = output_data[idx_w];
-        float height = output_data[idx_h];
+        // Raw output is in pixel coordinates relative to input_width_ x input_height_
+        // Need to normalize by dividing by input size to get [0,1] range
+        float x_center = output_data[idx_x] / static_cast<float>(input_width_);
+        float y_center = output_data[idx_y] / static_cast<float>(input_height_);
+        float width = output_data[idx_w] / static_cast<float>(input_width_);
+        float height = output_data[idx_h] / static_cast<float>(input_height_);
         
-        // Extract confidence (YOLOv11: index 4 is confidence, already normalized)
+        // Extract confidence (YOLOv11: may need sigmoid, but checking raw values first)
         // Matching Python: confidences = predictions[:, 4]
+        // For YOLOv11, confidence might need sigmoid activation
         float confidence = output_data[idx_conf];
+        // Apply sigmoid if confidence values are not already in [0,1] range
+        // Based on raw output showing very small values, we likely need sigmoid
+        confidence = 1.0f / (1.0f + std::exp(-confidence));
         
         // Debug: Log first few values to verify they're reasonable
         static int debug_count = 0;
@@ -447,16 +453,22 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         
         if (idx_conf >= static_cast<int>(output_data.size())) break;
         
-        // Extract bbox coordinates (YOLOv11: already normalized 0-1, no sigmoid)
+        // Extract bbox coordinates (YOLOv11: in pixel coordinates relative to input size, need to normalize)
         // Matching Python: boxes = output[:, :4] where output = output[0].T
-        float x_center = output_data[idx_x];
-        float y_center = output_data[idx_y];
-        float width = output_data[idx_w];
-        float height = output_data[idx_h];
+        // Raw output is in pixel coordinates relative to input_width_ x input_height_
+        // Need to normalize by dividing by input size to get [0,1] range
+        float x_center = output_data[idx_x] / static_cast<float>(input_width_);
+        float y_center = output_data[idx_y] / static_cast<float>(input_height_);
+        float width = output_data[idx_w] / static_cast<float>(input_width_);
+        float height = output_data[idx_h] / static_cast<float>(input_height_);
         
-        // Extract confidence (YOLOv11: index 4 is confidence, already normalized)
+        // Extract confidence (YOLOv11: may need sigmoid, but checking raw values first)
         // Matching Python: scores = output[:, 4]
+        // For YOLOv11, confidence might need sigmoid activation
         float confidence = output_data[idx_conf];
+        // Apply sigmoid if confidence values are not already in [0,1] range
+        // Based on raw output showing very small values, we likely need sigmoid
+        confidence = 1.0f / (1.0f + std::exp(-confidence));
         
         // Apply confidence threshold (matching Python: mask = scores > self.conf_threshold)
         if (confidence < conf_threshold_) {
@@ -471,9 +483,10 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         det.confidence = confidence;
         det.class_id = 0;  // ALL models are single-class (matching Python: class_id=0)
         
-        // Parse 17 keypoints (COCO format) - YOLOv11: already normalized, no sigmoid
+        // Parse 17 keypoints (COCO format) - YOLOv11: in pixel coordinates, need to normalize
         // Matching Python: keypoints = output[:, 5:], reshaped to (17, 3)
         // Keypoints start at channel 6 (after bbox + confidence + class_score)
+        // Raw output is in pixel coordinates relative to input_width_ x input_height_
         det.keypoints.resize(17);
         for (int k = 0; k < 17; ++k) {
             int kpt_channel_base = 6 + k * 3;  // Channel for keypoint k (x, y, conf)
@@ -483,9 +496,12 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
             
             if (idx_kpt_conf >= static_cast<int>(output_data.size())) break;
             
-            det.keypoints[k].x = output_data[idx_kpt_x];
-            det.keypoints[k].y = output_data[idx_kpt_y];
-            det.keypoints[k].confidence = output_data[idx_kpt_conf];
+            // Normalize keypoint coordinates by input size
+            det.keypoints[k].x = output_data[idx_kpt_x] / static_cast<float>(input_width_);
+            det.keypoints[k].y = output_data[idx_kpt_y] / static_cast<float>(input_height_);
+            // Keypoint confidence may also need sigmoid
+            float kpt_conf = output_data[idx_kpt_conf];
+            det.keypoints[k].confidence = 1.0f / (1.0f + std::exp(-kpt_conf));
         }
         
         detections.push_back(det);
