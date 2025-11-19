@@ -79,7 +79,9 @@ ConfigParser::ConfigParser()
     : num_readers_(10),
       num_preprocessors_(10),
       output_dir_("./output"),
-      time_padding_seconds_(0.0) {}
+      time_padding_seconds_(0.0),
+      debug_mode_(false),
+      max_frames_per_video_(0) {}
  
 ConfigParser::~ConfigParser() = default;
  
@@ -149,6 +151,31 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
         // Output directory
         if (config["output"] && config["output"]["dir"]) {
             output_dir_ = config["output"]["dir"].as<std::string>();
+        }
+        
+        // Debug mode settings
+        if (config["debug"]) {
+            const auto& debug = config["debug"];
+            if (debug["enabled"]) {
+                try {
+                    // Try as boolean first
+                    debug_mode_ = debug["enabled"].as<bool>();
+                } catch (const YAML::Exception&) {
+                    // If that fails, try as string
+                    std::string enabled_str = debug["enabled"].as<std::string>();
+                    std::transform(enabled_str.begin(), enabled_str.end(), enabled_str.begin(), ::tolower);
+                    debug_mode_ = (enabled_str == "true" || enabled_str == "1" || enabled_str == "yes");
+                }
+                std::cout << "[Config] Debug mode: " << (debug_mode_ ? "enabled" : "disabled") << std::endl;
+            }
+            if (debug["max_frames_per_video"]) {
+                max_frames_per_video_ = debug["max_frames_per_video"].as<int>();
+                if (max_frames_per_video_ < 0) {
+                    max_frames_per_video_ = 0;  // 0 means no limit
+                }
+                std::cout << "[Config] Max frames per video: " << max_frames_per_video_ 
+                          << (max_frames_per_video_ == 0 ? " (no limit)" : "") << std::endl;
+            }
         }
  
         // Video sources

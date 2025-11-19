@@ -59,6 +59,12 @@ ThreadPool::ThreadPool(int num_readers,
       max_frames_per_video_(max_frames_per_video),
       stop_flag_(false) {
     
+    // Log debug mode status
+    if (debug_mode_) {
+        LOG_INFO("ThreadPool", "Debug mode enabled: max_frames_per_video=" + 
+                 std::to_string(max_frames_per_video_));
+    }
+    
     // Initialize statistics
     {
         std::lock_guard<std::mutex> lock(stats_.stats_mutex);
@@ -335,10 +341,11 @@ void ThreadPool::readerWorker(int reader_id) {
         cv::Mat frame;
         int frame_count = 0;
         while (!stop_flag_ && reader.readFrame(frame)) {
-            // Check debug mode limit
+            // Check debug mode limit - stop if we've already processed max_frames_per_video frames
+            // frame_count is the number of frames already processed, so check BEFORE processing this one
             if (debug_mode_ && max_frames_per_video_ > 0 && frame_count >= max_frames_per_video_) {
                 LOG_INFO("Reader", "[DEBUG MODE] Reader " + std::to_string(reader_id) + 
-                         " stopping at frame " + std::to_string(frame_count) + 
+                         " stopping after processing " + std::to_string(frame_count) + " frames" +
                          " (max_frames_per_video=" + std::to_string(max_frames_per_video_) + ")");
                 break;
             }
