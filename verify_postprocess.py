@@ -213,34 +213,90 @@ def parse_cpp_binary(path: str) -> Tuple[int, Dict[int, List[DetectionRecord]]]:
     results: Dict[int, List[DetectionRecord]] = {}
     print(f"[INFO] Parsing C++ binary file: {path}")
     
+    # Check file size first
+    file_size = os.path.getsize(path)
+    print(f"[INFO] File size: {file_size} bytes")
+    
     with open(path, "rb") as f:
         header = f.read(4)
         if len(header) < 4:
             raise RuntimeError(f"{path}: empty file")
         model_type = struct.unpack("<i", header)[0]
-        print(f"[INFO] Model type: {model_type}")
+        
+        # Validate model type (should be 0 for DETECTION or 1 for POSE)
+        # If it's a huge number, it's likely a raw TensorRT output dump (float32 array)
+        if model_type < 0 or model_type > 10:
+            raise RuntimeError(
+                f"ERROR: Invalid model type ({model_type}). This file appears to be a raw TensorRT output dump, "
+                f"not a detection binary file.\n"
+                f"  - Raw TensorRT dumps: outputs_batch*.bin (float32 arrays)\n"
+                f"  - Detection binary files: output/<engine_name>_<video_name>.bin (written by writeDetectionsToFile)\n"
+                f"  - Expected location: output/ directory (check your config.yaml output_dir)\n"
+                f"  - File format: [model_type (int)] [frame_idx (int)] [num_dets (int)] [detections...]"
+            )
+        
+        print(f"[INFO] Model type: {model_type} (0=DETECTION, 1=POSE)")
 
         frame_count = 0
-        while True:
+        max_frames_to_check = 1000  # Safety limit
+        bytes_read = 4  # Header already read
+        
+        while frame_count < max_frames_to_check:
             frame_bytes = f.read(4)
             if len(frame_bytes) < 4:
                 break
+            bytes_read += 4
             frame_idx = struct.unpack("<i", frame_bytes)[0]
+            
+            # Validate frame index (should be reasonable, not a huge float value)
+            if frame_idx < 0 or frame_idx > 1000000:
+                raise RuntimeError(
+                    f"ERROR: Invalid frame index ({frame_idx}) at offset {bytes_read}. "
+                    f"This file appears to be a raw TensorRT output dump, not a detection binary file.\n"
+                    f"  - Detection binary files are written by writeDetectionsToFile()\n"
+                    f"  - They should be in the output/ directory, not in cross_check/cpp_outputs/"
+                )
 
             num_det_bytes = f.read(4)
             if len(num_det_bytes) < 4:
                 break
+            bytes_read += 4
             num_dets = struct.unpack("<i", num_det_bytes)[0]
+            
+            # Validate num_dets (should be reasonable)
+            if num_dets < 0 or num_dets > 10000:
+                raise RuntimeError(
+                    f"ERROR: Invalid num_dets ({num_dets}) for frame {frame_idx}. "
+                    f"This file appears to be in the wrong format."
+                )
 
             dets: List[DetectionRecord] = []
             for _ in range(num_dets):
-                bbox = struct.unpack("<4f", f.read(16))
-                conf = struct.unpack("<f", f.read(4))[0]
-                class_id = struct.unpack("<i", f.read(4))[0]
-                num_keypoints = struct.unpack("<i", f.read(4))[0]
+                bbox_data = f.read(16)
+                if len(bbox_data) < 16:
+                    raise RuntimeError(f"Unexpected end of file while reading bbox for frame {frame_idx}")
+                bbox = struct.unpack("<4f", bbox_data)
+                
+                conf_data = f.read(4)
+                if len(conf_data) < 4:
+                    raise RuntimeError(f"Unexpected end of file while reading confidence for frame {frame_idx}")
+                conf = struct.unpack("<f", conf_data)[0]
+                
+                class_id_data = f.read(4)
+                if len(class_id_data) < 4:
+                    raise RuntimeError(f"Unexpected end of file while reading class_id for frame {frame_idx}")
+                class_id = struct.unpack("<i", class_id_data)[0]
+                
+                num_keypoints_data = f.read(4)
+                if len(num_keypoints_data) < 4:
+                    raise RuntimeError(f"Unexpected end of file while reading num_keypoints for frame {frame_idx}")
+                num_keypoints = struct.unpack("<i", num_keypoints_data)[0]
+                
                 # Skip keypoints data if present (pose models)
                 for _ in range(num_keypoints):
                     f.read(12)  # 3 floats
+                
+                bytes_read += 16 + 4 + 4 + 4 + (num_keypoints * 12)
 
                 det = DetectionRecord(
                     frame=frame_idx,
