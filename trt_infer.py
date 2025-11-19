@@ -104,15 +104,21 @@ def preprocess_batch(
 
 def dims_to_tuple(dims) -> Tuple[int, ...]:
     """
-    Convert TensorRT Dims or iterable into a tuple of ints.
-    Supports both legacy binding APIs and newer TensorRT 10 tuple results.
+    Convert TensorRT Dims / tuple-like objects into a tuple of ints.
+    Compatible with both legacy and TensorRT >=10 APIs.
     """
     if isinstance(dims, (tuple, list)):
         return tuple(int(x) for x in dims)
-    if hasattr(dims, "nbDims"):
-        return tuple(int(dims[i]) for i in range(dims.nbDims))
-    if hasattr(dims, "d"):
-        return tuple(int(x) for x in dims.d)
+    # TensorRT >=10 returns trt.Dims which supports len()/getitem()
+    if "tensorrt" in str(type(dims)):
+        try:
+            return tuple(int(dims[i]) for i in range(len(dims)))
+        except Exception:
+            pass
+        if hasattr(dims, "d"):
+            return tuple(int(x) for x in dims.d)
+        if hasattr(dims, "nbDims"):
+            return tuple(int(dims[i]) for i in range(dims.nbDims))
     raise TypeError(f"Unsupported dims type: {type(dims)}")
 
 
