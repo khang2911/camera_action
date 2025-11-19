@@ -49,9 +49,15 @@ else
     git status --short
     echo ""
     
-    # Stage all changes
-    echo "Staging all changes..."
+    # Stage all changes except ONNX models
+    echo "Staging all changes (excluding *.onnx)..."
     git add .
+    # Unstage any ONNX files to avoid pushing heavy models
+    if git ls-files -o -m --exclude-standard | grep -Ei '\.onnx$' >/dev/null 2>&1 || \
+       git diff --name-only --cached | grep -Ei '\.onnx$' >/dev/null 2>&1; then
+        git reset HEAD -- '*.onnx' >/dev/null 2>&1 || true
+        echo -e "${YELLOW}Note: *.onnx files were detected and left unstaged to avoid pushing.${NC}"
+    fi
     
     # Get commit message
     if [ -n "$1" ]; then
