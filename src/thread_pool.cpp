@@ -390,6 +390,8 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             processed.frame_number = raw_frame.frame_number;
             processed.video_path = raw_frame.video_path;
             processed.frame = raw_frame.frame;  // Keep reference for potential debugging/logging
+            processed.original_width = raw_frame.original_width;
+            processed.original_height = raw_frame.original_height;
             
             engine_group->frame_queue->push(processed);
         }
@@ -427,11 +429,13 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
     int batch_size = engine_group->detectors[detector_id]->getBatchSize();
     
     while (!stop_flag_) {
-        // For batch_size > 1, accumulate frames into a batch
+            // For batch_size > 1, accumulate frames into a batch
         if (batch_size > 1) {
             std::vector<std::shared_ptr<std::vector<float>>> batch_tensors;
             std::vector<std::string> batch_output_paths;
             std::vector<int> batch_frame_numbers;
+            std::vector<int> batch_original_widths;
+            std::vector<int> batch_original_heights;
             
             // Collect batch_size frames
             while (static_cast<int>(batch_tensors.size()) < batch_size && !stop_flag_) {
@@ -468,13 +472,16 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 batch_tensors.push_back(tensor);
                 batch_output_paths.push_back(output_path);
                 batch_frame_numbers.push_back(frame_data.frame_number);
+                batch_original_widths.push_back(frame_data.original_width);
+                batch_original_heights.push_back(frame_data.original_height);
             }
             
             // Process batch if we have enough frames
             if (static_cast<int>(batch_tensors.size()) == batch_size) {
                 auto batch_start = std::chrono::steady_clock::now();
                 bool success = engine_group->detectors[detector_id]->runWithPreprocessedBatch(
-                    batch_tensors, batch_output_paths, batch_frame_numbers
+                    batch_tensors, batch_output_paths, batch_frame_numbers,
+                    batch_original_widths, batch_original_heights
                 );
                 auto batch_end = std::chrono::steady_clock::now();
                 auto batch_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(batch_end - batch_start).count();
@@ -539,7 +546,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 engine_group->preprocessor->preprocessToFloat(frame_data.frame, *tensor);
             }
             bool success = engine_group->detectors[detector_id]->runWithPreprocessedData(
-                tensor, output_path, frame_data.frame_number
+                tensor, output_path, frame_data.frame_number,
+                frame_data.original_width, frame_data.original_height
             );
             auto detect_end = std::chrono::steady_clock::now();
             auto detect_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(detect_end - detect_start).count();

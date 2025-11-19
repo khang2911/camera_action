@@ -15,13 +15,17 @@ struct FrameData {
     int video_id;
     int frame_number;
     std::string video_path;
+    int original_width;   // Original frame width before preprocessing
+    int original_height;  // Original frame height before preprocessing
     
-    FrameData() : video_id(-1), frame_number(-1) {}
+    FrameData() : video_id(-1), frame_number(-1), original_width(0), original_height(0) {}
     FrameData(const cv::Mat& f, int vid_id, int fnum, const std::string& vpath)
-        : frame(f), video_id(vid_id), frame_number(fnum), video_path(vpath) {}
+        : frame(f), video_id(vid_id), frame_number(fnum), video_path(vpath),
+          original_width(f.cols), original_height(f.rows) {}
     FrameData(const std::shared_ptr<std::vector<float>>& tensor,
-              int vid_id, int fnum, const std::string& vpath)
-        : preprocessed_data(tensor), video_id(vid_id), frame_number(fnum), video_path(vpath) {}
+              int vid_id, int fnum, const std::string& vpath, int orig_w = 0, int orig_h = 0)
+        : preprocessed_data(tensor), video_id(vid_id), frame_number(fnum), video_path(vpath),
+          original_width(orig_w), original_height(orig_h) {}
 };
 
 class FrameQueue {

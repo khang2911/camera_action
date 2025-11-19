@@ -4,6 +4,8 @@
 #include <cstring>
 #include <algorithm>
 #include <numeric>
+#include <limits>
+#include <cmath>
 #include <filesystem>
 #include <unordered_map>
 #include <mutex>
@@ -212,7 +214,7 @@ bool YOLODetector::detect(const cv::Mat& frame, const std::string& output_path, 
     
     auto buffer = std::make_shared<std::vector<float>>(input_elements_);
     preprocessor_->preprocessToFloat(frame, *buffer);
-    return runWithPreprocessedData(buffer, output_path, frame_number);
+    return runWithPreprocessedData(buffer, output_path, frame_number, frame.cols, frame.rows);
 }
 
 bool YOLODetector::detectBatch(const std::vector<cv::Mat>& frames, 
@@ -229,31 +231,40 @@ bool YOLODetector::detectBatch(const std::vector<cv::Mat>& frames,
     }
     
     std::vector<std::shared_ptr<std::vector<float>>> tensors(batch_size_);
+    std::vector<int> original_widths(batch_size_);
+    std::vector<int> original_heights(batch_size_);
     for (int b = 0; b < batch_size_; ++b) {
         auto buffer = std::make_shared<std::vector<float>>(input_elements_);
         preprocessor_->preprocessToFloat(frames[b], *buffer);
         tensors[b] = buffer;
+        original_widths[b] = frames[b].cols;
+        original_heights[b] = frames[b].rows;
     }
     
-    return runWithPreprocessedBatch(tensors, output_paths, frame_numbers);
+    return runWithPreprocessedBatch(tensors, output_paths, frame_numbers, original_widths, original_heights);
 }
 
 bool YOLODetector::runWithPreprocessedData(const std::shared_ptr<std::vector<float>>& input_data,
                                            const std::string& output_path,
-                                           int frame_number) {
+                                           int frame_number,
+                                           int original_width,
+                                           int original_height) {
     if (batch_size_ != 1) {
         std::cerr << "Error: runWithPreprocessedData requires batch_size=1 (current batch_size="
                   << batch_size_ << ")" << std::endl;
         return false;
     }
     
-    return runWithPreprocessedBatch({input_data}, {output_path}, {frame_number});
+    return runWithPreprocessedBatch({input_data}, {output_path}, {frame_number},
+                                    {original_width}, {original_height});
 }
 
 bool YOLODetector::runWithPreprocessedBatch(
     const std::vector<std::shared_ptr<std::vector<float>>>& inputs,
     const std::vector<std::string>& output_paths,
-    const std::vector<int>& frame_numbers) {
+    const std::vector<int>& frame_numbers,
+    const std::vector<int>& original_widths,
+    const std::vector<int>& original_heights) {
     
     if (!context_ || !input_buffer_ || !output_buffer_) {
         std::cerr << "Error: Detector not initialized" << std::endl;
@@ -286,7 +297,7 @@ bool YOLODetector::runWithPreprocessedBatch(
                         stream_);
     }
     
-    return runInference(output_paths, frame_numbers);
+    return runInference(output_paths, frame_numbers, original_widths, original_heights);
 }
 
 std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<float>& output_data) {
@@ -305,13 +316,18 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         float y_center = output_data[offset + 1];
         float width = output_data[offset + 2];
         float height = output_data[offset + 3];
-        float objectness = output_data[offset + 4];
+        float objectness_raw = output_data[offset + 4];
+        
+        // Apply sigmoid to objectness (YOLO outputs are typically logits)
+        float objectness = 1.0f / (1.0f + std::exp(-objectness_raw));
         
         // Find class with highest score
-        float max_class_score = 0.0f;
+        float max_class_score = -std::numeric_limits<float>::max();
         int best_class = -1;
         for (int c = 0; c < num_classes_; ++c) {
-            float class_score = output_data[offset + 5 + c];
+            float class_score_raw = output_data[offset + 5 + c];
+            // Apply sigmoid to class score
+            float class_score = 1.0f / (1.0f + std::exp(-class_score_raw));
             if (class_score > max_class_score) {
                 max_class_score = class_score;
                 best_class = c;
@@ -357,8 +373,12 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         float y_center = output_data[offset + 1];
         float width = output_data[offset + 2];
         float height = output_data[offset + 3];
-        float objectness = output_data[offset + 4];
-        float class_score = output_data[offset + 5];
+        float objectness_raw = output_data[offset + 4];
+        float class_score_raw = output_data[offset + 5];
+        
+        // Apply sigmoid to objectness and class score (YOLO outputs are typically logits)
+        float objectness = 1.0f / (1.0f + std::exp(-objectness_raw));
+        float class_score = 1.0f / (1.0f + std::exp(-class_score_raw));
         
         // Calculate final confidence: objectness * class_score
         float confidence = objectness * class_score;
@@ -549,7 +569,9 @@ bool YOLODetector::writeDetectionsToFile(const std::vector<Detection>& detection
 }
 
 bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
-                                const std::vector<int>& frame_numbers) {
+                                const std::vector<int>& frame_numbers,
+                                const std::vector<int>& original_widths,
+                                const std::vector<int>& original_heights) {
     if (static_cast<int>(output_paths.size()) != batch_size_ ||
         static_cast<int>(frame_numbers.size()) != batch_size_) {
         std::cerr << "Error: Output metadata batch size mismatch (expected "
@@ -603,6 +625,18 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
             detections.resize(max_detections_);
         }
         
+        // Scale detections to original frame coordinates if dimensions provided
+        int orig_w = (b < static_cast<int>(original_widths.size()) && original_widths[b] > 0) 
+                     ? original_widths[b] : 0;
+        int orig_h = (b < static_cast<int>(original_heights.size()) && original_heights[b] > 0) 
+                     ? original_heights[b] : 0;
+        
+        if (orig_w > 0 && orig_h > 0) {
+            for (auto& det : detections) {
+                scaleDetectionToOriginal(det, orig_w, orig_h);
+            }
+        }
+        
         if (!writeDetectionsToFile(detections, output_paths[b], frame_numbers[b])) {
             std::cerr << "Error: Failed to write detections for frame " << frame_numbers[b] << std::endl;
             return false;
@@ -610,5 +644,72 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
     }
     
     return true;
+}
+
+void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, int original_height) {
+    if (original_width <= 0 || original_height <= 0) {
+        return;  // Cannot scale without valid dimensions
+    }
+    
+    // YOLO outputs are normalized (0-1) relative to preprocessed image (input_width_ x input_height_)
+    // Preprocessor adds padding to maintain aspect ratio, then resizes to target size
+    
+    // Calculate scale factor used during preprocessing (same as in Preprocessor::addPadding)
+    float scale = std::min(static_cast<float>(input_width_) / original_width,
+                          static_cast<float>(input_height_) / original_height);
+    
+    // Calculate dimensions after scaling (before padding)
+    int scaled_w = static_cast<int>(original_width * scale);
+    int scaled_h = static_cast<int>(original_height * scale);
+    
+    // Calculate padding offsets (centered padding)
+    int pad_w = (input_width_ - scaled_w) / 2;
+    int pad_h = (input_height_ - scaled_h) / 2;
+    
+    // Convert normalized coordinates (0-1) to pixel coordinates in preprocessed image
+    float x_center_prep = det.bbox[0] * input_width_;
+    float y_center_prep = det.bbox[1] * input_height_;
+    float width_prep = det.bbox[2] * input_width_;
+    float height_prep = det.bbox[3] * input_height_;
+    
+    // Remove padding offset
+    float x_center_scaled = x_center_prep - pad_w;
+    float y_center_scaled = y_center_prep - pad_h;
+    
+    // Scale back to original image dimensions
+    float x_center_orig = x_center_scaled / scale;
+    float y_center_orig = y_center_scaled / scale;
+    float width_orig = width_prep / scale;
+    float height_orig = height_prep / scale;
+    
+    // Clamp to original image bounds
+    x_center_orig = std::max(0.0f, std::min(static_cast<float>(original_width), x_center_orig));
+    y_center_orig = std::max(0.0f, std::min(static_cast<float>(original_height), y_center_orig));
+    width_orig = std::max(0.0f, std::min(static_cast<float>(original_width), width_orig));
+    height_orig = std::max(0.0f, std::min(static_cast<float>(original_height), height_orig));
+    
+    // Update bbox (still in center-width-height format)
+    det.bbox[0] = x_center_orig;
+    det.bbox[1] = y_center_orig;
+    det.bbox[2] = width_orig;
+    det.bbox[3] = height_orig;
+    
+    // Scale keypoints if present (for pose models)
+    for (auto& kpt : det.keypoints) {
+        // Keypoints are also normalized (0-1) relative to preprocessed image
+        float kpt_x_prep = kpt.x * input_width_;
+        float kpt_y_prep = kpt.y * input_height_;
+        
+        // Remove padding and scale back
+        float kpt_x_scaled = kpt_x_prep - pad_w;
+        float kpt_y_scaled = kpt_y_prep - pad_h;
+        
+        float kpt_x_orig = kpt_x_scaled / scale;
+        float kpt_y_orig = kpt_y_scaled / scale;
+        
+        // Clamp to original image bounds
+        kpt.x = std::max(0.0f, std::min(static_cast<float>(original_width), kpt_x_orig));
+        kpt.y = std::max(0.0f, std::min(static_cast<float>(original_height), kpt_y_orig));
+    }
 }
 

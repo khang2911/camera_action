@@ -44,10 +44,13 @@ public:
     bool detect(const cv::Mat& frame, const std::string& output_path, int frame_number);
     bool detectBatch(const std::vector<cv::Mat>& frames, const std::vector<std::string>& output_paths, const std::vector<int>& frame_numbers);
     bool runWithPreprocessedData(const std::shared_ptr<std::vector<float>>& input_data,
-                                 const std::string& output_path, int frame_number);
+                                 const std::string& output_path, int frame_number,
+                                 int original_width = 0, int original_height = 0);
     bool runWithPreprocessedBatch(const std::vector<std::shared_ptr<std::vector<float>>>& inputs,
                                   const std::vector<std::string>& output_paths,
-                                  const std::vector<int>& frame_numbers);
+                                  const std::vector<int>& frame_numbers,
+                                  const std::vector<int>& original_widths = {},
+                                  const std::vector<int>& original_heights = {});
     
     ModelType getModelType() const { return model_type_; }
     int getBatchSize() const { return batch_size_; }
@@ -106,7 +109,12 @@ private:
     bool writeDetectionsToFile(const std::vector<Detection>& detections, const std::string& output_path, int frame_number);
     
     bool runInference(const std::vector<std::string>& output_paths,
-                      const std::vector<int>& frame_numbers);
+                      const std::vector<int>& frame_numbers,
+                      const std::vector<int>& original_widths = {},
+                      const std::vector<int>& original_heights = {});
+    
+    // Scale detection coordinates from preprocessed image to original frame
+    void scaleDetectionToOriginal(Detection& det, int original_width, int original_height);
 };
 
 #endif // YOLO_DETECTOR_H
