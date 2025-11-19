@@ -366,10 +366,43 @@ bool YOLODetector::runWithPreprocessedBatch(
     
     // Copy each preprocessed tensor into the GPU input buffer
     size_t single_input_bytes = input_size_ / batch_size_;
+    size_t single_input_elements = input_elements_;
+    
+    // Debug: Check input data before copying (first batch only, first few values)
+    static bool logged_input_debug = false;
+    if (!logged_input_debug && !inputs.empty() && !inputs[0]->empty()) {
+        std::cout << "[DEBUG Input] Batch size: " << batch_size_ << std::endl;
+        std::cout << "[DEBUG Input] input_size_: " << input_size_ << " bytes" << std::endl;
+        std::cout << "[DEBUG Input] single_input_bytes: " << single_input_bytes << " bytes" << std::endl;
+        std::cout << "[DEBUG Input] input_elements_: " << input_elements_ << " elements" << std::endl;
+        std::cout << "[DEBUG Input] Expected per-frame size: " << (single_input_bytes / sizeof(float)) << " elements" << std::endl;
+        std::cout << "[DEBUG Input] Actual input[0] size: " << inputs[0]->size() << " elements" << std::endl;
+        std::cout << "[DEBUG Input] First 10 values of input[0]: ";
+        for (int i = 0; i < std::min(10, static_cast<int>(inputs[0]->size())); ++i) {
+            std::cout << (*inputs[0])[i] << " ";
+        }
+        std::cout << std::endl;
+        if (batch_size_ > 1 && inputs.size() > 1) {
+            std::cout << "[DEBUG Input] First 10 values of input[1]: ";
+            for (int i = 0; i < std::min(10, static_cast<int>(inputs[1]->size())); ++i) {
+                std::cout << (*inputs[1])[i] << " ";
+            }
+            std::cout << std::endl;
+        }
+        logged_input_debug = true;
+    }
+    
     for (int b = 0; b < batch_size_; ++b) {
         if (!inputs[b] || inputs[b]->size() < input_elements_) {
-            std::cerr << "Error: Preprocessed input " << b << " has incorrect size" << std::endl;
+            std::cerr << "Error: Preprocessed input " << b << " has incorrect size. Expected at least " 
+                      << input_elements_ << " elements, got " << (inputs[b] ? inputs[b]->size() : 0) << std::endl;
             return false;
+        }
+        
+        // Verify the input data size matches exactly
+        if (inputs[b]->size() != input_elements_) {
+            std::cerr << "Warning: Input " << b << " size mismatch. Expected " << input_elements_ 
+                      << " elements, got " << inputs[b]->size() << ". Using first " << input_elements_ << " elements." << std::endl;
         }
         
         cudaMemcpyAsync(static_cast<char*>(input_buffer_) + b * single_input_bytes,
@@ -378,6 +411,9 @@ bool YOLODetector::runWithPreprocessedBatch(
                         cudaMemcpyHostToDevice,
                         stream_);
     }
+    
+    // Synchronize stream to ensure all input copies complete before inference
+    cudaStreamSynchronize(stream_);
     
     bool ok = runInference(output_paths, frame_numbers, original_widths, original_heights, dump_idx);
     return ok;
