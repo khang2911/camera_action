@@ -744,6 +744,88 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
     return true;
 }
 
+bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& output_paths,
+                                               const std::vector<int>& frame_numbers,
+                                               const std::vector<int>& original_widths,
+                                               const std::vector<int>& original_heights,
+                                               std::vector<std::vector<Detection>>& all_detections) {
+    if (static_cast<int>(output_paths.size()) != batch_size_ ||
+        static_cast<int>(frame_numbers.size()) != batch_size_) {
+        std::cerr << "Error: Output metadata batch size mismatch (expected "
+                  << batch_size_ << ")" << std::endl;
+        return false;
+    }
+    
+    // Set CUDA device for this detector (important for multi-GPU setups)
+    cudaSetDevice(gpu_id_);
+    
+    void* bindings[] = {input_buffer_, output_buffer_};
+    
+    // Run inference
+    bool success = context_->enqueueV2(bindings, stream_, nullptr);
+    if (!success) {
+        std::cerr << "Error: Inference execution failed" << std::endl;
+        return false;
+    }
+    
+    // Copy output from GPU to CPU
+    std::vector<float> output_data(output_size_ / sizeof(float));
+    cudaMemcpyAsync(output_data.data(), output_buffer_, output_size_, cudaMemcpyDeviceToHost, stream_);
+    cudaStreamSynchronize(stream_);
+    
+    size_t output_per_frame = static_cast<size_t>(num_anchors_) * output_channels_;
+    size_t expected_total_output = static_cast<size_t>(batch_size_) * output_per_frame;
+    if (output_data.size() != expected_total_output) {
+        std::cerr << "Error: Output size mismatch. Expected " << expected_total_output
+                  << " elements, got " << output_data.size() << std::endl;
+        return false;
+    }
+    
+    all_detections.clear();
+    all_detections.resize(batch_size_);
+    
+    for (int b = 0; b < batch_size_; ++b) {
+        std::vector<float> frame_output(output_per_frame);
+        size_t batch_offset = static_cast<size_t>(b) * output_per_frame;
+        std::copy(output_data.begin() + batch_offset,
+                  output_data.begin() + batch_offset + output_per_frame,
+                  frame_output.begin());
+        
+        std::vector<Detection> detections;
+        if (model_type_ == ModelType::POSE) {
+            detections = parseRawPoseOutput(frame_output);
+        } else {
+            detections = parseRawDetectionOutput(frame_output);
+        }
+        
+        detections = applyNMS(detections);
+        if (static_cast<int>(detections.size()) > max_detections_) {
+            detections.resize(max_detections_);
+        }
+        
+        // Scale detections to original frame coordinates if dimensions provided
+        int orig_w = (b < static_cast<int>(original_widths.size()) && original_widths[b] > 0) 
+                     ? original_widths[b] : 0;
+        int orig_h = (b < static_cast<int>(original_heights.size()) && original_heights[b] > 0) 
+                     ? original_heights[b] : 0;
+        
+        if (orig_w > 0 && orig_h > 0) {
+            for (auto& det : detections) {
+                scaleDetectionToOriginal(det, orig_w, orig_h);
+            }
+        }
+        
+        all_detections[b] = detections;
+        
+        if (!writeDetectionsToFile(detections, output_paths[b], frame_numbers[b])) {
+            std::cerr << "Error: Failed to write detections for frame " << frame_numbers[b] << std::endl;
+            return false;
+        }
+    }
+    
+    return true;
+}
+
 void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, int original_height) {
     if (original_width <= 0 || original_height <= 0) {
         // Cannot scale without valid dimensions - coordinates remain normalized [0,1]
@@ -811,6 +893,105 @@ void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, 
         // Clamp to original image bounds
         kpt.x = std::max(0.0f, std::min(static_cast<float>(original_width), kpt_x_orig));
         kpt.y = std::max(0.0f, std::min(static_cast<float>(original_height), kpt_y_orig));
+    }
+}
+
+void YOLODetector::drawDetections(cv::Mat& frame, const std::vector<Detection>& detections) {
+    // Color palette for different classes (BGR format for OpenCV)
+    std::vector<cv::Scalar> class_colors = {
+        cv::Scalar(0, 255, 0),      // Green
+        cv::Scalar(255, 0, 0),      // Blue
+        cv::Scalar(0, 0, 255),      // Red
+        cv::Scalar(255, 255, 0),    // Cyan
+        cv::Scalar(255, 0, 255),    // Magenta
+        cv::Scalar(0, 255, 255),    // Yellow
+        cv::Scalar(128, 0, 128),    // Purple
+        cv::Scalar(255, 165, 0),    // Orange
+    };
+    
+    // Keypoint connections for skeleton (COCO format - 17 keypoints)
+    std::vector<std::pair<int, int>> keypoint_connections = {
+        {0, 1}, {0, 2},   // nose to eyes
+        {1, 3}, {2, 4},   // eyes to ears
+        {5, 6},           // shoulders
+        {5, 7}, {7, 9},   // left arm
+        {6, 8}, {8, 10},  // right arm
+        {5, 11}, {6, 12}, // shoulders to hips
+        {11, 12},         // hips
+        {11, 13}, {13, 15}, // left leg
+        {12, 14}, {14, 16}, // right leg
+    };
+    
+    for (const auto& det : detections) {
+        // Get color for this class
+        cv::Scalar color = class_colors[det.class_id % class_colors.size()];
+        
+        // Convert bbox from center format [x_center, y_center, width, height] to corner format
+        float x_center = det.bbox[0];
+        float y_center = det.bbox[1];
+        float width = det.bbox[2];
+        float height = det.bbox[3];
+        
+        int x1 = static_cast<int>(x_center - width / 2.0f);
+        int y1 = static_cast<int>(y_center - height / 2.0f);
+        int x2 = static_cast<int>(x_center + width / 2.0f);
+        int y2 = static_cast<int>(y_center + height / 2.0f);
+        
+        // Clamp to image bounds
+        x1 = std::max(0, std::min(x1, frame.cols - 1));
+        y1 = std::max(0, std::min(y1, frame.rows - 1));
+        x2 = std::max(0, std::min(x2, frame.cols - 1));
+        y2 = std::max(0, std::min(y2, frame.rows - 1));
+        
+        // Draw bounding box
+        cv::rectangle(frame, cv::Point(x1, y1), cv::Point(x2, y2), color, 2);
+        
+        // Draw label
+        std::string label = "Class " + std::to_string(det.class_id) + 
+                           " (" + std::to_string(static_cast<int>(det.confidence * 100)) + "%)";
+        int baseline = 0;
+        cv::Size text_size = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+        cv::rectangle(frame, 
+                     cv::Point(x1, y1 - text_size.height - baseline - 5),
+                     cv::Point(x1 + text_size.width, y1),
+                     color, -1);
+        cv::putText(frame, label, cv::Point(x1, y1 - 5),
+                   cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
+        
+        // Draw keypoints and skeleton for pose models
+        if (model_type_ == ModelType::POSE && !det.keypoints.empty()) {
+            // Draw keypoints
+            for (size_t i = 0; i < det.keypoints.size() && i < 17; ++i) {
+                const auto& kpt = det.keypoints[i];
+                if (kpt.confidence > 0.1f) {  // Only draw visible keypoints
+                    int kpt_x = static_cast<int>(kpt.x);
+                    int kpt_y = static_cast<int>(kpt.y);
+                    kpt_x = std::max(0, std::min(kpt_x, frame.cols - 1));
+                    kpt_y = std::max(0, std::min(kpt_y, frame.rows - 1));
+                    cv::circle(frame, cv::Point(kpt_x, kpt_y), 3, color, -1);
+                }
+            }
+            
+            // Draw skeleton connections
+            for (const auto& conn : keypoint_connections) {
+                if (conn.first < static_cast<int>(det.keypoints.size()) &&
+                    conn.second < static_cast<int>(det.keypoints.size())) {
+                    const auto& kpt1 = det.keypoints[conn.first];
+                    const auto& kpt2 = det.keypoints[conn.second];
+                    if (kpt1.confidence > 0.1f && kpt2.confidence > 0.1f) {
+                        int x1_kpt = static_cast<int>(kpt1.x);
+                        int y1_kpt = static_cast<int>(kpt1.y);
+                        int x2_kpt = static_cast<int>(kpt2.x);
+                        int y2_kpt = static_cast<int>(kpt2.y);
+                        x1_kpt = std::max(0, std::min(x1_kpt, frame.cols - 1));
+                        y1_kpt = std::max(0, std::min(y1_kpt, frame.rows - 1));
+                        x2_kpt = std::max(0, std::min(x2_kpt, frame.cols - 1));
+                        y2_kpt = std::max(0, std::min(y2_kpt, frame.rows - 1));
+                        cv::line(frame, cv::Point(x1_kpt, y1_kpt), cv::Point(x2_kpt, y2_kpt), color, 2);
+                    }
+                }
+            }
+        }
     }
 }
 

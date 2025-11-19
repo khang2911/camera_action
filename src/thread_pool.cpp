@@ -1,6 +1,7 @@
 #include "thread_pool.h"
 #include "video_reader.h"
 #include "logger.h"
+#include "yolo_detector.h"
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -455,6 +456,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             std::vector<int> batch_frame_numbers;
             std::vector<int> batch_original_widths;
             std::vector<int> batch_original_heights;
+            std::vector<cv::Mat> batch_frames;  // Store frames for debug mode
+            std::vector<int> batch_video_ids;   // Store video IDs for debug mode
             
             // Collect batch_size frames
             while (static_cast<int>(batch_tensors.size()) < batch_size && !stop_flag_) {
@@ -493,17 +496,63 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 batch_frame_numbers.push_back(frame_data.frame_number);
                 batch_original_widths.push_back(frame_data.original_width);
                 batch_original_heights.push_back(frame_data.original_height);
+                
+                // Store frame and video_id for debug mode
+                if (debug_mode_) {
+                    batch_frames.push_back(frame_data.frame.clone());
+                    batch_video_ids.push_back(frame_data.video_id);
+                }
             }
             
             // Process batch if we have enough frames
             if (static_cast<int>(batch_tensors.size()) == batch_size) {
                 auto batch_start = std::chrono::steady_clock::now();
-                bool success = engine_group->detectors[detector_id]->runWithPreprocessedBatch(
-                    batch_tensors, batch_output_paths, batch_frame_numbers,
-                    batch_original_widths, batch_original_heights
-                );
+                bool success = false;
+                std::vector<std::vector<Detection>> batch_detections;
+                
+                if (debug_mode_) {
+                    // In debug mode, get detections to draw on images
+                    success = engine_group->detectors[detector_id]->runInferenceWithDetections(
+                        batch_output_paths, batch_frame_numbers,
+                        batch_original_widths, batch_original_heights,
+                        batch_detections
+                    );
+                } else {
+                    success = engine_group->detectors[detector_id]->runWithPreprocessedBatch(
+                        batch_tensors, batch_output_paths, batch_frame_numbers,
+                        batch_original_widths, batch_original_heights
+                    );
+                }
+                
                 auto batch_end = std::chrono::steady_clock::now();
                 auto batch_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(batch_end - batch_start).count();
+                
+                // Save debug images for batch
+                if (debug_mode_ && success && batch_detections.size() == static_cast<size_t>(batch_size) &&
+                    batch_frames.size() == static_cast<size_t>(batch_size)) {
+                    for (int b = 0; b < batch_size; ++b) {
+                        cv::Mat debug_frame = batch_frames[b].clone();
+                        engine_group->detectors[detector_id]->drawDetections(debug_frame, batch_detections[b]);
+                        
+                        // Create debug output directory: output_dir/debug_images/video_id/engine_name/
+                        std::filesystem::path debug_dir = std::filesystem::path(output_dir_) / "debug_images" / 
+                                                           ("video_" + std::to_string(batch_video_ids[b])) /
+                                                           engine_group->engine_name;
+                        std::filesystem::create_directories(debug_dir);
+                        
+                        // Save image: frame_XXXXX_engine.jpg
+                        std::string image_filename = "frame_" + 
+                            std::to_string(batch_frame_numbers[b]) + "_" + 
+                            engine_group->engine_name + ".jpg";
+                        std::filesystem::path image_path = debug_dir / image_filename;
+                        
+                        if (cv::imwrite(image_path.string(), debug_frame)) {
+                            LOG_DEBUG("Detector", "Saved debug image: " + image_path.string());
+                        } else {
+                            LOG_ERROR("Detector", "Failed to save debug image: " + image_path.string());
+                        }
+                    }
+                }
                 
                 if (success) {
                     {
@@ -564,12 +613,54 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 tensor = engine_group->acquireBuffer();
                 engine_group->preprocessor->preprocessToFloat(frame_data.frame, *tensor);
             }
-            bool success = engine_group->detectors[detector_id]->runWithPreprocessedData(
-                tensor, output_path, frame_data.frame_number,
-                frame_data.original_width, frame_data.original_height
-            );
+            
+            bool success = false;
+            std::vector<Detection> detections;
+            
+            if (debug_mode_) {
+                // In debug mode, get detections to draw on image
+                std::vector<std::vector<Detection>> all_detections;
+                success = engine_group->detectors[detector_id]->runInferenceWithDetections(
+                    {output_path}, {frame_data.frame_number},
+                    {frame_data.original_width}, {frame_data.original_height},
+                    all_detections
+                );
+                if (success && !all_detections.empty()) {
+                    detections = all_detections[0];
+                }
+            } else {
+                success = engine_group->detectors[detector_id]->runWithPreprocessedData(
+                    tensor, output_path, frame_data.frame_number,
+                    frame_data.original_width, frame_data.original_height
+                );
+            }
+            
             auto detect_end = std::chrono::steady_clock::now();
             auto detect_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(detect_end - detect_start).count();
+            
+            // Save debug image if enabled
+            if (debug_mode_ && success && !frame_data.frame.empty()) {
+                cv::Mat debug_frame = frame_data.frame.clone();
+                engine_group->detectors[detector_id]->drawDetections(debug_frame, detections);
+                
+                // Create debug output directory: output_dir/debug_images/video_id/engine_name/
+                std::filesystem::path debug_dir = std::filesystem::path(output_dir_) / "debug_images" / 
+                                                   ("video_" + std::to_string(frame_data.video_id)) /
+                                                   engine_group->engine_name;
+                std::filesystem::create_directories(debug_dir);
+                
+                // Save image: frame_XXXXX_engine.png
+                std::string image_filename = "frame_" + 
+                    std::to_string(frame_data.frame_number) + "_" + 
+                    engine_group->engine_name + ".jpg";
+                std::filesystem::path image_path = debug_dir / image_filename;
+                
+                if (cv::imwrite(image_path.string(), debug_frame)) {
+                    LOG_DEBUG("Detector", "Saved debug image: " + image_path.string());
+                } else {
+                    LOG_ERROR("Detector", "Failed to save debug image: " + image_path.string());
+                }
+            }
             
             if (success) {
                 {

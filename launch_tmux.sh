@@ -25,7 +25,7 @@ tmux new-session -d -s "$SESSION_NAME" -n "main"
 tmux send-keys -t "$SESSION_NAME:main" "cd '$(pwd)'" C-m
 tmux send-keys -t "$SESSION_NAME:main" "echo '=== AI Camera Solution - Main Output ==='" C-m
 tmux send-keys -t "$SESSION_NAME:main" "echo 'Running application...'" C-m
-tmux send-keys -t "$SESSION_NAME:main" "./build/AICameraSolution --config '$CONFIG_FILE' 2>&1 | tee '$LOG_DIR/main.log'" C-m
+tmux send-keys -t "$SESSION_NAME:main" "CUDA_VISIBLE_DEVICES=GPU-cbda8909-17d1-c105-5491-68facc8b869d ./build/AICameraSolution --config '$CONFIG_FILE' 2>&1 | tee '$LOG_DIR/main.log'" C-m
 
 # Window 1: Reader logs (filtered)
 tmux new-window -t "$SESSION_NAME" -n "readers"

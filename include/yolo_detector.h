@@ -113,8 +113,18 @@ private:
                       const std::vector<int>& original_widths = {},
                       const std::vector<int>& original_heights = {});
     
+    // Run inference and return detections (for debug mode)
+    bool runInferenceWithDetections(const std::vector<std::string>& output_paths,
+                                     const std::vector<int>& frame_numbers,
+                                     const std::vector<int>& original_widths,
+                                     const std::vector<int>& original_heights,
+                                     std::vector<std::vector<Detection>>& all_detections);
+    
     // Scale detection coordinates from preprocessed image to original frame
     void scaleDetectionToOriginal(Detection& det, int original_width, int original_height);
+    
+    // Draw detections on frame (for debug visualization)
+    void drawDetections(cv::Mat& frame, const std::vector<Detection>& detections);
 };
 
 #endif // YOLO_DETECTOR_H
