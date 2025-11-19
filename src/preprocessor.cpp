@@ -25,9 +25,11 @@ cv::Mat Preprocessor::addPadding(const cv::Mat& frame) {
     
     // Add padding (black padding)
     cv::Mat padded;
+    // Python preprocessing fills padding with value 114 (gray) before normalization.
+    // Match that behavior instead of default black padding.
     cv::copyMakeBorder(resized, padded, pad_h, target_height_ - new_h - pad_h,
                       pad_w, target_width_ - new_w - pad_w,
-                      cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
+                      cv::BORDER_CONSTANT, cv::Scalar(114, 114, 114));
     
     return padded;
 }
