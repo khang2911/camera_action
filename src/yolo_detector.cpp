@@ -2,6 +2,7 @@
 #include <fstream>
 #include <iostream>
 #include <cstring>
+#include <cstdlib>
 #include <algorithm>
 #include <numeric>
 #include <limits>
@@ -9,6 +10,7 @@
 #include <filesystem>
 #include <unordered_map>
 #include <mutex>
+#include <atomic>
 #include <sstream>
 #include <iomanip>
 
@@ -830,6 +832,25 @@ float YOLODetector::calculateIoU(const float* box1, const float* box2) {
 }
 
 bool YOLODetector::writeDetectionsToFile(const std::vector<Detection>& detections, const std::string& output_path, int frame_number) {
+    // Frame limit for quick verification (set via environment variable VERIFY_FRAME_LIMIT, default: 0 = no limit)
+    static int frame_limit = []() {
+        const char* env_limit = std::getenv("VERIFY_FRAME_LIMIT");
+        return env_limit ? std::atoi(env_limit) : 0;
+    }();
+    
+    static std::atomic<int> frames_processed{0};
+    if (frame_limit > 0) {
+        int current = frames_processed.fetch_add(1);
+        if (current >= frame_limit) {
+            // Skip writing this frame
+            if (current == frame_limit) {
+                std::cout << "[INFO] Frame limit reached (" << frame_limit 
+                          << " frames). Skipping remaining frames for quick verification." << std::endl;
+            }
+            return true;  // Return success to avoid errors, but don't write
+        }
+    }
+    
     // Get or create mutex for this file path (thread-safe)
     std::mutex* file_mutex = nullptr;
     {

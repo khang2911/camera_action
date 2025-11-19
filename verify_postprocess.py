@@ -211,12 +211,16 @@ def postprocess_frame(
 
 def parse_cpp_binary(path: str) -> Tuple[int, Dict[int, List[DetectionRecord]]]:
     results: Dict[int, List[DetectionRecord]] = {}
+    print(f"[INFO] Parsing C++ binary file: {path}")
+    
     with open(path, "rb") as f:
         header = f.read(4)
         if len(header) < 4:
             raise RuntimeError(f"{path}: empty file")
         model_type = struct.unpack("<i", header)[0]
+        print(f"[INFO] Model type: {model_type}")
 
+        frame_count = 0
         while True:
             frame_bytes = f.read(4)
             if len(frame_bytes) < 4:
@@ -246,7 +250,11 @@ def parse_cpp_binary(path: str) -> Tuple[int, Dict[int, List[DetectionRecord]]]:
                 )
                 dets.append(det)
             results[frame_idx] = dets
+            frame_count += 1
+            if frame_count % 100 == 0:
+                print(f"[INFO] Parsed {frame_count} frames...", end="\r")
 
+    print(f"[INFO] Finished parsing {frame_count} frames from C++ binary")
     return model_type, results
 
 
@@ -358,11 +366,12 @@ def process_raw_outputs(
     return frame_results
 
 
-def summarize_results(results: Dict[int, List[DetectionRecord]], label: str) -> None:
+def summarize_results(results: Dict[int, List[DetectionRecord]], label: str, show_all: bool = False) -> None:
     total = sum(len(v) for v in results.values())
     print(f"[INFO] {label}: {len(results)} frames, {total} detections in total")
-    preview_frames = sorted(results.keys())[:3]
-    for frame in preview_frames:
+    
+    frames_to_show = sorted(results.keys()) if show_all else sorted(results.keys())[:3]
+    for frame in frames_to_show:
         dets = results[frame]
         print(f"  Frame {frame}: {len(dets)} detections")
         for det in dets[:5]:
@@ -371,6 +380,8 @@ def summarize_results(results: Dict[int, List[DetectionRecord]], label: str) -> 
                 f"    conf={det.confidence:.4f}, "
                 f"cx={cx:.1f}, cy={cy:.1f}, w={w:.1f}, h={h:.1f}"
             )
+    if not show_all and len(results) > 3:
+        print(f"  ... (showing first 3 of {len(results)} frames)")
 
 
 def compare_with_cpp(
@@ -490,6 +501,11 @@ def parse_args() -> argparse.Namespace:
         help="Optional path to the C++ final detection binary file (postprocessed .bin file written by writeDetectionsToFile)",
     )
     parser.add_argument(
+        "--show-all-frames",
+        action="store_true",
+        help="Show all frames in summary (default: show first 3 only)",
+    )
+    parser.add_argument(
         "--match-iou",
         type=float,
         default=0.5,
@@ -523,14 +539,18 @@ def main() -> None:
         nms_threshold=args.nms_threshold,
         start_frame=args.start_frame,
     )
-    summarize_results(python_results, label="Reconstructed (Python postprocess)")
+    summarize_results(python_results, label="Reconstructed (Python postprocess)", show_all=args.show_all_frames)
 
     # Compare with C++ final detection binary file (postprocessed results)
     if args.cpp_bin:
+        print(f"\n[INFO] Loading C++ binary file for comparison...")
         model_type, cpp_results = parse_cpp_binary(args.cpp_bin)
         print(f"[INFO] Parsed C++ binary ({args.cpp_bin}), model_type={model_type}")
-        summarize_results(cpp_results, label="C++ binary")
+        summarize_results(cpp_results, label="C++ binary", show_all=args.show_all_frames)
+        print(f"\n[INFO] Comparing Python vs C++ detections...")
         compare_with_cpp(python_results, cpp_results, args.match_iou)
+    else:
+        print(f"\n[INFO] No --cpp-bin provided. Use --cpp-bin <path> to compare with C++ results.")
 
 
 if __name__ == "__main__":
