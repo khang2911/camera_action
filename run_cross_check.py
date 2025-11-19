@@ -54,8 +54,8 @@ def main():
     parser.add_argument("--dump-dir", default="cross_check", help="Base directory to store dumps")
     parser.add_argument("--compare-shape", help="Shape for compare_tensors (e.g. '16x3x864x864')")
     parser.add_argument("--compare-dtype", default="float32", help="Element dtype for compare_tensors")
-    parser.add_argument("--compare-target", choices=["inputs", "outputs"], default="outputs",
-                        help="Which tensors to compare (default outputs)")
+    parser.add_argument("--compare-target", choices=["inputs", "outputs"], default="inputs",
+                        help="Which tensors to compare after input check (default inputs)")
     parser.add_argument("--max-frames", type=int, default=16,
                         help="Max frames to process for quick checks (applies to both runs)")
 
@@ -103,39 +103,48 @@ def main():
     ]
     run_command(cpp_cmd, label="cpp")
 
-    # 3) Compare tensors
-    target = args.compare_target
-    py_dir = py_input_dir if target == "inputs" else py_output_dir
-    cpp_dir = cpp_input_dir if target == "inputs" else cpp_output_dir
-
-    py_files = sorted_bin_files(py_dir)
-    cpp_files = sorted_bin_files(cpp_dir)
-
-    if not py_files:
-        LOGGER.warning("No Python %s dumps found in %s", target, py_dir)
-        return
-    if not cpp_files:
-        LOGGER.warning("No C++ %s dumps found in %s", target, cpp_dir)
-        return
-
     compare_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "compare_tensors.py")
     if not os.path.exists(compare_script):
         LOGGER.error("compare_tensors.py not found at %s", compare_script)
         return
 
-    count = min(len(py_files), len(cpp_files))
-    LOGGER.info("Comparing %d %s tensors", count, target)
-    for idx in range(count):
-        LOGGER.info("Comparing batch %d: %s vs %s", idx, cpp_files[idx], py_files[idx])
-        compare_cmd = [
-            sys.executable, compare_script,
-            "--tensor-a", cpp_files[idx],
-            "--tensor-b", py_files[idx],
-            "--dtype", args.compare_dtype,
-        ]
-        if args.compare_shape:
-            compare_cmd.extend(["--shape", args.compare_shape])
-        run_command(compare_cmd, label=f"compare batch {idx}")
+    def compare_target(target: str, py_dir: str, cpp_dir: str):
+        py_files = sorted_bin_files(py_dir)
+        cpp_files = sorted_bin_files(cpp_dir)
+
+        if not py_files:
+            LOGGER.warning("No Python %s dumps found in %s", target, py_dir)
+            return False
+        if not cpp_files:
+            LOGGER.warning("No C++ %s dumps found in %s", target, cpp_dir)
+            return False
+
+        count = min(len(py_files), len(cpp_files))
+        LOGGER.info("Comparing %d %s tensors", count, target)
+        for idx in range(count):
+            LOGGER.info("Comparing batch %d: %s vs %s", idx, cpp_files[idx], py_files[idx])
+            compare_cmd = [
+                sys.executable, compare_script,
+                "--tensor-a", cpp_files[idx],
+                "--tensor-b", py_files[idx],
+                "--dtype", args.compare_dtype,
+            ]
+            if args.compare_shape:
+                compare_cmd.extend(["--shape", args.compare_shape])
+            run_command(compare_cmd, label=f"compare {target} batch {idx}")
+        return True
+
+    # Always compare inputs first
+    inputs_ok = compare_target("inputs", py_input_dir, cpp_input_dir)
+    if not inputs_ok:
+        LOGGER.error("Input comparison failed or missing dumps; aborting before output comparison.")
+        return
+
+    # Optionally compare outputs after successful input comparison
+    if args.compare_target == "outputs":
+        outputs_ok = compare_target("outputs", py_output_dir, cpp_output_dir)
+        if not outputs_ok:
+            LOGGER.warning("Output comparison skipped due to missing dumps.")
 
 
 if __name__ == "__main__":
