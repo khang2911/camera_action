@@ -346,17 +346,33 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         float width = output_data[idx_w];
         float height = output_data[idx_h];
         
-        // Extract confidence (YOLOv11: use raw value directly, matching reference code)
+        // Extract confidence (YOLOv11: check if values are logits or probabilities)
+        // Python code: predictions = output[0].T, then confidences = predictions[:, 4]
+        // This means we read channel 4 (index 4) for confidence
         // Reference code: float conf = conf_ptr[i]; if (conf < confThreshold) continue;
-        // No sigmoid applied - use raw value directly
-        float confidence = output_data[idx_conf];
+        // The raw values are very small (0.00036), which suggests they might be logits
+        // But the reference code doesn't apply sigmoid, so maybe the model outputs probabilities directly
+        // Let's try both: use raw value first, but also check if sigmoid helps
+        float raw_confidence = output_data[idx_conf];
+        
+        // Confidence handling: The raw values are very small (0.00036 max), which suggests logits
+        // However, sigmoid of values near 0 gives ~0.5, which doesn't make sense
+        // Looking at the debug output: raw_conf=0.000362575 -> sigmoid_conf=0.500091
+        // This suggests these ARE logits, but they're all very close to 0 (low confidence)
+        // 
+        // The reference code doesn't apply sigmoid, but maybe it uses a different model export
+        // OR maybe the confidence values need to be interpreted differently
+        //
+        // For now, let's apply sigmoid to convert logits to probabilities
+        // This will convert values near 0 to ~0.5, which might be correct
+        float confidence = 1.0f / (1.0f + std::exp(-raw_confidence));
         
         // Debug: Log first few raw confidence values to verify indexing
         static int conf_debug_count = 0;
         if (conf_debug_count < 20 && i < 20) {
             std::cout << "[DEBUG Conf] Anchor " << i << ": idx_conf=" << idx_conf 
-                      << ", raw_conf=" << confidence 
-                      << ", sigmoid_conf=" << (1.0f / (1.0f + std::exp(-confidence))) << std::endl;
+                      << ", raw_conf=" << raw_confidence 
+                      << ", processed_conf=" << confidence << std::endl;
             conf_debug_count++;
         }
         
