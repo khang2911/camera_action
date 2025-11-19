@@ -490,41 +490,84 @@ std::vector<Detection> YOLODetector::applyNMS(const std::vector<Detection>& dete
         return detections;
     }
     
-    // Create indices and sort by confidence (descending)
-    std::vector<int> indices(detections.size());
-    std::iota(indices.begin(), indices.end(), 0);
-    std::sort(indices.begin(), indices.end(), [&](int a, int b) {
+    // Convert detections to xyxy format and calculate areas (matching Python implementation)
+    struct BoxXYXY {
+        float x1, y1, x2, y2;
+        float area;
+        int original_index;
+    };
+    
+    std::vector<BoxXYXY> boxes_xyxy(detections.size());
+    for (size_t i = 0; i < detections.size(); ++i) {
+        // Convert from center format [x_center, y_center, width, height] to xyxy
+        float x_center = detections[i].bbox[0];
+        float y_center = detections[i].bbox[1];
+        float width = detections[i].bbox[2];
+        float height = detections[i].bbox[3];
+        
+        boxes_xyxy[i].x1 = x_center - width / 2.0f;
+        boxes_xyxy[i].y1 = y_center - height / 2.0f;
+        boxes_xyxy[i].x2 = x_center + width / 2.0f;
+        boxes_xyxy[i].y2 = y_center + height / 2.0f;
+        boxes_xyxy[i].area = width * height;
+        boxes_xyxy[i].original_index = static_cast<int>(i);
+    }
+    
+    // Sort by confidence (descending) - matching Python: order = scores.argsort()[::-1]
+    std::vector<int> order(detections.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), [&](int a, int b) {
         return detections[a].confidence > detections[b].confidence;
     });
     
-    std::vector<bool> suppressed(detections.size(), false);
-    std::vector<Detection> result;
+    // NMS algorithm matching Python implementation
+    std::vector<int> keep;
+    while (!order.empty()) {
+        int i = order[0];
+        keep.push_back(i);
+        
+        if (order.size() == 1) {
+            break;
+        }
+        
+        // Calculate IoU with remaining boxes
+        std::vector<float> ious;
+        std::vector<int> valid_inds;
+        
+        for (size_t j = 1; j < order.size(); ++j) {
+            int idx = order[j];
+            
+            // Calculate intersection
+            float xx1 = std::max(boxes_xyxy[i].x1, boxes_xyxy[idx].x1);
+            float yy1 = std::max(boxes_xyxy[i].y1, boxes_xyxy[idx].y1);
+            float xx2 = std::min(boxes_xyxy[i].x2, boxes_xyxy[idx].x2);
+            float yy2 = std::min(boxes_xyxy[i].y2, boxes_xyxy[idx].y2);
+            
+            float w = std::max(0.0f, xx2 - xx1);
+            float h = std::max(0.0f, yy2 - yy1);
+            float intersection = w * h;
+            
+            // IoU = intersection / (area[i] + area[others] - intersection)
+            float iou = intersection / (boxes_xyxy[i].area + boxes_xyxy[idx].area - intersection);
+            ious.push_back(iou);
+            valid_inds.push_back(j);
+        }
+        
+        // Keep boxes with IoU <= threshold (matching Python: inds = np.where(iou <= iou_threshold)[0])
+        std::vector<int> new_order;
+        for (size_t k = 0; k < ious.size(); ++k) {
+            if (ious[k] <= nms_threshold_) {
+                new_order.push_back(order[valid_inds[k]]);
+            }
+        }
+        order = new_order;
+    }
     
-    for (size_t i = 0; i < indices.size(); ++i) {
-        if (suppressed[indices[i]]) {
-            continue;
-        }
-        
-        result.push_back(detections[indices[i]]);
-        
-        // Suppress overlapping detections
-        for (size_t j = i + 1; j < indices.size(); ++j) {
-            if (suppressed[indices[j]]) {
-                continue;
-            }
-            
-            // Check if same class
-            if (detections[indices[i]].class_id != detections[indices[j]].class_id) {
-                continue;
-            }
-            
-            // Calculate IoU
-            float iou = calculateIoU(detections[indices[i]].bbox, detections[indices[j]].bbox);
-            
-            if (iou > nms_threshold_) {
-                suppressed[indices[j]] = true;
-            }
-        }
+    // Build result from kept indices
+    std::vector<Detection> result;
+    result.reserve(keep.size());
+    for (int idx : keep) {
+        result.push_back(detections[idx]);
     }
     
     return result;

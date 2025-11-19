@@ -51,6 +51,6 @@ output:
 
 # Debug Configuration
 debug:
-  enabled: false                    # Enable debug mode (process limited frames for testing)
+  enabled: true                    # Enable debug mode (process limited frames for testing)
   max_frames_per_video: 10          # Maximum frames to process per video (0 = no limit, only used if enabled=true)
 
