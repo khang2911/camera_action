@@ -996,15 +996,20 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
             detections = parseRawDetectionOutput(frame_output);
         }
         
-        // Log before NMS
+        // Log before NMS (enhanced logging to diagnose issues)
         static int frame_count = 0;
         static std::mutex frame_log_mutex;
         {
             std::lock_guard<std::mutex> lock(frame_log_mutex);
             frame_count++;
-            if (frame_count <= 20) {
+            if (frame_count <= 10) {
                 std::cout << "[DEBUG Frame] Frame " << frame_numbers[b] << " (batch " << b << "): "
-                          << "Before NMS: " << detections.size() << " detections" << std::endl;
+                          << "Before NMS: " << detections.size() << " detections";
+                if (!detections.empty()) {
+                    std::cout << ", top conf=" << detections[0].confidence 
+                              << ", bbox=[" << detections[0].bbox[0] << "," << detections[0].bbox[1] << "]";
+                }
+                std::cout << std::endl;
             }
         }
         
@@ -1013,9 +1018,13 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
         // Log after NMS
         {
             std::lock_guard<std::mutex> lock(frame_log_mutex);
-            if (frame_count <= 20) {
+            if (frame_count <= 10) {
                 std::cout << "[DEBUG Frame] Frame " << frame_numbers[b] << " (batch " << b << "): "
-                          << "After NMS: " << detections.size() << " detections" << std::endl;
+                          << "After NMS: " << detections.size() << " detections";
+                if (!detections.empty()) {
+                    std::cout << ", top conf=" << detections[0].confidence;
+                }
+                std::cout << std::endl;
             }
         }
         
@@ -1064,6 +1073,15 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
                               << " detections but orig_w=" << orig_w << ", orig_h=" << orig_h << std::endl;
                     warned = true;
                 }
+            }
+        }
+        
+        // Log before writing
+        {
+            std::lock_guard<std::mutex> lock(frame_log_mutex);
+            if (frame_count <= 10) {
+                std::cout << "[DEBUG Write] Frame " << frame_numbers[b] << ": Writing " 
+                          << detections.size() << " detections to " << output_paths[b] << std::endl;
             }
         }
         
