@@ -146,25 +146,16 @@ void YOLODetector::allocateBuffers() {
                 num_anchors_ = output_width_;
             }
             
-            // Determine number of classes based on model type
+            // YOLOv11 format determination:
             if (model_type_ == ModelType::POSE) {
-                // Pose: 56 channels = 4(bbox) + 1(objectness) + 1(class) + 17*3(keypoints)
-                num_classes_ = 1;  // Usually single class for pose
+                // YOLOv11 Pose: 56 channels = 4(bbox) + 1(confidence) + 1(class) + 17*3(keypoints)
+                // Format: [x_center, y_center, width, height, confidence, class_score, 17*3 keypoints]
+                num_classes_ = 1;  // Single class for pose
             } else {
-                // Detection: could be:
-                // - Older format: 4(bbox) + 1(objectness) + num_classes = num_classes + 5
-                // - Newer format (YOLOv8+): 4(bbox) + num_classes = num_classes + 4
-                // Try to detect format based on output_channels_
-                if (output_channels_ >= 5) {
-                    // Assume older format first (with objectness)
-                    num_classes_ = output_channels_ - 5;
-                    // If that gives 0 or negative, try newer format
-                    if (num_classes_ <= 0 && output_channels_ >= 4) {
-                        num_classes_ = output_channels_ - 4;
-                    }
-                } else {
-                    num_classes_ = 1;  // Fallback
-                }
+                // YOLOv11 Detection: 5 channels = 4(bbox) + 1(confidence)
+                // Format: [x_center, y_center, width, height, confidence]
+                // Single class model (class_id=0)
+                num_classes_ = 1;
             }
             
             for (int j = 0; j < dims.nbDims; ++j) {
@@ -315,53 +306,29 @@ bool YOLODetector::runWithPreprocessedBatch(
 std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<float>& output_data) {
     std::vector<Detection> detections;
     
-    // Raw YOLO detection format: [batch, num_anchors, num_classes + 5]
-    // Modern YOLO (v8+) format: [x_center, y_center, width, height, class_scores...]
-    // Older YOLO format: [x_center, y_center, width, height, objectness, class_scores...]
-    // Coordinates are typically normalized (0-1) relative to input image size
-    
-    // Check if we have objectness channel (older format) or not (newer format)
-    // If output_channels_ == num_classes_ + 4, then no objectness (newer format)
-    // If output_channels_ == num_classes_ + 5, then has objectness (older format)
-    bool has_objectness = (output_channels_ == num_classes_ + 5);
+    // YOLOv11 Detection Format (matching Python postprocess):
+    // Format: [x_center, y_center, width, height, confidence]
+    // - 5 channels total for single-class detection
+    // - All values are already normalized [0,1], no sigmoid needed
+    // - Python: predictions = output[0].T, boxes = predictions[:, :4], confidences = predictions[:, 4]
+    // - Single class model (class_id=0)
     
     for (int i = 0; i < num_anchors_; ++i) {
         int offset = i * output_channels_;
-        if (offset + output_channels_ - 1 >= static_cast<int>(output_data.size())) break;
+        if (offset + 4 >= static_cast<int>(output_data.size())) break;
         
-        // Extract bbox coordinates (YOLO11 outputs are already normalized 0-1, no sigmoid needed)
-        // Matching Python postprocess: boxes = predictions[:, :4] (direct use, no sigmoid)
+        // Extract bbox coordinates (YOLOv11: already normalized 0-1, no sigmoid)
+        // Matching Python: boxes = predictions[:, :4]
         float x_center = output_data[offset + 0];
         float y_center = output_data[offset + 1];
         float width = output_data[offset + 2];
         float height = output_data[offset + 3];
         
-        float objectness = 1.0f;
-        int class_start_offset = 4;
+        // Extract confidence (YOLOv11: index 4 is confidence, already normalized)
+        // Matching Python: confidences = predictions[:, 4]
+        float confidence = output_data[offset + 4];
         
-        if (has_objectness) {
-            // YOLO11 with objectness: use directly (matching Python: confidences = predictions[:, 4])
-            objectness = output_data[offset + 4];
-            class_start_offset = 5;
-        }
-        
-        // Find class with highest score (YOLO11 outputs are already normalized, no sigmoid needed)
-        float max_class_score = -std::numeric_limits<float>::max();
-        int best_class = -1;
-        for (int c = 0; c < num_classes_; ++c) {
-            float class_score = output_data[offset + class_start_offset + c];
-            
-            if (class_score > max_class_score) {
-                max_class_score = class_score;
-                best_class = c;
-            }
-        }
-        
-        // Calculate final confidence: use objectness directly (matching Python: confidences = predictions[:, 4])
-        // For models without objectness channel, use max class score
-        float confidence = has_objectness ? objectness : max_class_score;
-        
-        // Apply confidence threshold
+        // Apply confidence threshold (matching Python: valid_indices = confidences > self.conf_threshold)
         if (confidence < conf_threshold_) {
             continue;
         }
@@ -372,7 +339,7 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         det.bbox[2] = width;      // width (normalized 0-1)
         det.bbox[3] = height;      // height (normalized 0-1)
         det.confidence = confidence;
-        det.class_id = best_class;
+        det.class_id = 0;  // YOLOv11 detection is single-class (matching Python: class_id=0)
         
         detections.push_back(det);
     }
@@ -383,28 +350,30 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
 std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>& output_data) {
     std::vector<Detection> detections;
     
-    // Raw YOLO pose format: [batch, num_anchors, 56]
-    // Each anchor: [x_center, y_center, width, height, objectness, class_score,
-    //                kpt0_x, kpt0_y, kpt0_conf, kpt1_x, kpt1_y, kpt1_conf, ..., kpt16_x, kpt16_y, kpt16_conf]
-    // Total: 4(bbox) + 1(objectness) + 1(class) + 17*3(keypoints) = 56
+    // YOLOv11 Pose Format (matching Python postprocess_pose):
+    // Format: [x_center, y_center, width, height, confidence, class_score, 
+    //          kpt0_x, kpt0_y, kpt0_conf, kpt1_x, kpt1_y, kpt1_conf, ..., kpt16_x, kpt16_y, kpt16_conf]
+    // - 56 channels total: 4(bbox) + 1(confidence) + 1(class) + 17*3(keypoints) = 56
+    // - All values are already normalized [0,1], no sigmoid needed
+    // - Python: boxes = output[:, :4], scores = output[:, 4], keypoints = output[:, 5:]
+    // - Keypoints reshaped to (num_detections, 17, 3) - 17 keypoints, each with [x, y, conf]
     
     for (int i = 0; i < num_anchors_; ++i) {
         int offset = i * output_channels_;
-        if (offset + output_channels_ - 1 >= static_cast<int>(output_data.size())) break;
+        if (offset + 55 >= static_cast<int>(output_data.size())) break;  // Need at least 56 values
         
-        // Extract bbox coordinates (YOLO11 outputs are already normalized 0-1, no sigmoid needed)
-        // Matching Python postprocess_pose: boxes = output[:, :4], scores = output[:, 4] (direct use)
+        // Extract bbox coordinates (YOLOv11: already normalized 0-1, no sigmoid)
+        // Matching Python: boxes = output[:, :4]
         float x_center = output_data[offset + 0];
         float y_center = output_data[offset + 1];
         float width = output_data[offset + 2];
         float height = output_data[offset + 3];
-        float objectness = output_data[offset + 4];
-        float class_score = output_data[offset + 5];
         
-        // Calculate final confidence: use objectness directly (matching Python: scores = output[:, 4])
-        float confidence = objectness;
+        // Extract confidence (YOLOv11: index 4 is confidence, already normalized)
+        // Matching Python: scores = output[:, 4]
+        float confidence = output_data[offset + 4];
         
-        // Apply confidence threshold
+        // Apply confidence threshold (matching Python: mask = scores > self.conf_threshold)
         if (confidence < conf_threshold_) {
             continue;
         }
@@ -415,13 +384,13 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         det.bbox[2] = width;       // width (normalized 0-1)
         det.bbox[3] = height;      // height (normalized 0-1)
         det.confidence = confidence;
-        det.class_id = 0;  // Usually single class for pose models
+        det.class_id = 0;  // YOLOv11 pose is single-class (matching Python: class_id=0)
         
-        // Parse 17 keypoints (COCO format) - YOLO11 outputs are already normalized, no sigmoid needed
-        // Matching Python: keypoints = output[:, 5:] (direct use, reshaped to (17, 3))
+        // Parse 17 keypoints (COCO format) - YOLOv11: already normalized, no sigmoid
+        // Matching Python: keypoints = output[:, 5:], reshaped to (17, 3)
         det.keypoints.resize(17);
         for (int k = 0; k < 17; ++k) {
-            int kpt_offset = offset + 6 + k * 3;
+            int kpt_offset = offset + 6 + k * 3;  // Start from index 6 (after bbox + confidence + class)
             det.keypoints[k].x = output_data[kpt_offset + 0];
             det.keypoints[k].y = output_data[kpt_offset + 1];
             det.keypoints[k].confidence = output_data[kpt_offset + 2];
