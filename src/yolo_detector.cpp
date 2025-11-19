@@ -803,23 +803,31 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
             detections.resize(max_detections_);
         }
         
-        // Scale detections to original frame coordinates if dimensions provided
+        // Store detections in preprocessed coordinate space (normalized [0,1] relative to input_width_ x input_height_)
+        // Don't scale back to original - keep them in preprocessed space for debug images
+        all_detections[b] = detections;
+        
+        // Scale detections to original frame coordinates for writing to file
         int orig_w = (b < static_cast<int>(original_widths.size()) && original_widths[b] > 0) 
                      ? original_widths[b] : 0;
         int orig_h = (b < static_cast<int>(original_heights.size()) && original_heights[b] > 0) 
                      ? original_heights[b] : 0;
         
         if (orig_w > 0 && orig_h > 0) {
-            for (auto& det : detections) {
+            // Create a copy for file writing (scaled to original)
+            std::vector<Detection> detections_for_file = detections;
+            for (auto& det : detections_for_file) {
                 scaleDetectionToOriginal(det, orig_w, orig_h);
             }
-        }
-        
-        all_detections[b] = detections;
-        
-        if (!writeDetectionsToFile(detections, output_paths[b], frame_numbers[b])) {
-            std::cerr << "Error: Failed to write detections for frame " << frame_numbers[b] << std::endl;
-            return false;
+            if (!writeDetectionsToFile(detections_for_file, output_paths[b], frame_numbers[b])) {
+                std::cerr << "Error: Failed to write detections for frame " << frame_numbers[b] << std::endl;
+                return false;
+            }
+        } else {
+            if (!writeDetectionsToFile(detections, output_paths[b], frame_numbers[b])) {
+                std::cerr << "Error: Failed to write detections for frame " << frame_numbers[b] << std::endl;
+                return false;
+            }
         }
     }
     
@@ -922,16 +930,25 @@ void YOLODetector::drawDetections(cv::Mat& frame, const std::vector<Detection>& 
         {12, 14}, {14, 16}, // right leg
     };
     
+    // Detections are in normalized [0,1] coordinates relative to preprocessed image (input_width_ x input_height_)
+    // Convert to pixel coordinates in the preprocessed frame
     for (const auto& det : detections) {
         // Get color for this class
         cv::Scalar color = class_colors[det.class_id % class_colors.size()];
         
-        // Convert bbox from center format [x_center, y_center, width, height] to corner format
-        float x_center = det.bbox[0];
-        float y_center = det.bbox[1];
-        float width = det.bbox[2];
-        float height = det.bbox[3];
+        // Convert normalized bbox [x_center, y_center, width, height] from [0,1] to pixel coordinates
+        float x_center_norm = det.bbox[0];  // Normalized [0,1]
+        float y_center_norm = det.bbox[1];  // Normalized [0,1]
+        float width_norm = det.bbox[2];     // Normalized [0,1]
+        float height_norm = det.bbox[3];    // Normalized [0,1]
         
+        // Convert to pixel coordinates in preprocessed frame
+        float x_center = x_center_norm * input_width_;
+        float y_center = y_center_norm * input_height_;
+        float width = width_norm * input_width_;
+        float height = height_norm * input_height_;
+        
+        // Convert from center format to corner format
         int x1 = static_cast<int>(x_center - width / 2.0f);
         int y1 = static_cast<int>(y_center - height / 2.0f);
         int x2 = static_cast<int>(x_center + width / 2.0f);
@@ -960,12 +977,13 @@ void YOLODetector::drawDetections(cv::Mat& frame, const std::vector<Detection>& 
         
         // Draw keypoints and skeleton for pose models
         if (model_type_ == ModelType::POSE && !det.keypoints.empty()) {
-            // Draw keypoints
+            // Draw keypoints (also in normalized [0,1] coordinates)
             for (size_t i = 0; i < det.keypoints.size() && i < 17; ++i) {
                 const auto& kpt = det.keypoints[i];
                 if (kpt.confidence > 0.1f) {  // Only draw visible keypoints
-                    int kpt_x = static_cast<int>(kpt.x);
-                    int kpt_y = static_cast<int>(kpt.y);
+                    // Convert normalized coordinates to pixel coordinates
+                    int kpt_x = static_cast<int>(kpt.x * input_width_);
+                    int kpt_y = static_cast<int>(kpt.y * input_height_);
                     kpt_x = std::max(0, std::min(kpt_x, frame.cols - 1));
                     kpt_y = std::max(0, std::min(kpt_y, frame.rows - 1));
                     cv::circle(frame, cv::Point(kpt_x, kpt_y), 3, color, -1);
@@ -979,10 +997,11 @@ void YOLODetector::drawDetections(cv::Mat& frame, const std::vector<Detection>& 
                     const auto& kpt1 = det.keypoints[conn.first];
                     const auto& kpt2 = det.keypoints[conn.second];
                     if (kpt1.confidence > 0.1f && kpt2.confidence > 0.1f) {
-                        int x1_kpt = static_cast<int>(kpt1.x);
-                        int y1_kpt = static_cast<int>(kpt1.y);
-                        int x2_kpt = static_cast<int>(kpt2.x);
-                        int y2_kpt = static_cast<int>(kpt2.y);
+                        // Convert normalized coordinates to pixel coordinates
+                        int x1_kpt = static_cast<int>(kpt1.x * input_width_);
+                        int y1_kpt = static_cast<int>(kpt1.y * input_height_);
+                        int x2_kpt = static_cast<int>(kpt2.x * input_width_);
+                        int y2_kpt = static_cast<int>(kpt2.y * input_height_);
                         x1_kpt = std::max(0, std::min(x1_kpt, frame.cols - 1));
                         y1_kpt = std::max(0, std::min(y1_kpt, frame.rows - 1));
                         x2_kpt = std::max(0, std::min(x2_kpt, frame.cols - 1));

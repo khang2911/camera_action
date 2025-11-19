@@ -531,7 +531,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 if (debug_mode_ && success && batch_detections.size() == static_cast<size_t>(batch_size) &&
                     batch_frames.size() == static_cast<size_t>(batch_size)) {
                     for (int b = 0; b < batch_size; ++b) {
-                        cv::Mat debug_frame = batch_frames[b].clone();
+                        // Create preprocessed frame (resized with padding) for debug visualization
+                        cv::Mat debug_frame = engine_group->preprocessor->addPadding(batch_frames[b]);
                         engine_group->detectors[detector_id]->drawDetections(debug_frame, batch_detections[b]);
                         
                         // Create debug output directory: output_dir/debug_images/video_id/engine_name/
@@ -640,7 +641,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             
             // Save debug image if enabled
             if (debug_mode_ && success && !frame_data.frame.empty()) {
-                cv::Mat debug_frame = frame_data.frame.clone();
+                // Create preprocessed frame (resized with padding) for debug visualization
+                cv::Mat debug_frame = engine_group->preprocessor->addPadding(frame_data.frame);
                 engine_group->detectors[detector_id]->drawDetections(debug_frame, detections);
                 
                 // Create debug output directory: output_dir/debug_images/video_id/engine_name/
