@@ -333,13 +333,16 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         
         // Debug: Log first few values to verify they're reasonable
         static int debug_count = 0;
-        if (debug_count < 10 && confidence > conf_threshold_) {
-            std::cout << "[DEBUG] Anchor " << i << " (offset=" << offset << "): "
+        if (debug_count < 20 && confidence > conf_threshold_) {
+            std::cout << "[DEBUG Raw] Anchor " << i << " (offset=" << offset << "): "
                       << "x_center=" << x_center 
                       << ", y_center=" << y_center 
                       << ", width=" << width 
                       << ", height=" << height 
-                      << ", confidence=" << confidence << std::endl;
+                      << ", confidence=" << confidence 
+                      << " (raw values: [" << output_data[offset+0] << ", " 
+                      << output_data[offset+1] << ", " << output_data[offset+2] << ", " 
+                      << output_data[offset+3] << ", " << output_data[offset+4] << "])" << std::endl;
             debug_count++;
         }
         
@@ -852,6 +855,57 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
         return false;
     }
     
+    // Debug: Write raw output to file for inspection
+    // This function (runInferenceWithDetections) is only called in debug mode, so we can safely write here
+    static bool raw_output_written = false;
+    if (!raw_output_written && batch_size_ > 0) {
+        std::string raw_output_file = "raw_output_debug.txt";
+        std::ofstream raw_file(raw_output_file);
+        if (raw_file.is_open()) {
+            raw_file << "Raw TensorRT Output Debug Dump\n";
+            raw_file << "================================\n";
+            raw_file << "Batch size: " << batch_size_ << "\n";
+            raw_file << "Num anchors: " << num_anchors_ << "\n";
+            raw_file << "Output channels: " << output_channels_ << "\n";
+            raw_file << "Output per frame: " << output_per_frame << "\n";
+            raw_file << "Total output size: " << output_data.size() << "\n\n";
+            
+            // Write first batch's output
+            raw_file << "Batch 0 Output (first " << std::min(100, static_cast<int>(output_per_frame)) << " values):\n";
+            raw_file << "Format: [anchor_idx * channels + channel_idx] = value\n";
+            raw_file << "For anchor i, channel c: index = i * " << output_channels_ << " + c\n\n";
+            
+            for (int i = 0; i < std::min(100, static_cast<int>(num_anchors_)); ++i) {
+                int offset = i * output_channels_;
+                if (offset + output_channels_ <= static_cast<int>(output_data.size())) {
+                    raw_file << "Anchor " << i << " (offset=" << offset << "): ";
+                    for (int c = 0; c < output_channels_; ++c) {
+                        raw_file << "[" << c << "]=" << output_data[offset + c] << " ";
+                    }
+                    raw_file << "\n";
+                }
+            }
+            
+            // Also write in transposed view (channels x anchors)
+            raw_file << "\n\nTransposed View (channels x anchors) - first 5 channels, first 10 anchors:\n";
+            raw_file << "Format: channel[channel_idx][anchor_idx] = value\n";
+            for (int c = 0; c < std::min(5, output_channels_); ++c) {
+                raw_file << "Channel " << c << ": ";
+                for (int a = 0; a < std::min(10, num_anchors_); ++a) {
+                    int idx = a * output_channels_ + c;  // [anchor, channel] format
+                    if (idx < static_cast<int>(output_data.size())) {
+                        raw_file << "[" << a << "]=" << output_data[idx] << " ";
+                    }
+                }
+                raw_file << "\n";
+            }
+            
+            raw_file.close();
+            std::cout << "[DEBUG] Raw output written to: " << raw_output_file << std::endl;
+            raw_output_written = true;
+        }
+    }
+    
     all_detections.clear();
     all_detections.resize(batch_size_);
     
@@ -947,6 +1001,19 @@ void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, 
     // YOLO outputs are normalized (0-1) relative to preprocessed image (input_width_ x input_height_)
     // Preprocessor adds padding to maintain aspect ratio, then resizes to target size
     
+    // Debug: Log the normalized coordinates before scaling
+    static int debug_scale_count = 0;
+    if (debug_scale_count < 5) {
+        std::cout << "[DEBUG Scale] Before scaling - normalized bbox: "
+                  << "x_center=" << det.bbox[0] 
+                  << ", y_center=" << det.bbox[1]
+                  << ", width=" << det.bbox[2]
+                  << ", height=" << det.bbox[3]
+                  << " (original_size=" << original_width << "x" << original_height
+                  << ", input_size=" << input_width_ << "x" << input_height_ << ")" << std::endl;
+        debug_scale_count++;
+    }
+    
     // Calculate scale factor used during preprocessing (same as in Preprocessor::addPadding)
     // This is the factor by which the original image was scaled down to fit in the target size
     float scale = std::min(static_cast<float>(input_width_) / original_width,
@@ -976,6 +1043,16 @@ void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, 
     float y_center_orig = y_center_scaled / scale;
     float width_orig = width_prep / scale;
     float height_orig = height_prep / scale;
+    
+    // Debug: Log after scaling
+    if (debug_scale_count <= 5) {
+        std::cout << "[DEBUG Scale] After scaling - pixel bbox: "
+                  << "x_center=" << x_center_orig 
+                  << ", y_center=" << y_center_orig
+                  << ", width=" << width_orig
+                  << ", height=" << height_orig
+                  << " (scale=" << scale << ", pad_w=" << pad_w << ", pad_h=" << pad_h << ")" << std::endl;
+    }
     
     // Clamp to original image bounds
     x_center_orig = std::max(0.0f, std::min(static_cast<float>(original_width), x_center_orig));
