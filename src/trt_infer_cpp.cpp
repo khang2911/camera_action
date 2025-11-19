@@ -23,6 +23,8 @@ void printUsage(const char* prog) {
               << "  --max-frames COUNT           Maximum frames to process (default: -1, all)\n"
               << "  --dump-input-dir DIR         Directory to dump input tensors\n"
               << "  --dump-output-dir DIR         Directory to dump output tensors\n"
+              << "  --output-dir DIR             Directory to write detection binary files (default: ./output)\n"
+              << "  --output-name NAME           Base name for output file (default: auto-generated from video)\n"
               << "  --model-type TYPE            Model type: detection or pose (default: detection)\n"
               << std::endl;
 }
@@ -41,6 +43,8 @@ int main(int argc, char* argv[]) {
     int max_frames = -1;
     std::string dump_input_dir;
     std::string dump_output_dir;
+    std::string output_dir = "./output";
+    std::string output_name;
     ModelType model_type = ModelType::DETECTION;
 
     // Parse arguments
@@ -72,6 +76,10 @@ int main(int argc, char* argv[]) {
             dump_input_dir = argv[++i];
         } else if (arg == "--dump-output-dir" && i + 1 < argc) {
             dump_output_dir = argv[++i];
+        } else if (arg == "--output-dir" && i + 1 < argc) {
+            output_dir = argv[++i];
+        } else if (arg == "--output-name" && i + 1 < argc) {
+            output_name = argv[++i];
         } else if (arg == "--model-type" && i + 1 < argc) {
             std::string type_str = argv[++i];
             if (type_str == "pose") {
@@ -130,6 +138,25 @@ int main(int argc, char* argv[]) {
     if (!dump_input_dir.empty() || !dump_output_dir.empty()) {
         detector.setDumpDirectories(dump_input_dir, dump_output_dir, "cpp");
     }
+
+    // Generate output file path
+    std::string output_file_path;
+    if (output_name.empty()) {
+        // Auto-generate from video path
+        std::filesystem::path video_path_fs(video_path);
+        std::string video_stem = video_path_fs.stem().string();
+        output_name = video_stem;
+    }
+    
+    // Create output directory
+    std::error_code ec;
+    std::filesystem::create_directories(output_dir, ec);
+    if (ec) {
+        std::cerr << "Warning: Failed to create output directory: " << output_dir << std::endl;
+    }
+    
+    output_file_path = (std::filesystem::path(output_dir) / (output_name + ".bin")).string();
+    std::cout << "Output detection file: " << output_file_path << std::endl;
 
     // Open video
     cv::VideoCapture cap(video_path);
@@ -190,13 +217,13 @@ int main(int argc, char* argv[]) {
             std::cout << "Processing batch " << batch_idx << " (frames " 
                       << batch_frame_indices[0] << "-" << batch_frame_indices.back() << ")" << std::endl;
 
-            // Create dummy output paths (we're only dumping tensors, not writing detection files)
-            std::vector<std::string> dummy_output_paths(batch_size, "/dev/null");
-            std::vector<int> dummy_frame_numbers = batch_frame_indices;
+            // Create output paths (same file for all frames in batch - writeDetectionsToFile appends)
+            std::vector<std::string> output_paths(batch_size, output_file_path);
+            std::vector<int> frame_numbers = batch_frame_indices;
             
             // Run inference
-            if (!detector.runWithPreprocessedBatch(batch_inputs, dummy_output_paths, 
-                                                   dummy_frame_numbers,
+            if (!detector.runWithPreprocessedBatch(batch_inputs, output_paths, 
+                                                   frame_numbers,
                                                    batch_orig_widths, batch_orig_heights)) {
                 std::cerr << "Error: Inference failed for batch " << batch_idx << std::endl;
                 return 1;
@@ -230,12 +257,13 @@ int main(int argc, char* argv[]) {
             batch_orig_heights.push_back(batch_orig_heights.back());
         }
 
-        // Create dummy output paths
-        std::vector<std::string> dummy_output_paths(batch_size, "/dev/null");
-        std::vector<int> dummy_frame_numbers = batch_frame_indices;
+        // Create output paths (same file for all frames - writeDetectionsToFile appends)
+        // Note: batch was padded to batch_size, so use batch_size
+        std::vector<std::string> output_paths(batch_size, output_file_path);
+        std::vector<int> frame_numbers = batch_frame_indices;
         
-        if (!detector.runWithPreprocessedBatch(batch_inputs, dummy_output_paths,
-                                               dummy_frame_numbers,
+        if (!detector.runWithPreprocessedBatch(batch_inputs, output_paths,
+                                               frame_numbers,
                                                batch_orig_widths, batch_orig_heights)) {
             std::cerr << "Error: Inference failed for final batch" << std::endl;
             return 1;
@@ -248,6 +276,7 @@ int main(int argc, char* argv[]) {
     std::cout << "=== Processing Complete ===" << std::endl;
     std::cout << "Processed " << (frame_idx - start_frame) << " frames" << std::endl;
     std::cout << "Total batches: " << (batch_idx + 1) << std::endl;
+    std::cout << "Detection binary file: " << output_file_path << std::endl;
 
     return 0;
 }
