@@ -337,20 +337,19 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         
         total_anchors_checked++;
         
-        // Extract bbox coordinates (YOLOv11: in pixel coordinates relative to input size, need to normalize)
-        // Matching Python: boxes = predictions[:, :4] where predictions = output[0].T
-        // Raw output is in pixel coordinates relative to input_width_ x input_height_
-        // Need to normalize by dividing by input size to get [0,1] range
-        float x_center = output_data[idx_x] / static_cast<float>(input_width_);
-        float y_center = output_data[idx_y] / static_cast<float>(input_height_);
-        float width = output_data[idx_w] / static_cast<float>(input_width_);
-        float height = output_data[idx_h] / static_cast<float>(input_height_);
+        // Extract bbox coordinates (YOLOv11: in pixel coordinates relative to preprocessed image)
+        // Reference script: float cx = cx_ptr[i]; float cy = cy_ptr[i]; float w = w_ptr[i]; float h = h_ptr[i];
+        // Raw output is in pixel coordinates relative to input_width_ x input_height_ (e.g., 640x640)
+        // Store in pixel space initially, will scale to original image in scaleDetectionToOriginal()
+        float x_center = output_data[idx_x];   // Pixel coordinates in preprocessed image space
+        float y_center = output_data[idx_y];
+        float width = output_data[idx_w];
+        float height = output_data[idx_h];
         
-        // Extract confidence (YOLOv11: may need sigmoid, but checking raw values first)
-        // Matching Python: confidences = predictions[:, 4]
-        // For YOLOv11, confidence might need sigmoid activation
-        float raw_confidence = output_data[idx_conf];
-        float confidence = 1.0f / (1.0f + std::exp(-raw_confidence));
+        // Extract confidence (YOLOv11: use raw value directly, NO SIGMOID)
+        // Reference script: float conf = conf_ptr[i]; (no sigmoid applied)
+        // Confidence is already in the correct format [0,1] or as logit
+        float confidence = output_data[idx_conf];
         
         // Track statistics
         if (confidence > max_confidence) {
@@ -380,16 +379,15 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
                       << ", y_center=" << y_center 
                       << ", width=" << width 
                       << ", height=" << height 
-                      << ", confidence=" << confidence 
-                      << " (raw_conf=" << raw_confidence << ")" << std::endl;
+                      << ", confidence=" << confidence << std::endl;
             debug_count++;
         }
         
         Detection det;
-        det.bbox[0] = x_center;   // x_center (normalized 0-1)
-        det.bbox[1] = y_center;   // y_center (normalized 0-1)
-        det.bbox[2] = width;      // width (normalized 0-1)
-        det.bbox[3] = height;      // height (normalized 0-1)
+        det.bbox[0] = x_center;   // x_center (pixel coordinates in preprocessed image space)
+        det.bbox[1] = y_center;   // y_center (pixel coordinates in preprocessed image space)
+        det.bbox[2] = width;      // width (pixel coordinates in preprocessed image space)
+        det.bbox[3] = height;      // height (pixel coordinates in preprocessed image space)
         det.confidence = confidence;
         det.class_id = 0;  // ALL models are single-class (matching Python: class_id=0)
         
@@ -498,22 +496,19 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         
         if (idx_conf >= static_cast<int>(output_data.size())) break;
         
-        // Extract bbox coordinates (YOLOv11: in pixel coordinates relative to input size, need to normalize)
-        // Matching Python: boxes = output[:, :4] where output = output[0].T
-        // Raw output is in pixel coordinates relative to input_width_ x input_height_
-        // Need to normalize by dividing by input size to get [0,1] range
-        float x_center = output_data[idx_x] / static_cast<float>(input_width_);
-        float y_center = output_data[idx_y] / static_cast<float>(input_height_);
-        float width = output_data[idx_w] / static_cast<float>(input_width_);
-        float height = output_data[idx_h] / static_cast<float>(input_height_);
+        // Extract bbox coordinates (YOLOv11: in pixel coordinates relative to preprocessed image)
+        // Reference script: float cx = cx_ptr[i]; float cy = cy_ptr[i]; float w = w_ptr[i]; float h = h_ptr[i];
+        // Raw output is in pixel coordinates relative to input_width_ x input_height_ (e.g., 640x640)
+        // Store in pixel space initially, will scale to original image in scaleDetectionToOriginal()
+        float x_center = output_data[idx_x];   // Pixel coordinates in preprocessed image space
+        float y_center = output_data[idx_y];
+        float width = output_data[idx_w];
+        float height = output_data[idx_h];
         
-        // Extract confidence (YOLOv11: may need sigmoid, but checking raw values first)
-        // Matching Python: scores = output[:, 4]
-        // For YOLOv11, confidence might need sigmoid activation
+        // Extract confidence (YOLOv11: use raw value directly, NO SIGMOID)
+        // Reference script: float conf = conf_ptr[i]; (no sigmoid applied)
+        // Confidence is already in the correct format
         float confidence = output_data[idx_conf];
-        // Apply sigmoid if confidence values are not already in [0,1] range
-        // Based on raw output showing very small values, we likely need sigmoid
-        confidence = 1.0f / (1.0f + std::exp(-confidence));
         
         // Apply confidence threshold (matching Python: mask = scores > self.conf_threshold)
         if (confidence < conf_threshold_) {
@@ -521,10 +516,10 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
         }
         
         Detection det;
-        det.bbox[0] = x_center;   // x_center (normalized 0-1)
-        det.bbox[1] = y_center;   // y_center (normalized 0-1)
-        det.bbox[2] = width;       // width (normalized 0-1)
-        det.bbox[3] = height;      // height (normalized 0-1)
+        det.bbox[0] = x_center;   // x_center (pixel coordinates in preprocessed image space)
+        det.bbox[1] = y_center;   // y_center (pixel coordinates in preprocessed image space)
+        det.bbox[2] = width;       // width (pixel coordinates in preprocessed image space)
+        det.bbox[3] = height;      // height (pixel coordinates in preprocessed image space)
         det.confidence = confidence;
         det.class_id = 0;  // ALL models are single-class (matching Python: class_id=0)
         
@@ -541,12 +536,12 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
             
             if (idx_kpt_conf >= static_cast<int>(output_data.size())) break;
             
-            // Normalize keypoint coordinates by input size
-            det.keypoints[k].x = output_data[idx_kpt_x] / static_cast<float>(input_width_);
-            det.keypoints[k].y = output_data[idx_kpt_y] / static_cast<float>(input_height_);
-            // Keypoint confidence may also need sigmoid
-            float kpt_conf = output_data[idx_kpt_conf];
-            det.keypoints[k].confidence = 1.0f / (1.0f + std::exp(-kpt_conf));
+            // Keypoint coordinates are in pixel space (relative to preprocessed image)
+            // Reference script pattern: use raw pixel values directly
+            det.keypoints[k].x = output_data[idx_kpt_x];   // Pixel coordinates
+            det.keypoints[k].y = output_data[idx_kpt_y];
+            // Keypoint confidence: use raw value directly (NO SIGMOID, matching reference script)
+            det.keypoints[k].confidence = output_data[idx_kpt_conf];
         }
         
         detections.push_back(det);
@@ -1166,28 +1161,23 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
 
 void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, int original_height) {
     if (original_width <= 0 || original_height <= 0) {
-        // Cannot scale without valid dimensions - coordinates remain normalized [0,1]
+        // Cannot scale without valid dimensions - coordinates remain in preprocessed image pixel space
         return;
     }
     
-    // YOLO outputs are normalized (0-1) relative to preprocessed image (input_width_ x input_height_)
-    // Preprocessor adds padding to maintain aspect ratio, then resizes to target size
-    
-    // Debug: Log the normalized coordinates before scaling
-    static int debug_scale_count = 0;
-    if (debug_scale_count < 5) {
-        std::cout << "[DEBUG Scale] Before scaling - normalized bbox: "
-                  << "x_center=" << det.bbox[0] 
-                  << ", y_center=" << det.bbox[1]
-                  << ", width=" << det.bbox[2]
-                  << ", height=" << det.bbox[3]
-                  << " (original_size=" << original_width << "x" << original_height
-                  << ", input_size=" << input_width_ << "x" << input_height_ << ")" << std::endl;
-        debug_scale_count++;
-    }
+    // Reference script logic:
+    // x1 = cx - w * 0.5f; y1 = cy - h * 0.5f;  // Convert to corner format
+    // x1 = (x1 - pad_w) / scale; y1 = (y1 - pad_h) / scale;  // Undo padding & scale
+    // ww = w / scale; hh = h / scale;
+    //
+    // For center format, we do:
+    // cx_orig = (cx_prep - pad_w) / scale
+    // cy_orig = (cy_prep - pad_h) / scale
+    // w_orig = w_prep / scale
+    // h_orig = h_prep / scale
     
     // Calculate scale factor used during preprocessing (same as in Preprocessor::addPadding)
-    // This is the factor by which the original image was scaled down to fit in the target size
+    // Reference: float scale = std::min((float)inputW / ow, (float)inputH / oh);
     float scale = std::min(static_cast<float>(input_width_) / original_width,
                           static_cast<float>(input_height_) / original_height);
     
@@ -1195,22 +1185,39 @@ void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, 
     float scaled_w = original_width * scale;
     float scaled_h = original_height * scale;
     
-    // Calculate padding offsets (centered padding)
+    // Calculate padding offsets (centered padding, same as Preprocessor::addPadding)
+    // Reference: pad_w = (inputW - new_w) / 2; pad_h = (inputH - new_h) / 2;
     float pad_w = (input_width_ - scaled_w) / 2.0f;
     float pad_h = (input_height_ - scaled_h) / 2.0f;
     
-    // Convert normalized coordinates (0-1) to pixel coordinates in preprocessed image
-    // det.bbox values are in [0,1] range relative to input_width_ x input_height_
-    float x_center_prep = det.bbox[0] * input_width_;
-    float y_center_prep = det.bbox[1] * input_height_;
-    float width_prep = det.bbox[2] * input_width_;
-    float height_prep = det.bbox[3] * input_height_;
+    // det.bbox values are already in pixel coordinates relative to preprocessed image (input_width_ x input_height_)
+    // Reference: float cx = cx_ptr[i]; (direct pixel values)
+    float x_center_prep = det.bbox[0];   // Already in pixel space
+    float y_center_prep = det.bbox[1];
+    float width_prep = det.bbox[2];
+    float height_prep = det.bbox[3];
+    
+    // Debug: Log before scaling
+    static int debug_scale_count = 0;
+    if (debug_scale_count < 5) {
+        std::cout << "[DEBUG Scale] Before scaling - preprocessed pixel bbox: "
+                  << "x_center=" << x_center_prep 
+                  << ", y_center=" << y_center_prep
+                  << ", width=" << width_prep
+                  << ", height=" << height_prep
+                  << " (original_size=" << original_width << "x" << original_height
+                  << ", input_size=" << input_width_ << "x" << input_height_
+                  << ", scale=" << scale << ", pad_w=" << pad_w << ", pad_h=" << pad_h << ")" << std::endl;
+        debug_scale_count++;
+    }
     
     // Remove padding offset to get coordinates in the scaled (unpadded) region
+    // Reference: x1 = (x1 - pad_w) / scale;
     float x_center_scaled = x_center_prep - pad_w;
     float y_center_scaled = y_center_prep - pad_h;
     
     // Scale back to original image dimensions
+    // Reference: x1 = (x1 - pad_w) / scale; ww = w / scale;
     float x_center_orig = x_center_scaled / scale;
     float y_center_orig = y_center_scaled / scale;
     float width_orig = width_prep / scale;
@@ -1218,12 +1225,11 @@ void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, 
     
     // Debug: Log after scaling
     if (debug_scale_count <= 5) {
-        std::cout << "[DEBUG Scale] After scaling - pixel bbox: "
+        std::cout << "[DEBUG Scale] After scaling - original pixel bbox: "
                   << "x_center=" << x_center_orig 
                   << ", y_center=" << y_center_orig
                   << ", width=" << width_orig
-                  << ", height=" << height_orig
-                  << " (scale=" << scale << ", pad_w=" << pad_w << ", pad_h=" << pad_h << ")" << std::endl;
+                  << ", height=" << height_orig << std::endl;
     }
     
     // Clamp to original image bounds
@@ -1240,9 +1246,9 @@ void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, 
     
     // Scale keypoints if present (for pose models)
     for (auto& kpt : det.keypoints) {
-        // Keypoints are also normalized (0-1) relative to preprocessed image
-        float kpt_x_prep = kpt.x * input_width_;
-        float kpt_y_prep = kpt.y * input_height_;
+        // Keypoints are also in pixel coordinates relative to preprocessed image
+        float kpt_x_prep = kpt.x;   // Already in pixel space
+        float kpt_y_prep = kpt.y;
         
         // Remove padding and scale back
         float kpt_x_scaled = kpt_x_prep - pad_w;
@@ -1283,8 +1289,8 @@ void YOLODetector::drawDetections(cv::Mat& frame, const std::vector<Detection>& 
         {12, 14}, {14, 16}, // right leg
     };
     
-    // Detections are in normalized [0,1] coordinates relative to preprocessed image (input_width_ x input_height_)
-    // Convert to pixel coordinates in the preprocessed frame
+    // Detections are in pixel coordinates relative to preprocessed image (input_width_ x input_height_)
+    // The drawDetections function handles both normalized and pixel coordinates for compatibility
     for (const auto& det : detections) {
         // Get color for this class
         cv::Scalar color = class_colors[det.class_id % class_colors.size()];
