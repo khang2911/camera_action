@@ -346,12 +346,19 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         float width = output_data[idx_w];
         float height = output_data[idx_h];
         
-        // Extract confidence (YOLOv11: raw values are logits, need sigmoid)
-        // Raw output shows values like 1.49012e-07 which are logits (not probabilities)
-        // Reference code might use a different model or the values are different
-        // We need to apply sigmoid to convert logits to probabilities [0,1]
-        float raw_confidence = output_data[idx_conf];
-        float confidence = 1.0f / (1.0f + std::exp(-raw_confidence));
+        // Extract confidence (YOLOv11: use raw value directly, matching reference code)
+        // Reference code: float conf = conf_ptr[i]; if (conf < confThreshold) continue;
+        // No sigmoid applied - use raw value directly
+        float confidence = output_data[idx_conf];
+        
+        // Debug: Log first few raw confidence values to verify indexing
+        static int conf_debug_count = 0;
+        if (conf_debug_count < 20 && i < 20) {
+            std::cout << "[DEBUG Conf] Anchor " << i << ": idx_conf=" << idx_conf 
+                      << ", raw_conf=" << confidence 
+                      << ", sigmoid_conf=" << (1.0f / (1.0f + std::exp(-confidence))) << std::endl;
+            conf_debug_count++;
+        }
         
         // Track statistics
         if (confidence > max_confidence) {
@@ -1117,15 +1124,44 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
             raw_file << "  float* conf_ptr = output + 4 * num_preds; // output[4*8400 + i] = output[33600 + i]\n\n";
             
             // Test our indexing (assuming [channels, num_anchors] format)
-            raw_file << "Our indexing (assuming [channels, num_anchors]):\n";
+            // IMPORTANT: output_data contains ALL batches, so for batch 0:
+            // index = batch * (channels * num_anchors) + channel * num_anchors + anchor
+            // For batch 0: index = 0 * (5 * 8400) + channel * 8400 + anchor = channel * 8400 + anchor
+            raw_file << "Our indexing (assuming [channels, num_anchors] for batch 0):\n";
+            raw_file << "Full output_data size: " << output_data.size() << " (contains all " << batch_size_ << " batches)\n";
+            raw_file << "For batch 0, indices are: channel * 8400 + anchor (no batch offset needed for batch 0)\n\n";
             for (int i = 0; i < std::min(10, num_anchors_); ++i) {
-                int idx_cx = 0 * num_anchors_ + i;      // output[i]
-                int idx_cy = 1 * num_anchors_ + i;      // output[8400 + i]
-                int idx_w = 2 * num_anchors_ + i;       // output[16800 + i]
-                int idx_h = 3 * num_anchors_ + i;       // output[25200 + i]
-                int idx_conf = 4 * num_anchors_ + i;    // output[33600 + i]
+                // For batch 0: index = 0 * (5 * 8400) + channel * 8400 + anchor
+                int idx_cx = 0 * num_anchors_ + i;      // batch 0: 0 * 42000 + 0 * 8400 + i = i
+                int idx_cy = 1 * num_anchors_ + i;      // batch 0: 0 * 42000 + 1 * 8400 + i = 8400 + i
+                int idx_w = 2 * num_anchors_ + i;       // batch 0: 0 * 42000 + 2 * 8400 + i = 16800 + i
+                int idx_h = 3 * num_anchors_ + i;       // batch 0: 0 * 42000 + 3 * 8400 + i = 25200 + i
+                int idx_conf = 4 * num_anchors_ + i;    // batch 0: 0 * 42000 + 4 * 8400 + i = 33600 + i
                 if (idx_conf < static_cast<int>(output_data.size())) {
                     raw_file << "Anchor " << i << " (indices " << idx_cx << "," << idx_cy << "," 
+                             << idx_w << "," << idx_h << "," << idx_conf << "): "
+                             << "cx=" << output_data[idx_cx] 
+                             << ", cy=" << output_data[idx_cy]
+                             << ", w=" << output_data[idx_w]
+                             << ", h=" << output_data[idx_h]
+                             << ", conf=" << output_data[idx_conf] << "\n";
+                }
+            }
+            
+            // Also test batch 1 to verify batch extraction
+            raw_file << "\n\nTesting batch 1 extraction (to verify batch offset):\n";
+            size_t batch1_offset = 1 * output_per_frame;  // batch 1 starts at index 42000
+            raw_file << "Batch 1 offset: " << batch1_offset << "\n";
+            raw_file << "Batch 1, Anchor 0 (should use indices with batch offset):\n";
+            for (int i = 0; i < std::min(3, num_anchors_); ++i) {
+                // For batch 1: index = 1 * 42000 + channel * 8400 + anchor
+                int idx_cx = batch1_offset + 0 * num_anchors_ + i;
+                int idx_cy = batch1_offset + 1 * num_anchors_ + i;
+                int idx_w = batch1_offset + 2 * num_anchors_ + i;
+                int idx_h = batch1_offset + 3 * num_anchors_ + i;
+                int idx_conf = batch1_offset + 4 * num_anchors_ + i;
+                if (idx_conf < static_cast<int>(output_data.size())) {
+                    raw_file << "  Anchor " << i << " (indices " << idx_cx << "," << idx_cy << "," 
                              << idx_w << "," << idx_h << "," << idx_conf << "): "
                              << "cx=" << output_data[idx_cx] 
                              << ", cy=" << output_data[idx_cy]
