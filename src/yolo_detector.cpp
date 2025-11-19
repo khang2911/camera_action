@@ -1414,6 +1414,20 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
                 frame_output[dst_idx] = batch_data_channels_first[src_idx];
             }
         }
+        
+        // Debug: Verify transpose worked - check first anchor's values
+        static bool transpose_debug_logged = false;
+        if (!transpose_debug_logged && b == 0) {
+            std::cout << "[DEBUG Transpose] After transpose, Anchor 0: "
+                      << "cx=" << frame_output[0 * output_channels_ + 0] << " (should be 8.59375), "
+                      << "cy=" << frame_output[0 * output_channels_ + 1] << " (should be 11.4375), "
+                      << "conf=" << frame_output[0 * output_channels_ + 4] << " (should be 32.375 or similar)" << std::endl;
+            std::cout << "[DEBUG Transpose] Before transpose, Anchor 0: "
+                      << "cx=" << batch_data_channels_first[0 * num_anchors_ + 0] << ", "
+                      << "cy=" << batch_data_channels_first[1 * num_anchors_ + 0] << ", "
+                      << "conf=" << batch_data_channels_first[4 * num_anchors_ + 0] << std::endl;
+            transpose_debug_logged = true;
+        }
         std::vector<Detection> detections;
         if (model_type_ == ModelType::POSE) {
             detections = parseRawPoseOutput(frame_output);
