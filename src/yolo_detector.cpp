@@ -1225,6 +1225,45 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::string>& ou
                 }
             }
             
+            // Search for highest confidence values in batch 0
+            raw_file << "\n\n=== Searching for highest confidence values in batch 0 ===\n";
+            std::vector<std::pair<float, int>> conf_values;  // (confidence, anchor_index)
+            for (int i = 0; i < num_anchors_; ++i) {
+                int ref_conf_idx = 4 * num_anchors_ + i;
+                if (ref_conf_idx < static_cast<int>(output_data.size())) {
+                    float conf = output_data[ref_conf_idx];
+                    conf_values.push_back({conf, i});
+                }
+            }
+            std::sort(conf_values.begin(), conf_values.end(), std::greater<std::pair<float, int>>());
+            raw_file << "Top 20 confidence values in batch 0:\n";
+            for (int i = 0; i < std::min(20, static_cast<int>(conf_values.size())); ++i) {
+                int anchor_idx = conf_values[i].second;
+                float conf = conf_values[i].first;
+                int ref_conf_idx = 4 * num_anchors_ + anchor_idx;
+                int ref_cx_idx = 0 * num_anchors_ + anchor_idx;
+                int ref_cy_idx = 1 * num_anchors_ + anchor_idx;
+                int ref_w_idx = 2 * num_anchors_ + anchor_idx;
+                int ref_h_idx = 3 * num_anchors_ + anchor_idx;
+                raw_file << "  Rank " << (i+1) << ": Anchor " << anchor_idx 
+                         << ", conf=" << conf 
+                         << " (idx=" << ref_conf_idx << ")"
+                         << ", cx=" << output_data[ref_cx_idx]
+                         << ", cy=" << output_data[ref_cy_idx]
+                         << ", w=" << output_data[ref_w_idx]
+                         << ", h=" << output_data[ref_h_idx] << "\n";
+            }
+            
+            // Also check what sigmoid would give
+            raw_file << "\nTop 20 confidence values after sigmoid:\n";
+            for (int i = 0; i < std::min(20, static_cast<int>(conf_values.size())); ++i) {
+                float raw_conf = conf_values[i].first;
+                float sigmoid_conf = 1.0f / (1.0f + std::exp(-raw_conf));
+                raw_file << "  Rank " << (i+1) << ": Anchor " << conf_values[i].second 
+                         << ", raw_conf=" << raw_conf 
+                         << ", sigmoid_conf=" << sigmoid_conf << "\n";
+            }
+            
             // Also test: what if TensorRT actually outputs [batch, num_anchors, channels]?
             raw_file << "\n\n=== ALTERNATIVE TEST: What if format is [batch, num_anchors, channels]? ===\n";
             raw_file << "If format is [batch, num_anchors, channels], then for batch 0:\n";
