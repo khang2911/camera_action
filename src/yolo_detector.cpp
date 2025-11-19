@@ -377,7 +377,7 @@ bool YOLODetector::runWithPreprocessedBatch(
                         stream_);
     }
     
-    bool ok = runInference(output_paths, frame_numbers, original_widths, original_heights);
+    bool ok = runInference(output_paths, frame_numbers, original_widths, original_heights, dump_idx);
     return ok;
 }
 
