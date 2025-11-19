@@ -1864,10 +1864,45 @@ void YOLODetector::drawDetections(cv::Mat& frame, const std::vector<Detection>& 
         
         // Draw keypoints and skeleton for pose models
         if (model_type_ == ModelType::POSE && !det.keypoints.empty()) {
-            // Draw keypoints - check if coordinates are normalized or in pixel space
+            // COCO keypoint names for reference (17 keypoints)
+            // 0: nose, 1: left_eye, 2: right_eye, 3: left_ear, 4: right_ear
+            // 5: left_shoulder, 6: right_shoulder, 7: left_elbow, 8: right_elbow
+            // 9: left_wrist, 10: right_wrist, 11: left_hip, 12: right_hip
+            // 13: left_knee, 14: right_knee, 15: left_ankle, 16: right_ankle
+            
+            // Color scheme for different body parts (BGR format)
+            std::vector<cv::Scalar> kpt_colors = {
+                cv::Scalar(0, 255, 255),    // Yellow - head (nose, eyes, ears)
+                cv::Scalar(0, 255, 255),    // Yellow
+                cv::Scalar(0, 255, 255),    // Yellow
+                cv::Scalar(0, 255, 255),    // Yellow
+                cv::Scalar(0, 255, 255),    // Yellow
+                cv::Scalar(255, 0, 0),      // Blue - left arm/shoulder
+                cv::Scalar(0, 0, 255),      // Red - right arm/shoulder
+                cv::Scalar(255, 0, 0),      // Blue - left elbow
+                cv::Scalar(0, 0, 255),      // Red - right elbow
+                cv::Scalar(255, 0, 0),      // Blue - left wrist
+                cv::Scalar(0, 0, 255),      // Red - right wrist
+                cv::Scalar(0, 255, 0),      // Green - left hip
+                cv::Scalar(255, 0, 255),    // Magenta - right hip
+                cv::Scalar(0, 255, 0),      // Green - left knee
+                cv::Scalar(255, 0, 255),    // Magenta - right knee
+                cv::Scalar(0, 255, 0),      // Green - left ankle
+                cv::Scalar(255, 0, 255),    // Magenta - right ankle
+            };
+            
+            // Convert keypoints to pixel coordinates and store for drawing
+            std::vector<cv::Point> kpt_points;
+            std::vector<bool> kpt_visible;
+            kpt_points.reserve(det.keypoints.size());
+            kpt_visible.reserve(det.keypoints.size());
+            
             for (size_t i = 0; i < det.keypoints.size() && i < 17; ++i) {
                 const auto& kpt = det.keypoints[i];
-                if (kpt.confidence > 0.1f) {  // Only draw visible keypoints
+                bool visible = (kpt.confidence > 0.1f);
+                kpt_visible.push_back(visible);
+                
+                if (visible) {
                     // Check if keypoint coordinates are normalized [0,1] or in pixel space
                     int kpt_x, kpt_y;
                     if (kpt.x <= 1.0f && kpt.y <= 1.0f) {
@@ -1881,37 +1916,43 @@ void YOLODetector::drawDetections(cv::Mat& frame, const std::vector<Detection>& 
                     }
                     kpt_x = std::max(0, std::min(kpt_x, frame.cols - 1));
                     kpt_y = std::max(0, std::min(kpt_y, frame.rows - 1));
-                    cv::circle(frame, cv::Point(kpt_x, kpt_y), 3, color, -1);
+                    kpt_points.push_back(cv::Point(kpt_x, kpt_y));
+                } else {
+                    kpt_points.push_back(cv::Point(-1, -1));  // Invalid point
                 }
             }
             
-            // Draw skeleton connections
+            // Draw skeleton connections first (so keypoints appear on top)
             for (const auto& conn : keypoint_connections) {
-                if (conn.first < static_cast<int>(det.keypoints.size()) &&
-                    conn.second < static_cast<int>(det.keypoints.size())) {
-                    const auto& kpt1 = det.keypoints[conn.first];
-                    const auto& kpt2 = det.keypoints[conn.second];
-                    if (kpt1.confidence > 0.1f && kpt2.confidence > 0.1f) {
-                        // Check if keypoint coordinates are normalized [0,1] or in pixel space
-                        int x1_kpt, y1_kpt, x2_kpt, y2_kpt;
-                        if (kpt1.x <= 1.0f && kpt1.y <= 1.0f && kpt2.x <= 1.0f && kpt2.y <= 1.0f) {
-                            // Normalized - convert to pixel coordinates
-                            x1_kpt = static_cast<int>(kpt1.x * input_width_);
-                            y1_kpt = static_cast<int>(kpt1.y * input_height_);
-                            x2_kpt = static_cast<int>(kpt2.x * input_width_);
-                            y2_kpt = static_cast<int>(kpt2.y * input_height_);
-                        } else {
-                            // Already in pixel space - use directly
-                            x1_kpt = static_cast<int>(kpt1.x);
-                            y1_kpt = static_cast<int>(kpt1.y);
-                            x2_kpt = static_cast<int>(kpt2.x);
-                            y2_kpt = static_cast<int>(kpt2.y);
-                        }
-                        x1_kpt = std::max(0, std::min(x1_kpt, frame.cols - 1));
-                        y1_kpt = std::max(0, std::min(y1_kpt, frame.rows - 1));
-                        x2_kpt = std::max(0, std::min(x2_kpt, frame.cols - 1));
-                        y2_kpt = std::max(0, std::min(y2_kpt, frame.rows - 1));
-                        cv::line(frame, cv::Point(x1_kpt, y1_kpt), cv::Point(x2_kpt, y2_kpt), color, 2);
+                if (conn.first < static_cast<int>(kpt_points.size()) &&
+                    conn.second < static_cast<int>(kpt_points.size()) &&
+                    kpt_visible[conn.first] && kpt_visible[conn.second]) {
+                    const cv::Point& pt1 = kpt_points[conn.first];
+                    const cv::Point& pt2 = kpt_points[conn.second];
+                    if (pt1.x >= 0 && pt1.y >= 0 && pt2.x >= 0 && pt2.y >= 0) {
+                        // Use a slightly darker version of the detection color for skeleton
+                        cv::Scalar skeleton_color = color * 0.7;
+                        cv::line(frame, pt1, pt2, skeleton_color, 2);
+                    }
+                }
+            }
+            
+            // Draw keypoints with colors
+            for (size_t i = 0; i < kpt_points.size() && i < kpt_colors.size(); ++i) {
+                if (kpt_visible[i]) {
+                    const cv::Point& pt = kpt_points[i];
+                    if (pt.x >= 0 && pt.y >= 0) {
+                        // Draw keypoint as a filled circle with border
+                        cv::Scalar kpt_color = kpt_colors[i];
+                        // Draw outer circle (border)
+                        cv::circle(frame, pt, 5, cv::Scalar(0, 0, 0), 2);
+                        // Draw inner circle (filled)
+                        cv::circle(frame, pt, 4, kpt_color, -1);
+                        
+                        // Optionally draw keypoint index (for debugging)
+                        // Uncomment the following line to show keypoint indices:
+                        // cv::putText(frame, std::to_string(i), cv::Point(pt.x + 6, pt.y - 6),
+                        //            cv::FONT_HERSHEY_SIMPLEX, 0.3, cv::Scalar(255, 255, 255), 1);
                     }
                 }
             }
