@@ -983,11 +983,23 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
     }
     
     for (int b = 0; b < batch_size_; ++b) {
-        std::vector<float> frame_output(output_per_frame);
+        // Extract batch data in [channels, num_anchors] format (TensorRT output format)
+        std::vector<float> batch_data_channels_first(output_per_frame);
         size_t batch_offset = static_cast<size_t>(b) * output_per_frame;
         std::copy(output_data.begin() + batch_offset,
                   output_data.begin() + batch_offset + output_per_frame,
-                  frame_output.begin());
+                  batch_data_channels_first.begin());
+        
+        // Transpose from [channels, num_anchors] to [num_anchors, channels] to match Python's output[0].T
+        // This is required because parseRawDetectionOutput expects [num_anchors, channels] format
+        std::vector<float> frame_output(output_per_frame);
+        for (int anchor = 0; anchor < num_anchors_; ++anchor) {
+            for (int channel = 0; channel < output_channels_; ++channel) {
+                int src_idx = channel * num_anchors_ + anchor;  // [channels, num_anchors] format
+                int dst_idx = anchor * output_channels_ + channel;  // [num_anchors, channels] format
+                frame_output[dst_idx] = batch_data_channels_first[src_idx];
+            }
+        }
         
         std::vector<Detection> detections;
         if (model_type_ == ModelType::POSE) {
