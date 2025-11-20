@@ -1470,6 +1470,26 @@ std::string ThreadPool::tryPushOutputLocked(const std::string& video_key, VideoO
     
     status.message_pushed = true;
     std::string final_message = augmentMessageWithDetectors(status.original_message, status.detector_outputs);
+    
+    // Persist the final message to JSON file for auditing/debugging
+    try {
+        std::filesystem::path output_dir = std::filesystem::path(output_dir_) / "redis_messages";
+        std::filesystem::create_directories(output_dir);
+        std::string safe_key = video_key.empty() ? "unknown" : video_key;
+        std::filesystem::path file_path = output_dir / (safe_key + ".json");
+        std::ofstream outfile(file_path);
+        if (outfile.is_open()) {
+            outfile << final_message;
+            outfile.close();
+            LOG_INFO("RedisOutput", "Saved output message to " + file_path.string());
+        } else {
+            LOG_ERROR("RedisOutput", "Failed to open file for saving message: " + file_path.string());
+        }
+    } catch (const std::exception& e) {
+        LOG_ERROR("RedisOutput", "Failed to save Redis output message: " + std::string(e.what()));
+    }
+    
+    LOG_INFO("RedisOutput", "Ready to push message for video_key '" + video_key + "': " + final_message);
     video_output_status_.erase(video_key);
     return final_message;
 }
