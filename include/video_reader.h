@@ -16,6 +16,7 @@ public:
     bool isOpened() const;
     bool readFrame(cv::Mat& frame);
     int getFrameNumber() const { return frame_number_; }
+    int getActualFramePosition() const;  // Get actual frame position in video file
     int getVideoId() const { return video_id_; }
     std::string getVideoPath() const { return video_path_; }
     int getOriginalWidth() const { return original_width_; }

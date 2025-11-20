@@ -89,6 +89,15 @@ bool VideoReader::readFrame(cv::Mat& frame) {
     }
 }
 
+int VideoReader::getActualFramePosition() const {
+    if (!cap_.isOpened()) {
+        return -1;
+    }
+    // Get the actual current frame position in the video file
+    double pos = cap_.get(cv::CAP_PROP_POS_FRAMES);
+    return static_cast<int>(pos);
+}
+
 void VideoReader::initializeMetadata() {
     if (!cap_.isOpened()) {
         return;

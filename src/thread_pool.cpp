@@ -713,10 +713,11 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
             
             stats_.frames_read++;
             
-            // Create frame data with original frame (shared to preprocessor queue)
-            // Note: Frame is NOT cropped here - ROI cropping is applied per-engine in preprocessor
-            // Use frame_count (0-based index within this video) for bin file output, not global_frame_number
-            FrameData frame_data(frame.clone(), video_id, frame_count, clip.path, 
+            // Get the actual frame position in the video file (accounts for time-based filtering)
+            int actual_frame_position = reader.getActualFramePosition();
+            // Use actual_frame_position (actual frame number in video) for bin file output
+            // This ensures frame numbers match the video file, even when we skip frames at the beginning
+            FrameData frame_data(frame.clone(), video_id, actual_frame_position, clip.path, 
                                 clip.record_id, clip.record_date, clip.serial,
                                 message_key, video_key, clip.video_index,
                                 clip.has_roi, clip.roi_x1, clip.roi_y1, clip.roi_x2, clip.roi_y2);
