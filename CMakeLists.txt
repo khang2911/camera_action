@@ -84,6 +84,20 @@ find_library(CPP_REDIS_LIBRARY
     ${CMAKE_SOURCE_DIR}/../cpp_redis/lib
 )
 
+# Find tacopie library (required dependency of cpp_redis)
+find_library(TACOPIE_LIBRARY 
+    NAMES tacopie
+    PATHS
+    /usr/lib
+    /usr/lib/x86_64-linux-gnu
+    /usr/local/lib
+    /opt/cpp_redis/lib
+    ${CPP_REDIS_ROOT}/lib
+    ${REDIS_ROOT}/lib
+    ${CMAKE_SOURCE_DIR}/third_party/cpp_redis/lib
+    ${CMAKE_SOURCE_DIR}/../cpp_redis/lib
+)
+
 if(CPP_REDIS_INCLUDE_DIR)
     message(STATUS "cpp_redis found")
     message(STATUS "  CPP_REDIS_INCLUDE_DIR: ${CPP_REDIS_INCLUDE_DIR}")
@@ -91,6 +105,11 @@ if(CPP_REDIS_INCLUDE_DIR)
         message(STATUS "  CPP_REDIS_LIBRARY: ${CPP_REDIS_LIBRARY}")
     else()
         message(STATUS "  cpp_redis appears to be header-only (no library found)")
+    endif()
+    if(TACOPIE_LIBRARY)
+        message(STATUS "  TACOPIE_LIBRARY: ${TACOPIE_LIBRARY}")
+    else()
+        message(WARNING "tacopie library not found - cpp_redis requires it")
     endif()
 else()
     message(WARNING "cpp_redis library not found.")
@@ -163,9 +182,12 @@ set(ALL_LIBS
     ${OpenMP_CXX_LIBRARIES}
 )
 
-# Add cpp_redis library if found (it may be header-only)
+# Add cpp_redis and tacopie libraries if found
 if(CPP_REDIS_LIBRARY)
     list(APPEND ALL_LIBS ${CPP_REDIS_LIBRARY})
+endif()
+if(TACOPIE_LIBRARY)
+    list(APPEND ALL_LIBS ${TACOPIE_LIBRARY})
 endif()
 
 # Create executable

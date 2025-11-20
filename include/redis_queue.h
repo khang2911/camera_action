@@ -20,6 +20,7 @@ public:
     // Queue operations
     bool popMessage(std::string& message, int timeout_seconds = 0, const std::string& queue_name = "input_queue");
     bool pushMessage(const std::string& queue_name, const std::string& message);
+    int getQueueLength(const std::string& queue_name);
     
     // Get connection info
     std::string getHost() const { return host_; }

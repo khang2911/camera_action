@@ -476,6 +476,11 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
         // Reset counter when we get a message
         consecutive_empty_polls = 0;
         
+        // Get queue length to show how many messages are remaining
+        int queue_length = input_queue_->getQueueLength(input_queue_name_);
+        std::string queue_status = (queue_length >= 0) ? 
+            " (messages remaining in queue: " + std::to_string(queue_length) + ")" : "";
+        
         try {
             // Parse JSON message (one line from video_list.jsonl format)
             // Each message is a single JSON object, same format as video_list.jsonl
@@ -483,12 +488,12 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
             
             if (clip.path.empty()) {
                 LOG_WARNING("Reader", "Reader " + std::to_string(reader_id) + 
-                         " received message with empty video path, skipping");
+                         " received message with empty video path, skipping" + queue_status);
                 continue;
             }
             
             LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
-                     " processing video from Redis: " + clip.path);
+                     " processing video from Redis: " + clip.path + queue_status);
             
             // Process the video
             processVideo(reader_id, clip, video_id_counter, message);

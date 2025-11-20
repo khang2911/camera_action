@@ -212,3 +212,43 @@ bool RedisQueue::pushMessage(const std::string& queue_name, const std::string& m
         return false;
     }
 }
+
+int RedisQueue::getQueueLength(const std::string& queue_name) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    if (!redis_client_ || !redis_client_->is_connected()) {
+        if (!reconnect()) {
+            return -1;
+        }
+    }
+    
+    try {
+        std::promise<int> len_promise;
+        auto len_future = len_promise.get_future();
+        
+        // Use LLEN to get queue length
+        redis_client_->llen(queue_name, [&len_promise](cpp_redis::reply& reply) {
+            if (reply.is_integer()) {
+                len_promise.set_value(reply.as_integer());
+            } else if (reply.is_error()) {
+                LOG_ERROR("Redis", "LLEN error: " + reply.as_string());
+                len_promise.set_value(-1);
+            } else {
+                len_promise.set_value(-1);
+            }
+        });
+        
+        redis_client_->sync_commit();
+        
+        // Wait for the result
+        if (len_future.wait_for(std::chrono::seconds(2)) == std::future_status::ready) {
+            return len_future.get();
+        } else {
+            LOG_ERROR("Redis", "LLEN operation timed out");
+            return -1;
+        }
+    } catch (const std::exception& e) {
+        LOG_ERROR("Redis", "LLEN exception: " + std::string(e.what()));
+        return -1;
+    }
+}
