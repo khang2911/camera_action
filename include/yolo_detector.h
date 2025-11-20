@@ -145,7 +145,9 @@ private:
     bool copyInputsToDevice(const std::vector<std::shared_ptr<std::vector<float>>>& inputs);
     
     // Scale detection coordinates from preprocessed image to original frame
-    void scaleDetectionToOriginal(Detection& det, int original_width, int original_height, int roi_offset_x = 0, int roi_offset_y = 0);
+    void scaleDetectionToOriginal(Detection& det, int original_width, int original_height, 
+                                   int roi_offset_x = 0, int roi_offset_y = 0,
+                                   int true_original_width = 0, int true_original_height = 0);
 
     bool dump_inputs_enabled_ = false;
     bool dump_outputs_enabled_ = false;

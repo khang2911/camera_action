@@ -421,6 +421,8 @@ void ThreadPool::readerWorker(int reader_id) {
             // Store original frame dimensions (before any ROI cropping)
             frame_data.original_width = frame.cols;
             frame_data.original_height = frame.rows;
+            frame_data.true_original_width = frame.cols;  // True original dimensions (same as original when no cropping)
+            frame_data.true_original_height = frame.rows;
             // Store ROI offset for scaling detections back to true original frame
             if (clip.has_roi) {
                 frame_data.roi_offset_x = clip.roi_offset_x;
@@ -542,10 +544,12 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             processed.frame_number = raw_frame.frame_number;
             processed.video_path = raw_frame.video_path;
             processed.frame = frame_to_process;  // Keep reference for potential debugging/logging
-            processed.original_width = cropped_width;  // Use cropped dimensions for scaling
-            processed.original_height = cropped_height;
-            processed.roi_offset_x = roi_offset_x;  // Pass ROI offset for scaling back to original
-            processed.roi_offset_y = roi_offset_y;
+            processed.original_width = cropped_width;  // Cropped frame width (for scale calculation)
+            processed.original_height = cropped_height;  // Cropped frame height (for scale calculation)
+            processed.true_original_width = true_original_width;  // True original frame width (for clamping after ROI offset)
+            processed.true_original_height = true_original_height;  // True original frame height (for clamping after ROI offset)
+            processed.roi_offset_x = roi_offset_x;  // ROI offset X in true original frame
+            processed.roi_offset_y = roi_offset_y;  // ROI offset Y in true original frame
             
             engine_group->frame_queue->push(processed);
         }
@@ -590,6 +594,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             std::vector<int> batch_frame_numbers;
             std::vector<int> batch_original_widths;
             std::vector<int> batch_original_heights;
+            std::vector<int> batch_true_original_widths;  // True original frame widths (for clamping after ROI offset)
+            std::vector<int> batch_true_original_heights;  // True original frame heights (for clamping after ROI offset)
             std::vector<int> batch_roi_offset_x;  // ROI offset X for each frame
             std::vector<int> batch_roi_offset_y;  // ROI offset Y for each frame
             std::vector<cv::Mat> batch_frames;  // Store frames for debug mode
@@ -636,6 +642,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 batch_frame_numbers.push_back(frame_data.frame_number);
                 batch_original_widths.push_back(frame_data.original_width);
                 batch_original_heights.push_back(frame_data.original_height);
+                batch_true_original_widths.push_back(frame_data.true_original_width);
+                batch_true_original_heights.push_back(frame_data.true_original_height);
                 batch_roi_offset_x.push_back(frame_data.roi_offset_x);
                 batch_roi_offset_y.push_back(frame_data.roi_offset_y);
                 
