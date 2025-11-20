@@ -21,6 +21,7 @@ struct EngineGroup {
     int num_detectors;
     int input_width;
     int input_height;
+    bool roi_cropping;  // Enable ROI cropping for this engine
     size_t tensor_elements;
     std::vector<std::unique_ptr<YOLODetector>> detectors;
     std::vector<std::thread> detector_threads;
@@ -31,9 +32,9 @@ struct EngineGroup {
     std::mutex buffer_pool_mutex;
     
     EngineGroup(int id, const std::string& path, const std::string& name, int num_det,
-                int in_w, int in_h)
+                int in_w, int in_h, bool roi = false)
         : engine_id(id), engine_path(path), engine_name(name), num_detectors(num_det),
-          input_width(in_w), input_height(in_h) {
+          input_width(in_w), input_height(in_h), roi_cropping(roi) {
         tensor_elements = static_cast<size_t>(input_width) * input_height * 3;
         frame_queue = std::make_unique<FrameQueue>();
         preprocessor = std::make_unique<Preprocessor>(input_width, input_height);

@@ -135,7 +135,7 @@ ThreadPool::ThreadPool(int num_readers,
         const auto& config = engine_configs[i];
         auto engine_group = std::make_unique<EngineGroup>(
             static_cast<int>(i), config.path, config.name, config.num_detectors,
-            config.input_width, config.input_height
+            config.input_width, config.input_height, config.roi_cropping
         );
         
         LOG_INFO("ThreadPool", "Initializing engine " + config.name + " with " + 
@@ -416,11 +416,11 @@ void ThreadPool::readerWorker(int reader_id) {
             stats_.frames_read++;
             
             // Create frame data with original frame (shared to preprocessor queue)
+            // Note: Frame is NOT cropped here - ROI cropping is applied per-engine in preprocessor
             FrameData frame_data(frame.clone(), video_id, reader.getFrameNumber(), clip.path);
-            // Use cropped frame dimensions for scaling (frame is already cropped if ROI is enabled)
-            // The frame dimensions after cropping are what we use for scaling
-            frame_data.original_width = frame.cols;  // Cropped frame width
-            frame_data.original_height = frame.rows;  // Cropped frame height
+            // Store original frame dimensions (before any ROI cropping)
+            frame_data.original_width = frame.cols;
+            frame_data.original_height = frame.rows;
             // Store ROI offset for scaling detections back to true original frame
             if (clip.has_roi) {
                 frame_data.roi_offset_x = clip.roi_offset_x;
@@ -473,17 +473,58 @@ void ThreadPool::preprocessorWorker(int worker_id) {
         auto preprocess_start = std::chrono::steady_clock::now();
         
         for (auto& engine_group : engine_groups_) {
+            cv::Mat frame_to_process = raw_frame.frame;
+            int cropped_width = raw_frame.original_width;
+            int cropped_height = raw_frame.original_height;
+            int roi_offset_x = raw_frame.roi_offset_x;
+            int roi_offset_y = raw_frame.roi_offset_y;
+            
+            // Apply ROI cropping if enabled for this engine and ROI is available
+            if (engine_group->roi_cropping && raw_frame.roi_offset_x >= 0 && raw_frame.roi_offset_y >= 0) {
+                // Find the video clip to get ROI coordinates
+                // We need to find which video this frame belongs to
+                int video_id = raw_frame.video_id;
+                if (video_id >= 0 && video_id < static_cast<int>(video_clips_.size())) {
+                    const VideoClip& clip = video_clips_[video_id];
+                    if (clip.has_roi && !frame_to_process.empty()) {
+                        int orig_w = frame_to_process.cols;
+                        int orig_h = frame_to_process.rows;
+                        
+                        // Convert normalized ROI coordinates to pixel coordinates
+                        int x1 = static_cast<int>(clip.roi_x1 * orig_w);
+                        int y1 = static_cast<int>(clip.roi_y1 * orig_h);
+                        int x2 = static_cast<int>(clip.roi_x2 * orig_w);
+                        int y2 = static_cast<int>(clip.roi_y2 * orig_h);
+                        
+                        // Clamp to frame bounds
+                        x1 = std::max(0, std::min(x1, orig_w - 1));
+                        y1 = std::max(0, std::min(y1, orig_h - 1));
+                        x2 = std::max(x1 + 1, std::min(x2, orig_w));
+                        y2 = std::max(y1 + 1, std::min(y2, orig_h));
+                        
+                        // Crop the frame for this engine
+                        cv::Rect roi_rect(x1, y1, x2 - x1, y2 - y1);
+                        frame_to_process = frame_to_process(roi_rect).clone();
+                        cropped_width = frame_to_process.cols;
+                        cropped_height = frame_to_process.rows;
+                        // ROI offset is already set from raw_frame
+                    }
+                }
+            }
+            
             auto buffer = engine_group->acquireBuffer();
-            engine_group->preprocessor->preprocessToFloat(raw_frame.frame, *buffer);
+            engine_group->preprocessor->preprocessToFloat(frame_to_process, *buffer);
             
             FrameData processed;
             processed.preprocessed_data = buffer;
             processed.video_id = raw_frame.video_id;
             processed.frame_number = raw_frame.frame_number;
             processed.video_path = raw_frame.video_path;
-            processed.frame = raw_frame.frame;  // Keep reference for potential debugging/logging
-            processed.original_width = raw_frame.original_width;
-            processed.original_height = raw_frame.original_height;
+            processed.frame = frame_to_process;  // Keep reference for potential debugging/logging
+            processed.original_width = cropped_width;  // Use cropped dimensions for scaling
+            processed.original_height = cropped_height;
+            processed.roi_offset_x = roi_offset_x;  // Pass ROI offset for scaling back to original
+            processed.roi_offset_y = roi_offset_y;
             
             engine_group->frame_queue->push(processed);
         }
@@ -596,12 +637,14 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         batch_tensors,
                         batch_output_paths, batch_frame_numbers,
                         batch_original_widths, batch_original_heights,
-                        batch_detections
+                        batch_detections,
+                        batch_roi_offset_x, batch_roi_offset_y
                     );
                 } else {
                     success = engine_group->detectors[detector_id]->runWithPreprocessedBatch(
                         batch_tensors, batch_output_paths, batch_frame_numbers,
-                        batch_original_widths, batch_original_heights
+                        batch_original_widths, batch_original_heights,
+                        batch_roi_offset_x, batch_roi_offset_y
                     );
                 }
                 
@@ -707,7 +750,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     single_input,
                     {output_path}, {frame_data.frame_number},
                     {frame_data.original_width}, {frame_data.original_height},
-                    all_detections
+                    all_detections,
+                    {frame_data.roi_offset_x}, {frame_data.roi_offset_y}
                 );
                 if (success && !all_detections.empty()) {
                     detections = all_detections[0];

@@ -51,7 +51,9 @@ public:
                                   const std::vector<std::string>& output_paths,
                                   const std::vector<int>& frame_numbers,
                                   const std::vector<int>& original_widths = {},
-                                  const std::vector<int>& original_heights = {});
+                                  const std::vector<int>& original_heights = {},
+                                  const std::vector<int>& roi_offset_x = {},
+                                  const std::vector<int>& roi_offset_y = {});
     
     ModelType getModelType() const { return model_type_; }
     int getBatchSize() const { return batch_size_; }
@@ -69,7 +71,9 @@ public:
                                     const std::vector<int>& frame_numbers,
                                     const std::vector<int>& original_widths,
                                     const std::vector<int>& original_heights,
-                                    std::vector<std::vector<Detection>>& all_detections);
+                                    std::vector<std::vector<Detection>>& all_detections,
+                                    const std::vector<int>& roi_offset_x = {},
+                                    const std::vector<int>& roi_offset_y = {});
     
     // Draw detections on frame (for debug visualization)
     void drawDetections(cv::Mat& frame, const std::vector<Detection>& detections);

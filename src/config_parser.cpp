@@ -116,7 +116,16 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
                 if (node["conf_threshold"]) cfg.conf_threshold = node["conf_threshold"].as<float>();
                 if (node["nms_threshold"]) cfg.nms_threshold = node["nms_threshold"].as<float>();
                 if (node["gpu_id"]) cfg.gpu_id = node["gpu_id"].as<int>();
- 
+                if (node["roi_cropping"]) {
+                    try {
+                        cfg.roi_cropping = node["roi_cropping"].as<bool>();
+                    } catch (const YAML::Exception&) {
+                        std::string roi_str = node["roi_cropping"].as<std::string>();
+                        std::transform(roi_str.begin(), roi_str.end(), roi_str.begin(), ::tolower);
+                        cfg.roi_cropping = (roi_str == "true" || roi_str == "1" || roi_str == "yes");
+                    }
+                }
+
                 engine_configs_.push_back(cfg);
             }
         } else if (config["model"]) {

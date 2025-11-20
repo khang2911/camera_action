@@ -329,7 +329,7 @@ bool YOLODetector::runWithPreprocessedData(const std::shared_ptr<std::vector<flo
     }
     
     return runWithPreprocessedBatch({input_data}, {output_path}, {frame_number},
-                                    {original_width}, {original_height});
+                                    {original_width}, {original_height}, {}, {});
 }
 
 bool YOLODetector::runWithPreprocessedBatch(
@@ -337,7 +337,9 @@ bool YOLODetector::runWithPreprocessedBatch(
     const std::vector<std::string>& output_paths,
     const std::vector<int>& frame_numbers,
     const std::vector<int>& original_widths,
-    const std::vector<int>& original_heights) {
+    const std::vector<int>& original_heights,
+    const std::vector<int>& roi_offset_x,
+    const std::vector<int>& roi_offset_y) {
     
     if (!context_ || !input_buffer_ || !output_buffer_) {
         std::cerr << "Error: Detector not initialized" << std::endl;
@@ -1127,9 +1129,9 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
                 logged_scaling_info = true;
             }
             
-            // Get ROI offset if available (for now, default to 0 - will be passed through in future update)
-            int roi_x = 0;
-            int roi_y = 0;
+            // Get ROI offset for this batch item
+            int roi_x = (b < static_cast<int>(roi_offset_x.size())) ? roi_offset_x[b] : 0;
+            int roi_y = (b < static_cast<int>(roi_offset_y.size())) ? roi_offset_y[b] : 0;
             for (auto& det : detections) {
                 scaleDetectionToOriginal(det, orig_w, orig_h, roi_x, roi_y);
             }
@@ -1174,7 +1176,9 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::shared_ptr<
                                                const std::vector<int>& frame_numbers,
                                                const std::vector<int>& original_widths,
                                                const std::vector<int>& original_heights,
-                                               std::vector<std::vector<Detection>>& all_detections) {
+                                               std::vector<std::vector<Detection>>& all_detections,
+                                               const std::vector<int>& roi_offset_x,
+                                               const std::vector<int>& roi_offset_y) {
     if (static_cast<int>(inputs.size()) != batch_size_ ||
         static_cast<int>(output_paths.size()) != batch_size_ ||
         static_cast<int>(frame_numbers.size()) != batch_size_) {
@@ -1674,9 +1678,9 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::shared_ptr<
         if (orig_w > 0 && orig_h > 0) {
             // Create a copy for file writing (scaled to original)
             std::vector<Detection> detections_for_file = detections;
-            // Get ROI offset if available (for now, default to 0 - will be passed through in future update)
-            int roi_x = 0;
-            int roi_y = 0;
+            // Get ROI offset for this batch item
+            int roi_x = (b < static_cast<int>(roi_offset_x.size())) ? roi_offset_x[b] : 0;
+            int roi_y = (b < static_cast<int>(roi_offset_y.size())) ? roi_offset_y[b] : 0;
             for (auto& det : detections_for_file) {
                 scaleDetectionToOriginal(det, orig_w, orig_h, roi_x, roi_y);
             }

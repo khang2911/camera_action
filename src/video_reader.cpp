@@ -65,33 +65,19 @@ bool VideoReader::readFrame(cv::Mat& frame) {
             }
         }
 
-        // Store original dimensions before cropping
+        // Store original dimensions (for ROI offset calculation)
         original_width_ = frame.cols;
         original_height_ = frame.rows;
 
-        // Apply ROI cropping if enabled and ROI is defined
+        // Calculate ROI offset if ROI is defined (for scaling detections back to original frame)
+        // Note: ROI cropping is now applied per-engine in preprocessor, not here
+        // We keep the original frame intact and let each engine decide if it needs ROI cropping
         if (has_clip_metadata_ && clip_.has_roi && !frame.empty()) {
-            // Convert normalized ROI coordinates to pixel coordinates
             int x1 = static_cast<int>(clip_.roi_x1 * original_width_);
             int y1 = static_cast<int>(clip_.roi_y1 * original_height_);
-            int x2 = static_cast<int>(clip_.roi_x2 * original_width_);
-            int y2 = static_cast<int>(clip_.roi_y2 * original_height_);
-            
-            // Clamp to frame bounds
-            x1 = std::max(0, std::min(x1, original_width_ - 1));
-            y1 = std::max(0, std::min(y1, original_height_ - 1));
-            x2 = std::max(x1 + 1, std::min(x2, original_width_));
-            y2 = std::max(y1 + 1, std::min(y2, original_height_));
-            
-            // Store ROI offset for scaling detections back to original frame
-            clip_.roi_offset_x = x1;
-            clip_.roi_offset_y = y1;
-            
-            // Crop the frame
-            cv::Rect roi_rect(x1, y1, x2 - x1, y2 - y1);
-            frame = frame(roi_rect).clone();
+            clip_.roi_offset_x = std::max(0, std::min(x1, original_width_ - 1));
+            clip_.roi_offset_y = std::max(0, std::min(y1, original_height_ - 1));
         } else {
-            // No ROI cropping, offsets are zero
             if (has_clip_metadata_) {
                 clip_.roi_offset_x = 0;
                 clip_.roi_offset_y = 0;
