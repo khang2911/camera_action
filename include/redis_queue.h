@@ -30,7 +30,7 @@ private:
     int port_;
     std::string password_;
     std::unique_ptr<cpp_redis::client> redis_client_;
-    std::mutex mutex_;
+    mutable std::mutex mutex_;  // mutable to allow locking in const methods
     
     bool reconnect();
     void handleError(const std::string& operation);

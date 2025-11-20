@@ -431,7 +431,6 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
     // Log statistics (reduced for performance)
     static int parse_call_count = 0;
     parse_call_count++;
-    }
     
     return detections;
 }

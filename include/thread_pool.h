@@ -115,6 +115,7 @@ private:
     bool use_redis_queue_;
     std::shared_ptr<RedisQueue> input_queue_;
     std::shared_ptr<RedisQueue> output_queue_;
+    std::string input_queue_name_;
     std::string output_queue_name_;
     
     std::vector<std::thread> reader_threads_;
