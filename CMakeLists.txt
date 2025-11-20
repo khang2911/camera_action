@@ -36,6 +36,78 @@ endif()
 # OpenCV
 find_package(OpenCV REQUIRED)
 
+# FFmpeg
+find_path(AVCODEC_INCLUDE_DIR libavcodec/avcodec.h
+    PATHS
+    /usr/include
+    /usr/local/include
+    ${FFMPEG_ROOT}/include
+)
+
+find_path(AVFORMAT_INCLUDE_DIR libavformat/avformat.h
+    PATHS
+    /usr/include
+    /usr/local/include
+    ${FFMPEG_ROOT}/include
+)
+
+find_path(AVUTIL_INCLUDE_DIR libavutil/avutil.h
+    PATHS
+    /usr/include
+    /usr/local/include
+    ${FFMPEG_ROOT}/include
+)
+
+find_path(SWSCALE_INCLUDE_DIR libswscale/swscale.h
+    PATHS
+    /usr/include
+    /usr/local/include
+    ${FFMPEG_ROOT}/include
+)
+
+find_library(AVCODEC_LIBRARY avcodec
+    PATHS
+    /usr/lib
+    /usr/lib/x86_64-linux-gnu
+    /usr/local/lib
+    ${FFMPEG_ROOT}/lib
+)
+
+find_library(AVFORMAT_LIBRARY avformat
+    PATHS
+    /usr/lib
+    /usr/lib/x86_64-linux-gnu
+    /usr/local/lib
+    ${FFMPEG_ROOT}/lib
+)
+
+find_library(AVUTIL_LIBRARY avutil
+    PATHS
+    /usr/lib
+    /usr/lib/x86_64-linux-gnu
+    /usr/local/lib
+    ${FFMPEG_ROOT}/lib
+)
+
+find_library(SWSCALE_LIBRARY swscale
+    PATHS
+    /usr/lib
+    /usr/lib/x86_64-linux-gnu
+    /usr/local/lib
+    ${FFMPEG_ROOT}/lib
+)
+
+if(AVCODEC_INCLUDE_DIR AND AVFORMAT_INCLUDE_DIR AND AVUTIL_INCLUDE_DIR AND SWSCALE_INCLUDE_DIR AND
+   AVCODEC_LIBRARY AND AVFORMAT_LIBRARY AND AVUTIL_LIBRARY AND SWSCALE_LIBRARY)
+    message(STATUS "FFmpeg found")
+    message(STATUS "  AVCODEC_INCLUDE_DIR: ${AVCODEC_INCLUDE_DIR}")
+    message(STATUS "  AVFORMAT_INCLUDE_DIR: ${AVFORMAT_INCLUDE_DIR}")
+    message(STATUS "  AVUTIL_INCLUDE_DIR: ${AVUTIL_INCLUDE_DIR}")
+    message(STATUS "  SWSCALE_INCLUDE_DIR: ${SWSCALE_INCLUDE_DIR}")
+else()
+    message(FATAL_ERROR "FFmpeg libraries not found. Please install FFmpeg development libraries.")
+endif()
+
 # TensorRT
 find_path(TensorRT_INCLUDE_DIR NvInfer.h
     PATHS
@@ -67,6 +139,10 @@ include_directories(
     ${OpenCV_INCLUDE_DIRS}
     ${TensorRT_INCLUDE_DIR}
     ${yaml-cpp_INCLUDE_DIRS}
+    ${AVCODEC_INCLUDE_DIR}
+    ${AVFORMAT_INCLUDE_DIR}
+    ${AVUTIL_INCLUDE_DIR}
+    ${SWSCALE_INCLUDE_DIR}
 )
 
 # Source files
@@ -104,6 +180,10 @@ set(ALL_LIBS
     cudart
     pthread
     ${OpenMP_CXX_LIBRARIES}
+    ${AVCODEC_LIBRARY}
+    ${AVFORMAT_LIBRARY}
+    ${AVUTIL_LIBRARY}
+    ${SWSCALE_LIBRARY}
 )
 
 # Create executable
