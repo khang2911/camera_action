@@ -347,7 +347,7 @@ void ThreadPool::readerWorker(int reader_id) {
             // Check debug mode limit first (takes priority over global limit)
             // frame_count is the number of frames already processed, so check BEFORE processing this one
             if (debug_mode_ && max_frames_per_video_ > 0 && frame_count >= max_frames_per_video_) {
-                LOG_INFO("Reader", "[DEBUG MODE] Reader " + std::to_string(reader_id) + 
+                LOG_INFO("Reader", "Reader " + std::to_string(reader_id) + 
                          " stopping after processing " + std::to_string(frame_count) + " frames" +
                          " (max_frames_per_video=" + std::to_string(max_frames_per_video_) + ")");
                 break;

@@ -459,12 +459,6 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutputTransposed(const std
         
         // Debug: Log first few values
         static int debug_count = 0;
-        if (debug_count < 5) {
-            std::cout << "[DEBUG Transposed] Anchor " << i << ": x_center=" << x_center 
-                      << ", y_center=" << y_center << ", width=" << width 
-                      << ", height=" << height << ", confidence=" << confidence << std::endl;
-            debug_count++;
-        }
         
         // Apply confidence threshold
         if (confidence < conf_threshold_) {
@@ -564,14 +558,6 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
             
             // Debug: Log first few keypoints to diagnose parsing issues
             static bool logged_kpt_debug = false;
-            if (!logged_kpt_debug && i == 0 && k < 3) {
-                std::cerr << "[DEBUG Keypoint] Anchor " << i << ", Keypoint " << k 
-                          << ": raw_x=" << raw_x << ", raw_y=" << raw_y 
-                          << ", raw_conf=" << raw_conf
-                          << " (indices: x=" << idx_kpt_x << ", y=" << idx_kpt_y 
-                          << ", conf=" << idx_kpt_conf << ")" << std::endl;
-                if (k == 2) logged_kpt_debug = true;
-            }
             
             det.keypoints[k].x = raw_x;   // Pixel coordinates
             det.keypoints[k].y = raw_y;   // Pixel coordinates
@@ -755,12 +741,6 @@ std::vector<Detection> YOLODetector::applyNMS(const std::vector<Detection>& dete
     // Log NMS statistics (reduced logging for performance)
     static int nms_call_count = 0;
     nms_call_count++;
-    if (nms_call_count <= 3) {  // Log only first 3 calls
-        std::cout << "[DEBUG NMS] Call " << nms_call_count << ": "
-                  << "Input: " << input_count
-                  << ", After NMS: " << result.size()
-                  << " (threshold=" << nms_threshold_ << ")" << std::endl;
-    }
     
     return result;
 }
@@ -1000,10 +980,6 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
         // Log before writing
         {
             std::lock_guard<std::mutex> lock(frame_log_mutex);
-            if (frame_count <= 10) {
-                std::cout << "[DEBUG Write] Frame " << frame_numbers[b] << ": Writing " 
-                          << detections.size() << " detections to " << output_paths[b] << std::endl;
-            }
         }
         
         if (!writeDetectionsToFile(detections, output_paths[b], frame_numbers[b])) {
