@@ -670,13 +670,15 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         batch_output_paths, batch_frame_numbers,
                         batch_original_widths, batch_original_heights,
                         batch_detections,
-                        batch_roi_offset_x, batch_roi_offset_y
+                        batch_roi_offset_x, batch_roi_offset_y,
+                        batch_true_original_widths, batch_true_original_heights
                     );
                 } else {
                     success = engine_group->detectors[detector_id]->runWithPreprocessedBatch(
                         batch_tensors, batch_output_paths, batch_frame_numbers,
                         batch_original_widths, batch_original_heights,
-                        batch_roi_offset_x, batch_roi_offset_y
+                        batch_roi_offset_x, batch_roi_offset_y,
+                        batch_true_original_widths, batch_true_original_heights
                     );
                 }
                 
@@ -783,7 +785,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     {output_path}, {frame_data.frame_number},
                     {frame_data.original_width}, {frame_data.original_height},
                     all_detections,
-                    {frame_data.roi_offset_x}, {frame_data.roi_offset_y}
+                    {frame_data.roi_offset_x}, {frame_data.roi_offset_y},
+                    {frame_data.true_original_width}, {frame_data.true_original_height}
                 );
                 if (success && !all_detections.empty()) {
                     detections = all_detections[0];
@@ -792,7 +795,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 success = engine_group->detectors[detector_id]->runWithPreprocessedData(
                     tensor, output_path, frame_data.frame_number,
                     frame_data.original_width, frame_data.original_height,
-                    frame_data.roi_offset_x, frame_data.roi_offset_y
+                    frame_data.roi_offset_x, frame_data.roi_offset_y,
+                    frame_data.true_original_width, frame_data.true_original_height
                 );
             }
             

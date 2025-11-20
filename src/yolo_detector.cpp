@@ -323,7 +323,9 @@ bool YOLODetector::runWithPreprocessedData(const std::shared_ptr<std::vector<flo
                                            int original_width,
                                            int original_height,
                                            int roi_offset_x,
-                                           int roi_offset_y) {
+                                           int roi_offset_y,
+                                           int true_original_width,
+                                           int true_original_height) {
     if (batch_size_ != 1) {
         std::cerr << "Error: runWithPreprocessedData requires batch_size=1 (current batch_size="
                   << batch_size_ << ")" << std::endl;
@@ -332,7 +334,8 @@ bool YOLODetector::runWithPreprocessedData(const std::shared_ptr<std::vector<flo
     
     return runWithPreprocessedBatch({input_data}, {output_path}, {frame_number},
                                     {original_width}, {original_height}, 
-                                    {roi_offset_x}, {roi_offset_y});
+                                    {roi_offset_x}, {roi_offset_y},
+                                    {true_original_width}, {true_original_height});
 }
 
 bool YOLODetector::runWithPreprocessedBatch(
@@ -342,7 +345,9 @@ bool YOLODetector::runWithPreprocessedBatch(
     const std::vector<int>& original_widths,
     const std::vector<int>& original_heights,
     const std::vector<int>& roi_offset_x,
-    const std::vector<int>& roi_offset_y) {
+    const std::vector<int>& roi_offset_y,
+    const std::vector<int>& true_original_widths,
+    const std::vector<int>& true_original_heights) {
     
     if (!context_ || !input_buffer_ || !output_buffer_) {
         std::cerr << "Error: Detector not initialized" << std::endl;
@@ -370,7 +375,8 @@ bool YOLODetector::runWithPreprocessedBatch(
         return false;
     }
     
-    bool ok = runInference(output_paths, frame_numbers, original_widths, original_heights, dump_idx, roi_offset_x, roi_offset_y);
+    bool ok = runInference(output_paths, frame_numbers, original_widths, original_heights, dump_idx, 
+                           roi_offset_x, roi_offset_y, true_original_widths, true_original_heights);
     return ok;
 }
 
@@ -1137,10 +1143,13 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
             // Get ROI offset for this batch item
             int roi_x = (b < static_cast<int>(roi_offset_x.size())) ? roi_offset_x[b] : 0;
             int roi_y = (b < static_cast<int>(roi_offset_y.size())) ? roi_offset_y[b] : 0;
-            // For now, pass 0 for true original dimensions (will use fallback: original_width + roi_offset)
-            // TODO: Pass true original dimensions from FrameData
+            // Get true original dimensions for this batch item
+            int true_orig_w = (b < static_cast<int>(true_original_widths.size()) && true_original_widths[b] > 0) 
+                             ? true_original_widths[b] : 0;
+            int true_orig_h = (b < static_cast<int>(true_original_heights.size()) && true_original_heights[b] > 0) 
+                             ? true_original_heights[b] : 0;
             for (auto& det : detections) {
-                scaleDetectionToOriginal(det, orig_w, orig_h, roi_x, roi_y, 0, 0);
+                scaleDetectionToOriginal(det, orig_w, orig_h, roi_x, roi_y, true_orig_w, true_orig_h);
             }
         } else {
             // Warning: No original dimensions provided, bbox coordinates are in normalized [0,1] format
@@ -1185,7 +1194,9 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::shared_ptr<
                                                const std::vector<int>& original_heights,
                                                std::vector<std::vector<Detection>>& all_detections,
                                                const std::vector<int>& roi_offset_x,
-                                               const std::vector<int>& roi_offset_y) {
+                                               const std::vector<int>& roi_offset_y,
+                                               const std::vector<int>& true_original_widths,
+                                               const std::vector<int>& true_original_heights) {
     if (static_cast<int>(inputs.size()) != batch_size_ ||
         static_cast<int>(output_paths.size()) != batch_size_ ||
         static_cast<int>(frame_numbers.size()) != batch_size_) {
@@ -1688,10 +1699,13 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::shared_ptr<
             // Get ROI offset for this batch item
             int roi_x = (b < static_cast<int>(roi_offset_x.size())) ? roi_offset_x[b] : 0;
             int roi_y = (b < static_cast<int>(roi_offset_y.size())) ? roi_offset_y[b] : 0;
-            // For now, pass 0 for true original dimensions (will use fallback: original_width + roi_offset)
-            // TODO: Pass true original dimensions from FrameData
+            // Get true original dimensions for this batch item
+            int true_orig_w = (b < static_cast<int>(true_original_widths.size()) && true_original_widths[b] > 0) 
+                             ? true_original_widths[b] : 0;
+            int true_orig_h = (b < static_cast<int>(true_original_heights.size()) && true_original_heights[b] > 0) 
+                             ? true_original_heights[b] : 0;
             for (auto& det : detections_for_file) {
-                scaleDetectionToOriginal(det, orig_w, orig_h, roi_x, roi_y, 0, 0);
+                scaleDetectionToOriginal(det, orig_w, orig_h, roi_x, roi_y, true_orig_w, true_orig_h);
             }
             if (!writeDetectionsToFile(detections_for_file, output_paths[b], frame_numbers[b])) {
                 std::cerr << "Error: Failed to write detections for frame " << frame_numbers[b] << std::endl;

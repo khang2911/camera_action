@@ -47,14 +47,17 @@ public:
     bool runWithPreprocessedData(const std::shared_ptr<std::vector<float>>& input_data,
                                  const std::string& output_path, int frame_number,
                                  int original_width = 0, int original_height = 0,
-                                 int roi_offset_x = 0, int roi_offset_y = 0);
+                                 int roi_offset_x = 0, int roi_offset_y = 0,
+                                 int true_original_width = 0, int true_original_height = 0);
     bool runWithPreprocessedBatch(const std::vector<std::shared_ptr<std::vector<float>>>& inputs,
                                   const std::vector<std::string>& output_paths,
                                   const std::vector<int>& frame_numbers,
                                   const std::vector<int>& original_widths = {},
                                   const std::vector<int>& original_heights = {},
                                   const std::vector<int>& roi_offset_x = {},
-                                  const std::vector<int>& roi_offset_y = {});
+                                  const std::vector<int>& roi_offset_y = {},
+                                  const std::vector<int>& true_original_widths = {},
+                                  const std::vector<int>& true_original_heights = {});
     
     ModelType getModelType() const { return model_type_; }
     int getBatchSize() const { return batch_size_; }
@@ -74,7 +77,9 @@ public:
                                     const std::vector<int>& original_heights,
                                     std::vector<std::vector<Detection>>& all_detections,
                                     const std::vector<int>& roi_offset_x = {},
-                                    const std::vector<int>& roi_offset_y = {});
+                                    const std::vector<int>& roi_offset_y = {},
+                                    const std::vector<int>& true_original_widths = {},
+                                    const std::vector<int>& true_original_heights = {});
     
     // Draw detections on frame (for debug visualization)
     void drawDetections(cv::Mat& frame, const std::vector<Detection>& detections);
@@ -140,7 +145,9 @@ private:
                       const std::vector<int>& original_heights,
                       int dump_batch_index,
                       const std::vector<int>& roi_offset_x = {},
-                      const std::vector<int>& roi_offset_y = {});
+                      const std::vector<int>& roi_offset_y = {},
+                      const std::vector<int>& true_original_widths = {},
+                      const std::vector<int>& true_original_heights = {});
     
     bool copyInputsToDevice(const std::vector<std::shared_ptr<std::vector<float>>>& inputs);
     
