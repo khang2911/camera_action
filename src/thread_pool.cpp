@@ -697,7 +697,7 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
     
     cv::Mat frame;
     int frame_count = 0;
-    int global_frame_number = frame_start_offset;
+    int global_frame_number = frame_start_offset;  // Keep for internal tracking if needed
     while (!stop_flag_ && reader.readFrame(frame)) {
             // Check debug mode limit first (takes priority over global limit)
             // frame_count is the number of frames already processed, so check BEFORE processing this one
@@ -715,7 +715,8 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
             
             // Create frame data with original frame (shared to preprocessor queue)
             // Note: Frame is NOT cropped here - ROI cropping is applied per-engine in preprocessor
-            FrameData frame_data(frame.clone(), video_id, global_frame_number, clip.path, 
+            // Use frame_count (0-based index within this video) for bin file output, not global_frame_number
+            FrameData frame_data(frame.clone(), video_id, frame_count, clip.path, 
                                 clip.record_id, clip.record_date, clip.serial,
                                 message_key, video_key, clip.video_index,
                                 clip.has_roi, clip.roi_x1, clip.roi_y1, clip.roi_x2, clip.roi_y2);
@@ -763,12 +764,10 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
                  std::to_string(frame_count) + " frames)");
     
     if (finalize_message) {
-    if (finalize_message) {
         markVideoReadingComplete(message_key);
     }
     
     return frame_count;
-    }
 }
 
 void ThreadPool::preprocessorWorker(int worker_id) {
