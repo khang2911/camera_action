@@ -224,7 +224,39 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
                 }
             }
         }
- 
+        
+        // Parse Redis queue configuration
+        if (config["redis_queue"]) {
+            const auto& redis = config["redis_queue"];
+            if (redis["enabled"]) {
+                try {
+                    use_redis_queue_ = redis["enabled"].as<bool>();
+                } catch (const YAML::Exception&) {
+                    std::string enabled_str = redis["enabled"].as<std::string>();
+                    std::transform(enabled_str.begin(), enabled_str.end(), enabled_str.begin(), ::tolower);
+                    use_redis_queue_ = (enabled_str == "true" || enabled_str == "1" || enabled_str == "yes");
+                }
+            }
+            
+            if (use_redis_queue_) {
+                if (redis["host"]) {
+                    redis_host_ = redis["host"].as<std::string>();
+                }
+                if (redis["port"]) {
+                    redis_port_ = redis["port"].as<int>();
+                }
+                if (redis["password"]) {
+                    redis_password_ = redis["password"].as<std::string>();
+                }
+                if (redis["input_queue"]) {
+                    input_queue_name_ = redis["input_queue"].as<std::string>();
+                }
+                if (redis["output_queue"]) {
+                    output_queue_name_ = redis["output_queue"].as<std::string>();
+                }
+            }
+        }
+
         return true;
     } catch (const YAML::Exception& ex) {
         std::cerr << "[Config] Failed to load configuration '" << config_path << "': " << ex.what() << std::endl;

@@ -38,6 +38,16 @@ models:
     roi_cropping: false                   # Enable ROI cropping for this engine (uses config.box from video_list.jsonl)
 
 # Video Sources
+# Option 1: Use Redis queue (recommended for production)
+redis_queue:
+  enabled: true                    # Set to true to use Redis queue mode
+  host: "localhost"                # Redis server host
+  port: 6379                        # Redis server port
+  password: ""                      # Redis password (leave empty if no password)
+  input_queue: "input_queue"        # Redis queue name for input messages
+  output_queue: "output_queue"      # Redis queue name for output messages
+
+# Option 2: Use file-based video list (alternative to Redis)
 videos:
   list_file: "./video_list.jsonl"  # Path to JSONL file containing video metadata with time ranges
   # Alternative: use list_file_jsonl for explicit JSONL format

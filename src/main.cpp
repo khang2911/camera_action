@@ -3,9 +3,21 @@
 #include <string>
 #include <iomanip>
 #include <sstream>
+#include <memory>
+#include <csignal>
+#include <atomic>
 #include "thread_pool.h"
 #include "config_parser.h"
 #include "logger.h"
+#include "redis_queue.h"
+
+// Global flag for signal handling
+std::atomic<bool> g_stop_requested(false);
+
+void signalHandler(int signal) {
+    LOG_INFO("Main", "Received signal " + std::to_string(signal) + ". Initiating graceful shutdown...");
+    g_stop_requested = true;
+}
 
 void printUsage(const char* program_name) {
     std::cout << "Usage: " << program_name << " [options]\n"
@@ -68,6 +80,9 @@ int main(int argc, char* argv[]) {
         }
     }
     
+    // Check if using Redis queue mode
+    bool use_redis = config.useRedisQueue();
+    
     // Validate configuration
     if (!config.isValid()) {
         std::cerr << "Error: Invalid configuration. Missing required parameters:" << std::endl;
@@ -75,7 +90,7 @@ int main(int argc, char* argv[]) {
         if (engine_configs.empty()) {
             std::cerr << "  - Model paths (use --engine or set in config file)" << std::endl;
         }
-        if (config.getVideoClips().empty()) {
+        if (!use_redis && config.getVideoClips().empty()) {
             std::cerr << "  - Video sources (use videos.list_file or set via --videos)" << std::endl;
         }
         if (config.getNumReaders() <= 0) {
@@ -91,6 +106,10 @@ int main(int argc, char* argv[]) {
     std::string output_dir = config.getOutputDir();
     const auto& video_clips = config.getVideoClips();
     std::vector<EngineConfig> engine_configs = config.getEngineConfigs();
+    
+    // Get debug mode settings
+    bool debug_mode = config.isDebugMode();
+    int max_frames_per_video = config.getMaxFramesPerVideo();
     
     // Initialize logger
     Logger& logger = Logger::getInstance();
@@ -118,11 +137,17 @@ int main(int argc, char* argv[]) {
                  ", gpu_id=" + std::to_string(engine_configs[i].gpu_id) + "]");
     }
     LOG_INFO("Main", "Output directory: " + output_dir);
-    LOG_INFO("Main", "Number of videos: " + std::to_string(video_clips.size()));
     
-    // Get debug mode settings
-    bool debug_mode = config.isDebugMode();
-    int max_frames_per_video = config.getMaxFramesPerVideo();
+    if (use_redis) {
+        LOG_INFO("Main", "=== REDIS QUEUE MODE ===");
+        LOG_INFO("Main", "Redis host: " + config.getRedisHost());
+        LOG_INFO("Main", "Redis port: " + std::to_string(config.getRedisPort()));
+        LOG_INFO("Main", "Input queue: " + config.getInputQueueName());
+        LOG_INFO("Main", "Output queue: " + config.getOutputQueueName());
+    } else {
+        LOG_INFO("Main", "Number of videos: " + std::to_string(video_clips.size()));
+    }
+    
     if (debug_mode) {
         LOG_INFO("Main", "=== DEBUG MODE ENABLED ===");
         if (max_frames_per_video > 0) {
@@ -133,22 +158,74 @@ int main(int argc, char* argv[]) {
     }
     
     // Create thread pool
-    ThreadPool pool(num_readers, num_preprocessors, video_clips, engine_configs, output_dir,
-                    debug_mode, max_frames_per_video);
+    std::unique_ptr<ThreadPool> pool;
+    if (use_redis) {
+        // Redis queue mode
+        auto input_queue = std::make_shared<RedisQueue>(
+            config.getRedisHost(), config.getRedisPort(), config.getRedisPassword());
+        auto output_queue = std::make_shared<RedisQueue>(
+            config.getRedisHost(), config.getRedisPort(), config.getRedisPassword());
+        
+        if (!input_queue->connect()) {
+            LOG_ERROR("Main", "Failed to connect to Redis input queue");
+            return 1;
+        }
+        if (!output_queue->connect()) {
+            LOG_ERROR("Main", "Failed to connect to Redis output queue");
+            return 1;
+        }
+        
+        pool = std::make_unique<ThreadPool>(
+            num_readers, num_preprocessors, engine_configs, output_dir,
+            input_queue, output_queue, config.getInputQueueName(), config.getOutputQueueName(),
+            debug_mode, max_frames_per_video);
+    } else {
+        // File-based mode
+        pool = std::make_unique<ThreadPool>(
+            num_readers, num_preprocessors, video_clips, engine_configs, output_dir,
+            debug_mode, max_frames_per_video);
+    }
+    
+    // Set up signal handlers for graceful shutdown (especially important for Redis mode)
+    std::signal(SIGINT, signalHandler);   // Ctrl+C
+    std::signal(SIGTERM, signalHandler); // Termination signal
     
     // Start processing
     LOG_INFO("Main", "Starting processing...");
-    pool.start();
+    pool->start();
     
-    // Wait for completion
-    pool.waitForCompletion();
+    // For Redis mode, monitor stop flag and stop thread pool when signal is received
+    if (use_redis) {
+        LOG_INFO("Main", "Running in continuous mode. Waiting for messages from Redis queue...");
+        LOG_INFO("Main", "Press Ctrl+C to stop gracefully");
+        
+        // Wait for completion (which will wait indefinitely in Redis mode)
+        // Also check for stop signal
+        std::thread stop_monitor([&pool]() {
+            while (!g_stop_requested) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+            LOG_INFO("Main", "Stop signal received, stopping thread pool...");
+            pool->stop();
+        });
+        
+        pool->waitForCompletion();
+        
+        // Wait for stop monitor to finish
+        if (stop_monitor.joinable()) {
+            stop_monitor.join();
+        }
+    } else {
+        // File-based mode: wait for completion normally
+        pool->waitForCompletion();
+    }
     
     // Print final statistics
     long long frames_read, frames_preprocessed, reader_total_time_ms, preprocessor_total_time_ms;
     std::vector<long long> frames_detected, frames_failed;
     std::vector<long long> engine_total_time_ms, engine_frame_count;
     std::chrono::steady_clock::time_point start_time;
-    pool.getStatisticsSnapshot(frames_read, frames_preprocessed, frames_detected, frames_failed,
+    pool->getStatisticsSnapshot(frames_read, frames_preprocessed, frames_detected, frames_failed,
                                reader_total_time_ms, preprocessor_total_time_ms,
                                engine_total_time_ms, engine_frame_count, start_time);
     

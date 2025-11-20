@@ -13,6 +13,7 @@
 #include "yolo_detector.h"
 #include "config_parser.h"
 #include "logger.h"
+#include "redis_queue.h"
 
 struct EngineGroup {
     int engine_id;
@@ -56,11 +57,24 @@ public:
                bool debug_mode = false,
                int max_frames_per_video = 0);
     
+    // Constructor for Redis queue mode
+    ThreadPool(int num_readers,
+               int num_preprocessors,
+               const std::vector<EngineConfig>& engine_configs,
+               const std::string& output_dir,
+               std::shared_ptr<RedisQueue> input_queue,
+               std::shared_ptr<RedisQueue> output_queue,
+               const std::string& input_queue_name,
+               const std::string& output_queue_name,
+               bool debug_mode = false,
+               int max_frames_per_video = 0);
+    
     ~ThreadPool();
     
     void start();
     void stop();
     void waitForCompletion();
+    bool isStopped() const { return stop_flag_; }
     
     // Statistics getters
     struct Statistics {
@@ -96,6 +110,12 @@ private:
     std::string output_dir_;
     bool debug_mode_;
     int max_frames_per_video_;
+    
+    // Redis queue mode
+    bool use_redis_queue_;
+    std::shared_ptr<RedisQueue> input_queue_;
+    std::shared_ptr<RedisQueue> output_queue_;
+    std::string output_queue_name_;
     
     std::vector<std::thread> reader_threads_;
     std::vector<std::thread> preprocessor_threads_;

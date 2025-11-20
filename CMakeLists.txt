@@ -56,6 +56,29 @@ find_library(TensorRT_LIBRARY nvinfer
 # yaml-cpp (for configuration file parsing)
 find_package(yaml-cpp REQUIRED)
 
+# Redis (hiredis)
+find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h
+    PATHS
+    /usr/include
+    /usr/local/include
+    ${HIREDIS_ROOT}/include
+)
+
+find_library(HIREDIS_LIBRARY hiredis
+    PATHS
+    /usr/lib
+    /usr/lib/x86_64-linux-gnu
+    /usr/local/lib
+    ${HIREDIS_ROOT}/lib
+)
+
+if(HIREDIS_INCLUDE_DIR AND HIREDIS_LIBRARY)
+    message(STATUS "hiredis found")
+    message(STATUS "  HIREDIS_INCLUDE_DIR: ${HIREDIS_INCLUDE_DIR}")
+else()
+    message(FATAL_ERROR "hiredis library not found. Please install hiredis development library.")
+endif()
+
 # Build type
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -67,6 +90,7 @@ include_directories(
     ${OpenCV_INCLUDE_DIRS}
     ${TensorRT_INCLUDE_DIR}
     ${yaml-cpp_INCLUDE_DIRS}
+    ${HIREDIS_INCLUDE_DIR}
 )
 
 # Source files
@@ -79,6 +103,7 @@ set(SOURCES
     src/frame_queue.cpp
     src/config_parser.cpp
     src/logger.cpp
+    src/redis_queue.cpp
 )
 
 # Header files
@@ -91,6 +116,7 @@ set(HEADERS
     include/video_clip.h
     include/config_parser.h
     include/logger.h
+    include/redis_queue.h
 )
 
 # Libraries
@@ -104,6 +130,7 @@ set(ALL_LIBS
     cudart
     pthread
     ${OpenMP_CXX_LIBRARIES}
+    ${HIREDIS_LIBRARY}
 )
 
 # Create executable

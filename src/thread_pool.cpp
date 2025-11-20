@@ -2,6 +2,8 @@
 #include "video_reader.h"
 #include "logger.h"
 #include "yolo_detector.h"
+#include "redis_queue.h"
+#include "config_parser.h"
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -9,6 +11,7 @@
 #include <cstdlib>
 #include <chrono>
 #include <thread>
+#include <fstream>
 
 EngineGroup::~EngineGroup() {
     std::lock_guard<std::mutex> lock(buffer_pool_mutex);
@@ -59,6 +62,7 @@ ThreadPool::ThreadPool(int num_readers,
       output_dir_(output_dir),
       debug_mode_(debug_mode),
       max_frames_per_video_(max_frames_per_video),
+      use_redis_queue_(false),
       stop_flag_(false) {
     
     
@@ -87,6 +91,9 @@ ThreadPool::ThreadPool(int num_readers,
         std::lock_guard<std::mutex> lock(video_mutex_);
         video_processed_.assign(video_clips_.size(), false);
     }
+    
+    // Initialize Redis queue mode flag
+    use_redis_queue_ = false;
     
     // Initialize engine groups (one per engine)
     for (size_t i = 0; i < engine_configs.size(); ++i) {
@@ -127,6 +134,92 @@ ThreadPool::ThreadPool(int num_readers,
     }
     
     LOG_INFO("ThreadPool", "ThreadPool initialized with " + std::to_string(num_readers) + 
+             " reader threads, " + std::to_string(num_preprocessors_) + " preprocessor threads, and " +
+             std::to_string(engine_configs.size()) + " engines");
+}
+
+// Redis queue mode constructor
+ThreadPool::ThreadPool(int num_readers,
+                       int num_preprocessors,
+                       const std::vector<EngineConfig>& engine_configs,
+                       const std::string& output_dir,
+                       std::shared_ptr<RedisQueue> input_queue,
+                       std::shared_ptr<RedisQueue> output_queue,
+                       const std::string& input_queue_name,
+                       const std::string& output_queue_name,
+                       bool debug_mode,
+                       int max_frames_per_video)
+    : num_readers_(num_readers),
+      num_preprocessors_(num_preprocessors > 0 ? num_preprocessors : num_readers),
+      output_dir_(output_dir),
+      debug_mode_(debug_mode),
+      max_frames_per_video_(max_frames_per_video),
+      use_redis_queue_(true),
+      input_queue_(input_queue),
+      output_queue_(output_queue),
+      input_queue_name_(input_queue_name),
+      output_queue_name_(output_queue_name),
+      stop_flag_(false) {
+    
+    // Log debug mode status
+    if (debug_mode_) {
+        LOG_INFO("ThreadPool", "Debug mode enabled: max_frames_per_video=" + 
+                 std::to_string(max_frames_per_video_));
+    }
+    
+    // Initialize statistics
+    {
+        std::lock_guard<std::mutex> lock(stats_.stats_mutex);
+        stats_.frames_detected.resize(engine_configs.size(), 0);
+        stats_.frames_failed.resize(engine_configs.size(), 0);
+        stats_.engine_total_time_ms.resize(engine_configs.size(), 0);
+        stats_.engine_frame_count.resize(engine_configs.size(), 0);
+    }
+    stats_.start_time = std::chrono::steady_clock::now();
+    
+    // Create output directory if it doesn't exist
+    std::filesystem::create_directories(output_dir);
+    raw_frame_queue_ = std::make_unique<FrameQueue>(500);
+    
+    // Initialize engine groups (one per engine)
+    for (size_t i = 0; i < engine_configs.size(); ++i) {
+        const auto& config = engine_configs[i];
+        auto engine_group = std::make_unique<EngineGroup>(
+            static_cast<int>(i), config.path, config.name, config.num_detectors,
+            config.input_width, config.input_height, config.roi_cropping
+        );
+        
+        LOG_INFO("ThreadPool", "Initializing engine " + config.name + " with " + 
+                 std::to_string(config.num_detectors) + " detector threads");
+        
+        // Initialize detectors for this engine
+        for (int j = 0; j < config.num_detectors; ++j) {
+            auto detector = std::make_unique<YOLODetector>(
+                config.path, config.type, config.batch_size,
+                config.input_width, config.input_height,
+                config.conf_threshold, config.nms_threshold, config.gpu_id
+            );
+            if (!detector->initialize()) {
+                LOG_ERROR("ThreadPool", "Failed to initialize detector " + std::to_string(j) + 
+                         " for engine " + config.name);
+            } else {
+                std::string type_str = (config.type == ModelType::POSE) ? "pose" : "detection";
+                LOG_DEBUG("ThreadPool", "Detector " + std::to_string(j) + " (" + type_str + 
+                         ", batch_size=" + std::to_string(detector->getBatchSize()) +
+                         ", input_size=" + std::to_string(detector->getInputWidth()) + "x" + 
+                         std::to_string(detector->getInputHeight()) +
+                         ", conf_threshold=" + std::to_string(config.conf_threshold) +
+                         ", nms_threshold=" + std::to_string(config.nms_threshold) +
+                         ", gpu_id=" + std::to_string(detector->getGpuId()) +
+                         ") initialized for engine " + config.name);
+            }
+            engine_group->detectors.push_back(std::move(detector));
+        }
+        
+        engine_groups_.push_back(std::move(engine_group));
+    }
+    
+    LOG_INFO("ThreadPool", "ThreadPool initialized (Redis mode) with " + std::to_string(num_readers) + 
              " reader threads, " + std::to_string(num_preprocessors_) + " preprocessor threads, and " +
              std::to_string(engine_configs.size()) + " engines");
 }
@@ -233,77 +326,92 @@ void ThreadPool::stop() {
 }
 
 void ThreadPool::waitForCompletion() {
-    LOG_INFO("ThreadPool", "Waiting for all processing to complete...");
-    
-    // Wait for all videos to be processed and all queues to be empty
-    bool all_done = false;
-    int consecutive_empty_checks = 0;
-    const int REQUIRED_EMPTY_CHECKS = 20;  // Wait 2 seconds (20 * 100ms) with empty queues
-    
-    while (!all_done && !stop_flag_) {
-        // Check if all videos have been processed
-        bool all_videos_processed = true;
-        {
-            std::lock_guard<std::mutex> lock(video_mutex_);
-            for (size_t i = 0; i < video_processed_.size(); ++i) {
-                if (!video_processed_[i]) {
-                    all_videos_processed = false;
+    if (use_redis_queue_) {
+        // Redis queue mode: keep running indefinitely, waiting for new messages
+        LOG_INFO("ThreadPool", "Redis queue mode: Process will run continuously, waiting for messages...");
+        LOG_INFO("ThreadPool", "Press Ctrl+C to stop the process");
+        
+        // Wait indefinitely until stop_flag_ is set (by signal handler or external stop)
+        while (!stop_flag_) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+        
+        LOG_INFO("ThreadPool", "Stop signal received. Stopping all threads...");
+        stop();
+    } else {
+        // File-based mode: wait for all videos to be processed
+        LOG_INFO("ThreadPool", "Waiting for all processing to complete...");
+        
+        // Wait for all videos to be processed and all queues to be empty
+        bool all_done = false;
+        int consecutive_empty_checks = 0;
+        const int REQUIRED_EMPTY_CHECKS = 20;  // Wait 2 seconds (20 * 100ms) with empty queues
+        
+        while (!all_done && !stop_flag_) {
+            // Check if all videos have been processed
+            bool all_videos_processed = true;
+            {
+                std::lock_guard<std::mutex> lock(video_mutex_);
+                for (size_t i = 0; i < video_processed_.size(); ++i) {
+                    if (!video_processed_[i]) {
+                        all_videos_processed = false;
+                        break;
+                    }
+                }
+            }
+            
+            // Check if all queues are empty
+            bool all_queues_empty = true;
+            if (raw_frame_queue_ && !raw_frame_queue_->empty()) {
+                all_queues_empty = false;
+            }
+            for (auto& engine_group : engine_groups_) {
+                if (!engine_group->frame_queue->empty()) {
+                    all_queues_empty = false;
                     break;
                 }
             }
-        }
-        
-        // Check if all queues are empty
-        bool all_queues_empty = true;
-        if (raw_frame_queue_ && !raw_frame_queue_->empty()) {
-            all_queues_empty = false;
-        }
-        for (auto& engine_group : engine_groups_) {
-            if (!engine_group->frame_queue->empty()) {
-                all_queues_empty = false;
-                break;
-            }
-        }
-        
-        if (all_videos_processed && all_queues_empty) {
-            // Both conditions met, but wait a bit more to ensure detectors finish processing
-            consecutive_empty_checks++;
-            if (consecutive_empty_checks >= REQUIRED_EMPTY_CHECKS) {
-                // Queues have been empty for required time, processing should be done
-                all_done = true;
-                LOG_INFO("ThreadPool", "All videos processed and queues empty for " + 
-                         std::to_string(REQUIRED_EMPTY_CHECKS * 100) + "ms. Processing complete.");
-            } else {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
-        } else {
-            // Reset counter if conditions not met
-            consecutive_empty_checks = 0;
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
             
-            // Log status periodically
-            if (consecutive_empty_checks == 0) {
-                int videos_remaining = 0;
-                {
-                    std::lock_guard<std::mutex> lock(video_mutex_);
-                    for (size_t i = 0; i < video_processed_.size(); ++i) {
-                        if (!video_processed_[i]) videos_remaining++;
+            if (all_videos_processed && all_queues_empty) {
+                // Both conditions met, but wait a bit more to ensure detectors finish processing
+                consecutive_empty_checks++;
+                if (consecutive_empty_checks >= REQUIRED_EMPTY_CHECKS) {
+                    // Queues have been empty for required time, processing should be done
+                    all_done = true;
+                    LOG_INFO("ThreadPool", "All videos processed and queues empty for " + 
+                             std::to_string(REQUIRED_EMPTY_CHECKS * 100) + "ms. Processing complete.");
+                } else {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
+            } else {
+                // Reset counter if conditions not met
+                consecutive_empty_checks = 0;
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                
+                // Log status periodically
+                if (consecutive_empty_checks == 0) {
+                    int videos_remaining = 0;
+                    {
+                        std::lock_guard<std::mutex> lock(video_mutex_);
+                        for (size_t i = 0; i < video_processed_.size(); ++i) {
+                            if (!video_processed_[i]) videos_remaining++;
+                        }
                     }
+                    size_t total_queue_size = 0;
+                    for (auto& engine_group : engine_groups_) {
+                        total_queue_size += engine_group->frame_queue->size();
+                    }
+                    LOG_DEBUG("ThreadPool", "Waiting... Videos remaining: " + std::to_string(videos_remaining) + 
+                             ", Total queue size: " + std::to_string(total_queue_size));
                 }
-                size_t total_queue_size = 0;
-                for (auto& engine_group : engine_groups_) {
-                    total_queue_size += engine_group->frame_queue->size();
-                }
-                LOG_DEBUG("ThreadPool", "Waiting... Videos remaining: " + std::to_string(videos_remaining) + 
-                         ", Total queue size: " + std::to_string(total_queue_size));
             }
         }
+        
+        LOG_INFO("ThreadPool", "All processing complete. Stopping all threads...");
+        
+        stop_flag_ = true;
+        stop();
     }
-    
-    LOG_INFO("ThreadPool", "All processing complete. Stopping all threads...");
-    
-    stop_flag_ = true;
-    stop();
 }
 
 int ThreadPool::getNextVideo() {
@@ -320,6 +428,13 @@ int ThreadPool::getNextVideo() {
 void ThreadPool::readerWorker(int reader_id) {
     LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + " started");
     
+    if (use_redis_queue_) {
+        // Redis queue mode: read messages from Redis
+        readerWorkerRedis(reader_id);
+        return;
+    }
+    
+    // File-based mode: process videos from video_clips_
     // Each reader thread processes videos until all are done
     while (!stop_flag_) {
         int video_id = getNextVideo();
@@ -331,19 +446,212 @@ void ThreadPool::readerWorker(int reader_id) {
         }
         
         const auto& clip = video_clips_[video_id];
-        LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
-                 " processing video " + std::to_string(video_id) + ": " + clip.path);
-        
-        VideoReader reader(clip, video_id);
-        
-        if (!reader.isOpened()) {
-            LOG_ERROR("Reader", "Cannot open video " + std::to_string(video_id) + ": " + clip.path);
+        processVideo(reader_id, clip, video_id);
+    }
+}
+
+void ThreadPool::readerWorkerRedis(int reader_id) {
+    LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + " started (Redis mode)");
+    LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + " waiting for messages from queue: " + input_queue_name_);
+    
+    int video_id_counter = 0;
+    int consecutive_empty_polls = 0;
+    
+    while (!stop_flag_) {
+        std::string message;
+        if (!input_queue_->popMessage(message, 1, input_queue_name_)) {  // 1 second timeout
+            // No message available, continue waiting
+            consecutive_empty_polls++;
+            
+            // Log waiting status every 30 seconds to show process is alive
+            if (consecutive_empty_polls % 30 == 0) {
+                LOG_INFO("Reader", "[WAITING] Reader " + std::to_string(reader_id) + 
+                         " waiting for messages from queue: " + input_queue_name_ + 
+                         " (alive and ready)");
+            }
             continue;
         }
         
-        cv::Mat frame;
-        int frame_count = 0;
-        while (!stop_flag_ && reader.readFrame(frame)) {
+        // Reset counter when we get a message
+        consecutive_empty_polls = 0;
+        
+        try {
+            // Parse JSON message (one line from video_list.jsonl format)
+            // Each message is a single JSON object, same format as video_list.jsonl
+            VideoClip clip = parseJsonToVideoClip(message);
+            
+            if (clip.path.empty()) {
+                LOG_WARNING("Reader", "Reader " + std::to_string(reader_id) + 
+                         " received message with empty video path, skipping");
+                continue;
+            }
+            
+            LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
+                     " processing video from Redis: " + clip.path);
+            
+            // Process the video
+            processVideo(reader_id, clip, video_id_counter, message);
+            
+            video_id_counter++;
+        } catch (const std::exception& e) {
+            LOG_ERROR("Reader", "Failed to parse Redis message: " + std::string(e.what()));
+            if (!message.empty()) {
+                size_t preview_len = std::min(200UL, message.length());
+                LOG_ERROR("Reader", "Message content (first " + std::to_string(preview_len) + " chars): " + 
+                         message.substr(0, preview_len));
+            }
+            continue;
+        }
+    }
+    
+    LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + " finished (Redis mode)");
+}
+
+VideoClip ThreadPool::parseJsonToVideoClip(const std::string& json_str) {
+    VideoClip clip;
+    
+    // Simple JSON parsing using string operations
+    // This is a basic parser - for production, consider using a proper JSON library
+    
+    // Parse playback_location
+    size_t playback_pos = json_str.find("\"playback_location\"");
+    if (playback_pos != std::string::npos) {
+        size_t colon_pos = json_str.find(":", playback_pos);
+        if (colon_pos != std::string::npos) {
+            size_t start = json_str.find("\"", colon_pos) + 1;
+            if (start != std::string::npos && start > colon_pos) {
+                size_t end = json_str.find("\"", start);
+                if (end != std::string::npos) {
+                    clip.path = json_str.substr(start, end - start);
+                }
+            }
+        }
+    }
+    
+    // Parse raw_alarm.video_start_time and video_end_time
+    size_t start_time_pos = json_str.find("\"video_start_time\"");
+    if (start_time_pos != std::string::npos) {
+        size_t colon_pos = json_str.find(":", start_time_pos);
+        if (colon_pos != std::string::npos) {
+            size_t start = json_str.find("\"", colon_pos) + 1;
+            if (start != std::string::npos && start > colon_pos) {
+                size_t end = json_str.find("\"", start);
+                if (end != std::string::npos) {
+                    std::string start_time_str = json_str.substr(start, end - start);
+                    clip.start_timestamp = ConfigParser::parseTimestamp(start_time_str);
+                }
+            }
+        }
+    }
+    
+    size_t end_time_pos = json_str.find("\"video_end_time\"");
+    if (end_time_pos != std::string::npos) {
+        size_t colon_pos = json_str.find(":", end_time_pos);
+        if (colon_pos != std::string::npos) {
+            size_t start = json_str.find("\"", colon_pos) + 1;
+            if (start != std::string::npos && start > colon_pos) {
+                size_t end = json_str.find("\"", start);
+                if (end != std::string::npos) {
+                    std::string end_time_str = json_str.substr(start, end - start);
+                    clip.end_timestamp = ConfigParser::parseTimestamp(end_time_str);
+                }
+            }
+        }
+    }
+    
+    // Parse record_list[0].moment_time and duration
+    size_t moment_time_pos = json_str.find("\"moment_time\"");
+    if (moment_time_pos != std::string::npos) {
+        size_t colon_pos = json_str.find(":", moment_time_pos);
+        if (colon_pos != std::string::npos) {
+            size_t start = json_str.find("\"", colon_pos) + 1;
+            if (start != std::string::npos && start > colon_pos) {
+                size_t end = json_str.find("\"", start);
+                if (end != std::string::npos) {
+                    std::string moment_time_str = json_str.substr(start, end - start);
+                    clip.moment_time = ConfigParser::parseTimestamp(moment_time_str);
+                }
+            }
+        }
+    }
+    
+    size_t duration_pos = json_str.find("\"duration\"");
+    if (duration_pos != std::string::npos) {
+        size_t colon_pos = json_str.find(":", duration_pos);
+        if (colon_pos != std::string::npos) {
+            std::string duration_str = json_str.substr(colon_pos + 1);
+            // Remove whitespace and find number
+            size_t num_start = duration_str.find_first_of("0123456789.-");
+            if (num_start != std::string::npos) {
+                size_t num_end = duration_str.find_first_not_of("0123456789.-", num_start);
+                if (num_end == std::string::npos) num_end = duration_str.length();
+                try {
+                    clip.duration_seconds = std::stod(duration_str.substr(num_start, num_end - num_start));
+                } catch (...) {
+                    clip.duration_seconds = 0.0;
+                }
+            }
+        }
+    }
+    
+    if (std::isfinite(clip.start_timestamp) && std::isfinite(clip.end_timestamp) && 
+        std::isfinite(clip.moment_time)) {
+        clip.has_time_window = true;
+    }
+    
+    // Parse config.box (simplified - assumes format [[x1,y1],[x2,y1],[x2,y2],[x1,y2]])
+    size_t box_pos = json_str.find("\"box\"");
+    if (box_pos != std::string::npos) {
+        size_t bracket_start = json_str.find("[[", box_pos);
+        if (bracket_start != std::string::npos) {
+            clip.has_roi = true;
+            // Simple parsing - extract first and third coordinates
+            // This is a simplified parser - for production use proper JSON library
+            std::istringstream iss(json_str.substr(bracket_start));
+            char c;
+            float x1, y1, x2, y2;
+            if (iss >> c && c == '[' && 
+                iss >> c && c == '[' &&
+                iss >> x1 >> c && c == ',' &&
+                iss >> y1 >> c && c == ']') {
+                clip.roi_x1 = x1;
+                clip.roi_y1 = y1;
+                // Find third coordinate [x2, y2]
+                size_t third_bracket = json_str.find("[[", bracket_start + 1);
+                if (third_bracket != std::string::npos) {
+                    std::istringstream iss2(json_str.substr(third_bracket));
+                    if (iss2 >> c && c == '[' &&
+                        iss2 >> x2 >> c && c == ',' &&
+                        iss2 >> y2 >> c && c == ']') {
+                        clip.roi_x2 = x2;
+                        clip.roi_y2 = y2;
+                    }
+                }
+            }
+        }
+    }
+    
+    return clip;
+}
+
+void ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id, const std::string& redis_message) {
+    LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
+             " processing video " + std::to_string(video_id) + ": " + clip.path);
+    
+    VideoReader reader(clip, video_id);
+    
+    if (!reader.isOpened()) {
+        LOG_ERROR("Reader", "Cannot open video " + std::to_string(video_id) + ": " + clip.path);
+        // Push message to output queue even if failed
+        if (use_redis_queue_ && output_queue_ && !redis_message.empty()) {
+            output_queue_->pushMessage(output_queue_name_, redis_message);
+        }
+        return;
+    }
+    
+    cv::Mat frame;
+    int frame_count = 0;
+    while (!stop_flag_ && reader.readFrame(frame)) {
             // Check debug mode limit first (takes priority over global limit)
             // frame_count is the number of frames already processed, so check BEFORE processing this one
             if (debug_mode_ && max_frames_per_video_ > 0 && frame_count >= max_frames_per_video_) {
@@ -402,6 +710,14 @@ void ThreadPool::readerWorker(int reader_id) {
         LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
                  " finished video " + std::to_string(video_id) + " (" + 
                  std::to_string(frame_count) + " frames)");
+    
+    // Push message to output queue after processing (Redis mode)
+    if (use_redis_queue_ && output_queue_ && !redis_message.empty()) {
+        if (output_queue_->pushMessage(output_queue_name_, redis_message)) {
+            LOG_INFO("Reader", "Pushed processed message to output queue: " + output_queue_name_);
+        } else {
+            LOG_ERROR("Reader", "Failed to push message to output queue: " + output_queue_name_);
+        }
     }
 }
 

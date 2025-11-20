@@ -90,6 +90,14 @@ public:
     
     bool isValid() const;
     
+    // Redis queue configuration
+    bool useRedisQueue() const { return use_redis_queue_; }
+    std::string getRedisHost() const { return redis_host_; }
+    int getRedisPort() const { return redis_port_; }
+    std::string getRedisPassword() const { return redis_password_; }
+    std::string getInputQueueName() const { return input_queue_name_; }
+    std::string getOutputQueueName() const { return output_queue_name_; }
+    
 private:
     std::vector<EngineConfig> engine_configs_;
     std::vector<VideoClip> video_clips_;
@@ -100,6 +108,14 @@ private:
     bool debug_mode_ = false;
     int max_frames_per_video_ = 0;  // 0 means no limit
     bool roi_cropping_enabled_ = false;  // Enable ROI cropping from config.box
+    
+    // Redis queue settings
+    bool use_redis_queue_ = false;
+    std::string redis_host_ = "localhost";
+    int redis_port_ = 6379;
+    std::string redis_password_ = "";
+    std::string input_queue_name_ = "input_queue";
+    std::string output_queue_name_ = "output_queue";
     
     void loadVideoListFromFile(const std::string& path);
     void loadPlainVideoList(std::istream& stream);
