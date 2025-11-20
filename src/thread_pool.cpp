@@ -492,10 +492,11 @@ void ThreadPool::preprocessorWorker(int worker_id) {
                 if (video_id >= 0 && video_id < static_cast<int>(video_clips_.size())) {
                     const VideoClip& clip = video_clips_[video_id];
                     if (clip.has_roi && !frame_to_process.empty()) {
-                        int orig_w = frame_to_process.cols;
-                        int orig_h = frame_to_process.rows;
+                        // Use true original dimensions for ROI coordinate calculation
+                        int orig_w = true_original_width;
+                        int orig_h = true_original_height;
                         
-                        // Convert normalized ROI coordinates to pixel coordinates
+                        // Convert normalized ROI coordinates to pixel coordinates in the true original frame
                         int x1 = static_cast<int>(clip.roi_x1 * orig_w);
                         int y1 = static_cast<int>(clip.roi_y1 * orig_h);
                         int x2 = static_cast<int>(clip.roi_x2 * orig_w);
@@ -512,7 +513,9 @@ void ThreadPool::preprocessorWorker(int worker_id) {
                         frame_to_process = frame_to_process(roi_rect).clone();
                         cropped_width = frame_to_process.cols;
                         cropped_height = frame_to_process.rows;
-                        // ROI offset is already set from raw_frame
+                        // Update ROI offset to the calculated crop coordinates (x1, y1) in the original frame
+                        roi_offset_x = x1;
+                        roi_offset_y = y1;
                         
                         // Debug: Log ROI cropping (first frame only)
                         static bool logged_roi_crop = false;

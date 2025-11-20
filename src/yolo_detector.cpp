@@ -1800,8 +1800,21 @@ void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, 
     }
     
     // Add ROI offset to scale from cropped frame to true original frame
+    // Debug: Log ROI offset addition
+    static int debug_roi_count = 0;
+    if (debug_roi_count < 5 && (roi_offset_x != 0 || roi_offset_y != 0)) {
+        std::cout << "[DEBUG ROI] Before ROI offset: x_center=" << x_center_orig 
+                  << ", y_center=" << y_center_orig
+                  << ", roi_offset=(" << roi_offset_x << "," << roi_offset_y << ")"
+                  << ", true_original=" << true_original_width << "x" << true_original_height << std::endl;
+        debug_roi_count++;
+    }
     x_center_orig += static_cast<float>(roi_offset_x);
     y_center_orig += static_cast<float>(roi_offset_y);
+    if (debug_roi_count <= 5 && (roi_offset_x != 0 || roi_offset_y != 0)) {
+        std::cout << "[DEBUG ROI] After ROI offset: x_center=" << x_center_orig 
+                  << ", y_center=" << y_center_orig << std::endl;
+    }
     
     // Clamp to true original image bounds (after adding ROI offset)
     // Use true original dimensions if provided, otherwise don't clamp (use very large bounds)
