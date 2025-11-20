@@ -8,6 +8,7 @@
 #include <sstream>
 #include <iomanip>
 #include <filesystem>
+#include <algorithm>
 #include <cstdlib>
 #include <chrono>
 #include <thread>
@@ -753,7 +754,8 @@ void ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id
             // Create frame data with original frame (shared to preprocessor queue)
             // Note: Frame is NOT cropped here - ROI cropping is applied per-engine in preprocessor
             FrameData frame_data(frame.clone(), video_id, reader.getFrameNumber(), clip.path, 
-                                clip.record_id, clip.record_date, clip.serial, video_key);
+                                clip.record_id, clip.record_date, clip.serial, video_key,
+                                clip.has_roi, clip.roi_x1, clip.roi_y1, clip.roi_x2, clip.roi_y2);
             // Store original frame dimensions (before any ROI cropping)
             frame_data.original_width = frame.cols;
             frame_data.original_height = frame.rows;
@@ -823,57 +825,48 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             
             // Apply ROI cropping if enabled for this engine and ROI is available
             if (engine_group->roi_cropping) {
-                // Find the video clip to get ROI coordinates
-                // We need to find which video this frame belongs to
-                int video_id = raw_frame.video_id;
-                if (video_id >= 0 && video_id < static_cast<int>(video_clips_.size())) {
-                    const VideoClip& clip = video_clips_[video_id];
-                    if (clip.has_roi && !frame_to_process.empty()) {
-                        // Use true original dimensions for ROI coordinate calculation
-                        int orig_w = true_original_width;
-                        int orig_h = true_original_height;
-                        
-                        // Convert normalized ROI coordinates to pixel coordinates in the true original frame
-                        int x1 = static_cast<int>(clip.roi_x1 * orig_w);
-                        int y1 = static_cast<int>(clip.roi_y1 * orig_h);
-                        int x2 = static_cast<int>(clip.roi_x2 * orig_w);
-                        int y2 = static_cast<int>(clip.roi_y2 * orig_h);
-                        
-                        // Clamp to frame bounds
-                        x1 = std::max(0, std::min(x1, orig_w - 1));
-                        y1 = std::max(0, std::min(y1, orig_h - 1));
-                        x2 = std::max(x1 + 1, std::min(x2, orig_w));
-                        y2 = std::max(y1 + 1, std::min(y2, orig_h));
-                        
-                        // Crop the frame for this engine
-                        cv::Rect roi_rect(x1, y1, x2 - x1, y2 - y1);
-                        frame_to_process = frame_to_process(roi_rect).clone();
-                        cropped_width = frame_to_process.cols;
-                        cropped_height = frame_to_process.rows;
-                        // Update ROI offset to the calculated crop coordinates (x1, y1) in the original frame
-                        roi_offset_x = x1;
-                        roi_offset_y = y1;
-                        
-                        // Debug: Log ROI cropping (first frame only)
-                        static bool logged_roi_crop = false;
-                        if (!logged_roi_crop && worker_id == 0) {
-                            LOG_INFO("Preprocessor", "ROI cropping applied for engine " + engine_group->engine_name +
-                                     ": original=" + std::to_string(orig_w) + "x" + std::to_string(orig_h) +
-                                     ", cropped=" + std::to_string(cropped_width) + "x" + std::to_string(cropped_height) +
-                                     ", ROI=[" + std::to_string(x1) + "," + std::to_string(y1) + "," + 
-                                     std::to_string(x2) + "," + std::to_string(y2) + "]");
-                            logged_roi_crop = true;
-                        }
-                    } else {
-                        // Debug: Log when ROI cropping is enabled but ROI not available
-                        static bool logged_roi_missing = false;
-                        if (!logged_roi_missing && worker_id == 0) {
-                            if (!clip.has_roi) {
-                                LOG_WARNING("Preprocessor", "ROI cropping enabled for engine " + engine_group->engine_name +
-                                         " but video " + std::to_string(video_id) + " has no ROI defined");
-                            }
-                            logged_roi_missing = true;
-                        }
+                if (raw_frame.has_roi && !frame_to_process.empty() &&
+                    true_original_width > 0 && true_original_height > 0) {
+                    float norm_x1 = std::clamp(raw_frame.roi_norm_x1, 0.0f, 1.0f);
+                    float norm_y1 = std::clamp(raw_frame.roi_norm_y1, 0.0f, 1.0f);
+                    float norm_x2 = std::clamp(raw_frame.roi_norm_x2, 0.0f, 1.0f);
+                    float norm_y2 = std::clamp(raw_frame.roi_norm_y2, 0.0f, 1.0f);
+                    if (norm_x2 <= norm_x1) norm_x2 = std::min(1.0f, norm_x1 + 0.001f);
+                    if (norm_y2 <= norm_y1) norm_y2 = std::min(1.0f, norm_y1 + 0.001f);
+                    
+                    int x1 = static_cast<int>(norm_x1 * true_original_width);
+                    int y1 = static_cast<int>(norm_y1 * true_original_height);
+                    int x2 = static_cast<int>(norm_x2 * true_original_width);
+                    int y2 = static_cast<int>(norm_y2 * true_original_height);
+                    
+                    // Clamp to frame bounds
+                    x1 = std::max(0, std::min(x1, true_original_width - 1));
+                    y1 = std::max(0, std::min(y1, true_original_height - 1));
+                    x2 = std::max(x1 + 1, std::min(x2, true_original_width));
+                    y2 = std::max(y1 + 1, std::min(y2, true_original_height));
+                    
+                    cv::Rect roi_rect(x1, y1, x2 - x1, y2 - y1);
+                    frame_to_process = frame_to_process(roi_rect).clone();
+                    cropped_width = frame_to_process.cols;
+                    cropped_height = frame_to_process.rows;
+                    roi_offset_x = x1;
+                    roi_offset_y = y1;
+                    
+                    static bool logged_roi_crop = false;
+                    if (!logged_roi_crop && worker_id == 0) {
+                        LOG_INFO("Preprocessor", "ROI cropping applied for engine " + engine_group->engine_name +
+                                 ": original=" + std::to_string(true_original_width) + "x" + std::to_string(true_original_height) +
+                                 ", cropped=" + std::to_string(cropped_width) + "x" + std::to_string(cropped_height) +
+                                 ", ROI=[" + std::to_string(x1) + "," + std::to_string(y1) + "," + 
+                                 std::to_string(x2) + "," + std::to_string(y2) + "]");
+                        logged_roi_crop = true;
+                    }
+                } else if (worker_id == 0) {
+                    static bool logged_roi_missing = false;
+                    if (!logged_roi_missing) {
+                        LOG_WARNING("Preprocessor", "ROI cropping enabled for engine " + engine_group->engine_name +
+                                 " but no ROI metadata available for video " + std::to_string(raw_frame.video_id));
+                        logged_roi_missing = true;
                     }
                 }
             }
@@ -890,6 +883,11 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             processed.record_date = raw_frame.record_date;  // Copy record_date for output path
             processed.serial = raw_frame.serial;
             processed.video_key = raw_frame.video_key;
+            processed.has_roi = raw_frame.has_roi;
+            processed.roi_norm_x1 = raw_frame.roi_norm_x1;
+            processed.roi_norm_y1 = raw_frame.roi_norm_y1;
+            processed.roi_norm_x2 = raw_frame.roi_norm_x2;
+            processed.roi_norm_y2 = raw_frame.roi_norm_y2;
             processed.frame = frame_to_process;  // Keep reference for potential debugging/logging
             processed.original_width = cropped_width;  // Cropped frame width (for scale calculation)
             processed.original_height = cropped_height;  // Cropped frame height (for scale calculation)
@@ -933,6 +931,28 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
     
     // Get batch size for this detector
     int batch_size = engine_group->detectors[detector_id]->getBatchSize();
+
+    auto formatDate = [](const std::string& record_date) {
+        if (record_date.length() >= 10 && record_date.find('-') != std::string::npos) {
+            std::string year = record_date.substr(0, 4);
+            std::string month = record_date.substr(5, 2);
+            std::string day = record_date.substr(8, 2);
+            return day + "-" + month + "-" + year.substr(2, 2);
+        }
+        return std::string("unknown-date");
+    };
+
+    auto serialPart = [](const std::string& serial, const std::string& fallback_key, int video_id) {
+        if (!serial.empty()) return serial;
+        if (!fallback_key.empty()) return fallback_key;
+        return std::string("video_") + std::to_string(video_id);
+    };
+
+    auto recordPart = [](const std::string& record_id, const std::string& fallback_key, int video_id) {
+        if (!record_id.empty()) return record_id;
+        if (!fallback_key.empty()) return fallback_key;
+        return std::string("video_") + std::to_string(video_id);
+    };
     
     while (!stop_flag_) {
             // For batch_size > 1, accumulate frames into a batch
@@ -949,6 +969,9 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             std::vector<cv::Mat> batch_frames;  // Store frames for debug mode
             std::vector<int> batch_video_ids;   // Store video IDs for debug mode
             std::vector<std::string> batch_video_keys;
+            std::vector<std::string> batch_serials;
+            std::vector<std::string> batch_record_ids;
+            std::vector<std::string> batch_record_dates;
             
             // Collect batch_size frames
             while (static_cast<int>(batch_tensors.size()) < batch_size && !stop_flag_) {
@@ -999,6 +1022,9 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     batch_video_ids.push_back(frame_data.video_id);
                 }
                 batch_video_keys.push_back(frame_data.video_key);
+                batch_serials.push_back(frame_data.serial);
+                batch_record_ids.push_back(frame_data.record_id);
+                batch_record_dates.push_back(frame_data.record_date);
             }
             
             // Process batch if we have enough frames
@@ -1033,17 +1059,18 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 if (debug_mode_ && success && batch_detections.size() == static_cast<size_t>(batch_size) &&
                     batch_frames.size() == static_cast<size_t>(batch_size)) {
                     for (int b = 0; b < batch_size; ++b) {
-                        // Create preprocessed frame (resized with padding) for debug visualization
                         cv::Mat debug_frame = engine_group->preprocessor->addPadding(batch_frames[b]);
                         engine_group->detectors[detector_id]->drawDetections(debug_frame, batch_detections[b]);
                         
-                        // Create debug output directory: output_dir/debug_images/video_id/engine_name/
-                        std::filesystem::path debug_dir = std::filesystem::path(output_dir_) / "debug_images" / 
-                                                           ("video_" + std::to_string(batch_video_ids[b])) /
-                                                           engine_group->engine_name;
+                        std::string serial_part = serialPart(batch_serials[b], batch_video_keys[b], batch_video_ids[b]);
+                        std::string record_part = recordPart(batch_record_ids[b], batch_video_keys[b], batch_video_ids[b]);
+                        std::string date_part = formatDate(batch_record_dates[b]);
+                        
+                        std::filesystem::path debug_dir = std::filesystem::path(output_dir_) / "debug_images" /
+                                                           engine_group->engine_name / date_part /
+                                                           (serial_part + "_" + record_part);
                         std::filesystem::create_directories(debug_dir);
                         
-                        // Save image: frame_XXXXX_engine.jpg
                         std::string image_filename = "frame_" + 
                             std::to_string(batch_frame_numbers[b]) + "_" + 
                             engine_group->engine_name + ".jpg";
@@ -1154,17 +1181,18 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             
             // Save debug image if enabled
             if (debug_mode_ && success && !frame_data.frame.empty()) {
-                // Create preprocessed frame (resized with padding) for debug visualization
                 cv::Mat debug_frame = engine_group->preprocessor->addPadding(frame_data.frame);
                 engine_group->detectors[detector_id]->drawDetections(debug_frame, detections);
                 
-                // Create debug output directory: output_dir/debug_images/video_id/engine_name/
-                std::filesystem::path debug_dir = std::filesystem::path(output_dir_) / "debug_images" / 
-                                                   ("video_" + std::to_string(frame_data.video_id)) /
-                                                   engine_group->engine_name;
+                std::string serial_part = serialPart(frame_data.serial, frame_data.video_key, frame_data.video_id);
+                std::string record_part = recordPart(frame_data.record_id, frame_data.video_key, frame_data.video_id);
+                std::string date_part = formatDate(frame_data.record_date);
+                
+                std::filesystem::path debug_dir = std::filesystem::path(output_dir_) / "debug_images" /
+                                                   engine_group->engine_name / date_part /
+                                                   (serial_part + "_" + record_part);
                 std::filesystem::create_directories(debug_dir);
                 
-                // Save image: frame_XXXXX_engine.png
                 std::string image_filename = "frame_" + 
                     std::to_string(frame_data.frame_number) + "_" + 
                     engine_group->engine_name + ".jpg";
