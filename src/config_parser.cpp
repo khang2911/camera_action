@@ -327,11 +327,11 @@ void ConfigParser::loadJsonVideoList(const std::string& path) {
         const std::string end_value = nodeToString(raw_alarm["video_end_time"]);
         const auto time_window = computeTimeWindow(start_value, end_value);
  
-        // Parse ROI box from config if ROI cropping is enabled
+        // Parse ROI box from config (always parse, engines can decide whether to use it)
         YAML::Node config_node = root["config"];
         bool has_roi_box = false;
         float roi_x1 = 0.0f, roi_y1 = 0.0f, roi_x2 = 1.0f, roi_y2 = 1.0f;
-        if (roi_cropping_enabled_ && config_node && config_node["box"] && config_node["box"].IsSequence()) {
+        if (config_node && config_node["box"] && config_node["box"].IsSequence()) {
             const auto& box = config_node["box"];
             if (box.size() >= 4) {
                 // Box format: [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]

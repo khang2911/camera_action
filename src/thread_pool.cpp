@@ -480,7 +480,7 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             int roi_offset_y = raw_frame.roi_offset_y;
             
             // Apply ROI cropping if enabled for this engine and ROI is available
-            if (engine_group->roi_cropping && raw_frame.roi_offset_x >= 0 && raw_frame.roi_offset_y >= 0) {
+            if (engine_group->roi_cropping) {
                 // Find the video clip to get ROI coordinates
                 // We need to find which video this frame belongs to
                 int video_id = raw_frame.video_id;
@@ -508,6 +508,27 @@ void ThreadPool::preprocessorWorker(int worker_id) {
                         cropped_width = frame_to_process.cols;
                         cropped_height = frame_to_process.rows;
                         // ROI offset is already set from raw_frame
+                        
+                        // Debug: Log ROI cropping (first frame only)
+                        static bool logged_roi_crop = false;
+                        if (!logged_roi_crop && worker_id == 0) {
+                            LOG_INFO("Preprocessor", "ROI cropping applied for engine " + engine_group->engine_name +
+                                     ": original=" + std::to_string(orig_w) + "x" + std::to_string(orig_h) +
+                                     ", cropped=" + std::to_string(cropped_width) + "x" + std::to_string(cropped_height) +
+                                     ", ROI=[" + std::to_string(x1) + "," + std::to_string(y1) + "," + 
+                                     std::to_string(x2) + "," + std::to_string(y2) + "]");
+                            logged_roi_crop = true;
+                        }
+                    } else {
+                        // Debug: Log when ROI cropping is enabled but ROI not available
+                        static bool logged_roi_missing = false;
+                        if (!logged_roi_missing && worker_id == 0) {
+                            if (!clip.has_roi) {
+                                LOG_WARN("Preprocessor", "ROI cropping enabled for engine " + engine_group->engine_name +
+                                         " but video " + std::to_string(video_id) + " has no ROI defined");
+                            }
+                            logged_roi_missing = true;
+                        }
                     }
                 }
             }
