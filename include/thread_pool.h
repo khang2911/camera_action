@@ -139,7 +139,7 @@ private:
     
     // Helper functions for Redis mode
     VideoClip parseJsonToVideoClip(const std::string& json_str);
-    void processVideo(int reader_id, const VideoClip& clip, int video_id);
+    void processVideo(int reader_id, const VideoClip& clip, int video_id, const std::string& redis_message = "");
     
     std::string generateOutputPath(int video_id, int frame_number, int engine_id, int detector_id, const std::string& engine_name);
 };
