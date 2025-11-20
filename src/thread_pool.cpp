@@ -1538,6 +1538,11 @@ std::string ThreadPool::tryPushOutputLocked(const std::string& message_key, Vide
     if (status.original_message.empty()) {
         return "";
     }
+    if (status.detector_outputs.empty()) {
+        LOG_WARNING("RedisOutput", "tryPushOutputLocked: message '" + message_key +
+                                   "' has no detector outputs yet, delaying push");
+        return "";
+    }
     
     status.message_pushed = true;
     std::string final_message = augmentMessageWithDetectors(status.original_message, status.detector_outputs);

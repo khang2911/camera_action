@@ -56,8 +56,8 @@ videos:
 
 # Thread Configuration
 threads:
-  num_readers: 7      # Number of reader/preprocessor threads (CPU)
-  num_preprocessors: 14  # Number of preprocessing workers (CPU)
+  num_readers: 3      # Number of reader/preprocessor threads (CPU)
+  num_preprocessors: 10  # Number of preprocessing workers (CPU)
 
 # Output Configuration
 output:
