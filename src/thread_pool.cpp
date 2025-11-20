@@ -450,7 +450,7 @@ void ThreadPool::readerWorker(int reader_id) {
         }
         
         const auto& clip = video_clips_[video_id];
-        processVideo(reader_id, clip, video_id);
+        (void)processVideo(reader_id, clip, video_id);
     }
 }
 
@@ -505,6 +505,7 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
                 continue;
             }
             
+            int frame_offset = 0;
             for (size_t idx = 0; idx < valid_clips.size(); ++idx) {
                 auto& clip = valid_clips[idx];
                 LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
@@ -512,7 +513,9 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
                 
                 bool register_message = (idx == 0);
                 bool finalize_message = (idx == valid_clips.size() - 1);
-                processVideo(reader_id, clip, video_id_counter, message, register_message, finalize_message);
+                int frames_processed = processVideo(reader_id, clip, video_id_counter, message,
+                                                    register_message, finalize_message, frame_offset);
+                frame_offset += frames_processed;
                 video_id_counter++;
             }
             
@@ -552,6 +555,7 @@ std::vector<VideoClip> ThreadPool::parseJsonToVideoClips(const std::string& json
         if (serial.empty()) serial = getString(alarm, "serial");
         std::string record_id = getString(alarm, "record_id");
         if (record_id.empty()) record_id = getString(raw_alarm, "record_id");
+        std::string tracking_key = getString(root, "tracking_key");
         
         std::string record_date;
         std::string send_at = getString(raw_alarm, "send_at");
@@ -567,6 +571,8 @@ std::vector<VideoClip> ThreadPool::parseJsonToVideoClips(const std::string& json
         double start_ts = ConfigParser::parseTimestamp(getString(raw_alarm, "video_start_time"));
         double end_ts = ConfigParser::parseTimestamp(getString(raw_alarm, "video_end_time"));
         
+        std::string message_key = !tracking_key.empty() ? tracking_key : buildMessageKey(serial, record_id);
+
         YAML::Node playback = root["playback_location"];
         YAML::Node record_list = raw_alarm ? raw_alarm["record_list"] : YAML::Node();
         size_t clip_count = 0;
@@ -608,6 +614,8 @@ std::vector<VideoClip> ThreadPool::parseJsonToVideoClips(const std::string& json
             clip.serial = serial;
             clip.record_id = record_id;
             clip.record_date = record_date;
+            clip.message_key = message_key;
+            clip.video_index = static_cast<int>(i);
             clip.start_timestamp = start_ts;
             clip.end_timestamp = end_ts;
             if (std::isfinite(start_ts) && std::isfinite(end_ts)) {
@@ -655,29 +663,36 @@ std::vector<VideoClip> ThreadPool::parseJsonToVideoClips(const std::string& json
     return clips;
 }
 
-void ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
-                              const std::string& redis_message,
-                              bool register_message,
-                              bool finalize_message) {
+int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
+                             const std::string& redis_message,
+                             bool register_message,
+                             bool finalize_message,
+                             int frame_start_offset) {
     LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
              " processing video " + std::to_string(video_id) + ": " + clip.path);
     
-    const std::string video_key = buildVideoKey(clip.serial, clip.record_id, video_id);
+    const std::string message_key = !clip.message_key.empty()
+        ? clip.message_key
+        : buildMessageKey(clip.serial, clip.record_id);
+    const std::string video_key = buildVideoKey(message_key, clip.video_index);
     
     if (register_message && use_redis_queue_ && output_queue_ && !redis_message.empty()) {
-        registerVideoMessage(video_key, redis_message);
+        registerVideoMessage(message_key, redis_message);
     }
     
     VideoReader reader(clip, video_id);
     
     if (!reader.isOpened()) {
         LOG_ERROR("Reader", "Cannot open video " + std::to_string(video_id) + ": " + clip.path);
-        markVideoReadingComplete(video_key);
-        return;
+        if (finalize_message) {
+            markVideoReadingComplete(message_key);
+        }
+        return 0;
     }
     
     cv::Mat frame;
     int frame_count = 0;
+    int global_frame_number = frame_start_offset;
     while (!stop_flag_ && reader.readFrame(frame)) {
             // Check debug mode limit first (takes priority over global limit)
             // frame_count is the number of frames already processed, so check BEFORE processing this one
@@ -695,8 +710,9 @@ void ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id
             
             // Create frame data with original frame (shared to preprocessor queue)
             // Note: Frame is NOT cropped here - ROI cropping is applied per-engine in preprocessor
-            FrameData frame_data(frame.clone(), video_id, reader.getFrameNumber(), clip.path, 
-                                clip.record_id, clip.record_date, clip.serial, video_key,
+            FrameData frame_data(frame.clone(), video_id, global_frame_number, clip.path, 
+                                clip.record_id, clip.record_date, clip.serial,
+                                message_key, video_key, clip.video_index,
                                 clip.has_roi, clip.roi_x1, clip.roi_y1, clip.roi_x2, clip.roi_y2);
             // Store original frame dimensions (before any ROI cropping)
             frame_data.original_width = frame.cols;
@@ -720,6 +736,7 @@ void ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id
             stats_.reader_total_time_ms += frame_time_ms;
             
             frame_count++;
+            global_frame_number++;
             
             // Print progress every 20 frames to show continuous operation
             if (frame_count % 20 == 0) {
@@ -741,7 +758,11 @@ void ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id
                  std::to_string(frame_count) + " frames)");
     
     if (finalize_message) {
-        markVideoReadingComplete(video_key);
+    if (finalize_message) {
+        markVideoReadingComplete(message_key);
+    }
+    
+    return frame_count;
     }
 }
 
@@ -826,7 +847,9 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             processed.record_id = raw_frame.record_id;  // Copy record_id for output path
             processed.record_date = raw_frame.record_date;  // Copy record_date for output path
             processed.serial = raw_frame.serial;
+            processed.message_key = raw_frame.message_key;
             processed.video_key = raw_frame.video_key;
+            processed.video_index = raw_frame.video_index;
             processed.has_roi = raw_frame.has_roi;
             processed.roi_norm_x1 = raw_frame.roi_norm_x1;
             processed.roi_norm_y1 = raw_frame.roi_norm_y1;
@@ -840,7 +863,7 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             processed.roi_offset_x = roi_offset_x;  // ROI offset X in true original frame
             processed.roi_offset_y = roi_offset_y;  // ROI offset Y in true original frame
             
-            registerPendingFrame(processed.video_key, engine_group->engine_name);
+            registerPendingFrame(processed.message_key, engine_group->engine_name);
             engine_group->frame_queue->push(processed);
         }
         
@@ -912,7 +935,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             std::vector<int> batch_roi_offset_y;  // ROI offset Y for each frame
             std::vector<cv::Mat> batch_frames;  // Store frames for debug mode
             std::vector<int> batch_video_ids;   // Store video IDs for debug mode
-            std::vector<std::string> batch_video_keys;
+            std::vector<std::string> batch_message_keys;
+            std::vector<int> batch_video_indices;
             std::vector<std::string> batch_serials;
             std::vector<std::string> batch_record_ids;
             std::vector<std::string> batch_record_dates;
@@ -935,10 +959,11 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 }
                 
                 // Generate output path with engine name
-                std::string serial_value = frame_data.serial.empty() ? frame_data.video_key : frame_data.serial;
-                std::string record_value = frame_data.record_id.empty() ? frame_data.video_key : frame_data.record_id;
+                std::string serial_value = serialPart(frame_data.serial, frame_data.message_key, frame_data.video_id);
+                std::string record_value = recordPart(frame_data.record_id, frame_data.message_key, frame_data.video_id);
                 std::string output_path = generateOutputPath(
-                    serial_value, record_value, frame_data.record_date, engine_group->engine_name);
+                    serial_value, record_value, frame_data.record_date, engine_group->engine_name,
+                    frame_data.video_index);
                 
                 std::shared_ptr<std::vector<float>> tensor = frame_data.preprocessed_data;
                 if (!tensor) {
@@ -965,7 +990,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     batch_frames.push_back(frame_data.frame.clone());
                     batch_video_ids.push_back(frame_data.video_id);
                 }
-                batch_video_keys.push_back(frame_data.video_key);
+                batch_message_keys.push_back(frame_data.message_key);
+                batch_video_indices.push_back(frame_data.video_index);
                 batch_serials.push_back(frame_data.serial);
                 batch_record_ids.push_back(frame_data.record_id);
                 batch_record_dates.push_back(frame_data.record_date);
@@ -1006,13 +1032,13 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         cv::Mat debug_frame = engine_group->preprocessor->addPadding(batch_frames[b]);
                         engine_group->detectors[detector_id]->drawDetections(debug_frame, batch_detections[b]);
                         
-                        std::string serial_part = serialPart(batch_serials[b], batch_video_keys[b], batch_video_ids[b]);
-                        std::string record_part = recordPart(batch_record_ids[b], batch_video_keys[b], batch_video_ids[b]);
+                        std::string serial_part = serialPart(batch_serials[b], batch_message_keys[b], batch_video_ids[b]);
+                        std::string record_part = recordPart(batch_record_ids[b], batch_message_keys[b], batch_video_ids[b]);
                         std::string date_part = formatDate(batch_record_dates[b]);
                         
                         std::filesystem::path debug_dir = std::filesystem::path(output_dir_) / "debug_images" /
                                                            engine_group->engine_name / date_part /
-                                                           (serial_part + "_" + record_part);
+                                                           (serial_part + "_" + record_part + "_v" + std::to_string(batch_video_indices[b]));
                         std::filesystem::create_directories(debug_dir);
                         
                         std::string image_filename = "frame_" + 
@@ -1052,8 +1078,9 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     LOG_ERROR("Detector", "Batch detection failed for " + std::to_string(batch_size) + " frames");
                 }
 
-                for (size_t b = 0; b < batch_video_keys.size(); ++b) {
-                    markFrameProcessed(batch_video_keys[b], engine_group->engine_name, batch_output_paths[b]);
+                for (size_t b = 0; b < batch_message_keys.size(); ++b) {
+                    markFrameProcessed(batch_message_keys[b], engine_group->engine_name,
+                                       batch_output_paths[b], batch_video_indices[b]);
                 }
             }
         } else {
@@ -1074,13 +1101,14 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             }
             
             // Generate output path with engine name
-            std::string serial_value = frame_data.serial.empty() ? frame_data.video_key : frame_data.serial;
-            std::string record_value = frame_data.record_id.empty() ? frame_data.video_key : frame_data.record_id;
+            std::string serial_value = serialPart(frame_data.serial, frame_data.message_key, frame_data.video_id);
+            std::string record_value = recordPart(frame_data.record_id, frame_data.message_key, frame_data.video_id);
             std::string output_path = generateOutputPath(
                 serial_value,
                 record_value,
                 frame_data.record_date,
-                engine_group->engine_name
+                engine_group->engine_name,
+                frame_data.video_index
             );
             
             // Run YOLO detection on GPU (TensorRT) - frame will be preprocessed by detector
@@ -1128,13 +1156,13 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 cv::Mat debug_frame = engine_group->preprocessor->addPadding(frame_data.frame);
                 engine_group->detectors[detector_id]->drawDetections(debug_frame, detections);
                 
-                std::string serial_part = serialPart(frame_data.serial, frame_data.video_key, frame_data.video_id);
-                std::string record_part = recordPart(frame_data.record_id, frame_data.video_key, frame_data.video_id);
+                std::string serial_part = serialPart(frame_data.serial, frame_data.message_key, frame_data.video_id);
+                std::string record_part = recordPart(frame_data.record_id, frame_data.message_key, frame_data.video_id);
                 std::string date_part = formatDate(frame_data.record_date);
                 
                 std::filesystem::path debug_dir = std::filesystem::path(output_dir_) / "debug_images" /
                                                    engine_group->engine_name / date_part /
-                                                   (serial_part + "_" + record_part);
+                                                   (serial_part + "_" + record_part + "_v" + std::to_string(frame_data.video_index));
                 std::filesystem::create_directories(debug_dir);
                 
                 std::string image_filename = "frame_" + 
@@ -1180,7 +1208,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 LOG_ERROR("Detector", "Detection failed: " + output_path);
             }
 
-            markFrameProcessed(frame_data.video_key, engine_group->engine_name, output_path);
+            markFrameProcessed(frame_data.message_key, engine_group->engine_name, output_path, frame_data.video_index);
             
             // Also log every 50 frames with summary
             if (processed_count % 50 == 0) {
@@ -1330,9 +1358,9 @@ void ThreadPool::getStatisticsSnapshot(long long& frames_read, long long& frames
 std::string ThreadPool::generateOutputPath(const std::string& serial,
                                            const std::string& record_id,
                                            const std::string& record_date,
-                                           const std::string& engine_name) {
-    // Generate path in format: /detector_name/dd-mm-yy/serial_recordid.bin
-    // Example: /alcohol/18-11-25/c03o24120001941_de8e0004-cd5b-4ce2-8244-5055b012bcbf.bin
+                                           const std::string& engine_name,
+                                           int video_index) {
+    // Generate path in format: /detector_name/dd-mm-yy/serial_recordid_videoindex.bin
     
     auto sanitize_component = [](const std::string& value, const std::string& fallback) {
         return value.empty() ? fallback : value;
@@ -1354,11 +1382,11 @@ std::string ThreadPool::generateOutputPath(const std::string& serial,
     
     std::ostringstream oss;
     oss << output_dir_ << "/" << engine_name << "/" << date_formatted << "/"
-        << serial_part << "_" << record_part << ".bin";
+        << serial_part << "_" << record_part << "_" << video_index << ".bin";
     return oss.str();
 }
 
-std::string ThreadPool::buildVideoKey(const std::string& serial, const std::string& record_id, int video_id) const {
+std::string ThreadPool::buildMessageKey(const std::string& serial, const std::string& record_id) const {
     if (!serial.empty() && !record_id.empty()) {
         return serial + "_" + record_id;
     }
@@ -1368,16 +1396,27 @@ std::string ThreadPool::buildVideoKey(const std::string& serial, const std::stri
     if (!serial.empty()) {
         return serial;
     }
-    return "video_" + std::to_string(video_id);
+    return "message";
 }
 
-void ThreadPool::registerVideoMessage(const std::string& video_key, const std::string& message) {
-    if (!use_redis_queue_ || !output_queue_ || video_key.empty() || message.empty()) {
+std::string ThreadPool::buildVideoKey(const std::string& message_key, int video_index) const {
+    std::ostringstream oss;
+    if (!message_key.empty()) {
+        oss << message_key;
+    } else {
+        oss << "video";
+    }
+    oss << "_v" << video_index;
+    return oss.str();
+}
+
+void ThreadPool::registerVideoMessage(const std::string& message_key, const std::string& message) {
+    if (!use_redis_queue_ || !output_queue_ || message_key.empty() || message.empty()) {
         return;
     }
     
     std::lock_guard<std::mutex> lock(video_output_mutex_);
-    VideoOutputStatus& status = video_output_status_[video_key];
+    VideoOutputStatus& status = video_output_status_[message_key];
     status.original_message = message;
     status.pending_counts.clear();
     status.detector_outputs.clear();
@@ -1385,40 +1424,42 @@ void ThreadPool::registerVideoMessage(const std::string& video_key, const std::s
     status.message_pushed = false;
 }
 
-void ThreadPool::registerPendingFrame(const std::string& video_key, const std::string& engine_name) {
-    if (!use_redis_queue_ || !output_queue_ || video_key.empty() || engine_name.empty()) {
+void ThreadPool::registerPendingFrame(const std::string& message_key, const std::string& engine_name) {
+    if (!use_redis_queue_ || !output_queue_ || message_key.empty() || engine_name.empty()) {
         return;
     }
     
     std::lock_guard<std::mutex> lock(video_output_mutex_);
-    auto it = video_output_status_.find(video_key);
+    auto it = video_output_status_.find(message_key);
     if (it == video_output_status_.end()) {
         return;
     }
     it->second.pending_counts[engine_name]++;
 }
 
-void ThreadPool::markFrameProcessed(const std::string& video_key, const std::string& engine_name, const std::string& output_path) {
-    if (!use_redis_queue_ || !output_queue_ || video_key.empty() || engine_name.empty()) {
+void ThreadPool::markFrameProcessed(const std::string& message_key, const std::string& engine_name,
+                                    const std::string& output_path, int video_index) {
+    if (!use_redis_queue_ || !output_queue_ || message_key.empty() || engine_name.empty()) {
         return;
     }
     
     std::string message_to_push;
     {
         std::lock_guard<std::mutex> lock(video_output_mutex_);
-        auto it = video_output_status_.find(video_key);
+        auto it = video_output_status_.find(message_key);
         if (it == video_output_status_.end()) {
             return;
         }
         auto& status = it->second;
         if (!output_path.empty()) {
-            status.detector_outputs[engine_name] = output_path;
+            std::string key = engine_name + "_v" + std::to_string(video_index);
+            status.detector_outputs[key] = output_path;
         }
         int& pending = status.pending_counts[engine_name];
         if (pending > 0) {
             pending--;
         }
-        message_to_push = tryPushOutputLocked(video_key, status);
+        message_to_push = tryPushOutputLocked(message_key, status);
     }
     
     if (!message_to_push.empty()) {
@@ -1430,20 +1471,20 @@ void ThreadPool::markFrameProcessed(const std::string& video_key, const std::str
     }
 }
 
-void ThreadPool::markVideoReadingComplete(const std::string& video_key) {
-    if (!use_redis_queue_ || !output_queue_ || video_key.empty()) {
+void ThreadPool::markVideoReadingComplete(const std::string& message_key) {
+    if (!use_redis_queue_ || !output_queue_ || message_key.empty()) {
         return;
     }
     
     std::string message_to_push;
     {
         std::lock_guard<std::mutex> lock(video_output_mutex_);
-        auto it = video_output_status_.find(video_key);
+        auto it = video_output_status_.find(message_key);
         if (it == video_output_status_.end()) {
             return;
         }
         it->second.reading_completed = true;
-        message_to_push = tryPushOutputLocked(video_key, it->second);
+        message_to_push = tryPushOutputLocked(message_key, it->second);
     }
     
     if (!message_to_push.empty()) {
@@ -1494,7 +1535,7 @@ std::string ThreadPool::augmentMessageWithDetectors(const std::string& message,
     return augmented;
 }
 
-std::string ThreadPool::tryPushOutputLocked(const std::string& video_key, VideoOutputStatus& status) {
+std::string ThreadPool::tryPushOutputLocked(const std::string& message_key, VideoOutputStatus& status) {
     if (!canPushOutputLocked(status)) {
         return "";
     }
@@ -1509,7 +1550,7 @@ std::string ThreadPool::tryPushOutputLocked(const std::string& video_key, VideoO
     try {
         std::filesystem::path output_dir = std::filesystem::path(output_dir_) / "redis_messages";
         std::filesystem::create_directories(output_dir);
-        std::string safe_key = video_key.empty() ? "unknown" : video_key;
+        std::string safe_key = message_key.empty() ? "unknown" : message_key;
         std::filesystem::path file_path = output_dir / (safe_key + ".json");
         std::ofstream outfile(file_path);
         if (outfile.is_open()) {
@@ -1523,8 +1564,8 @@ std::string ThreadPool::tryPushOutputLocked(const std::string& video_key, VideoO
         LOG_ERROR("RedisOutput", "Failed to save Redis output message: " + std::string(e.what()));
     }
     
-    LOG_INFO("RedisOutput", "Ready to push message for video_key '" + video_key + "': " + final_message);
-    video_output_status_.erase(video_key);
+    LOG_INFO("RedisOutput", "Ready to push message for key '" + message_key + "': " + final_message);
+    video_output_status_.erase(message_key);
     return final_message;
 }
 

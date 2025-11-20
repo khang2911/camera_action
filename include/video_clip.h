@@ -9,6 +9,8 @@ struct VideoClip {
     std::string serial;               // Camera serial from alarm.serial/raw_alarm.serial
     std::string record_id;            // Record ID from alarm.record_id
     std::string record_date;          // Date string in YYYY-MM-DD format (derived from raw_alarm.send_at)
+    std::string message_key;          // Key shared across videos in same message
+    int video_index = 0;              // Index of this video within the message
     double moment_time = 0.0;          // Base timestamp (seconds since epoch) for frame index zero
     double duration_seconds = 0.0;     // Total duration reported for the clip
     double start_timestamp = -std::numeric_limits<double>::infinity();

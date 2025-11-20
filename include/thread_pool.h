@@ -157,19 +157,23 @@ private:
     
     // Helper functions for Redis mode
     std::vector<VideoClip> parseJsonToVideoClips(const std::string& json_str);
-    void processVideo(int reader_id, const VideoClip& clip, int video_id,
+    int processVideo(int reader_id, const VideoClip& clip, int video_id,
                       const std::string& redis_message = "",
                       bool register_message = true,
-                      bool finalize_message = true);
+                      bool finalize_message = true,
+                      int frame_start_offset = 0);
     
     std::string generateOutputPath(const std::string& serial, const std::string& record_id, 
-                                   const std::string& record_date, const std::string& engine_name);
-    std::string buildVideoKey(const std::string& serial, const std::string& record_id, int video_id) const;
-    void registerVideoMessage(const std::string& video_key, const std::string& message);
-    void registerPendingFrame(const std::string& video_key, const std::string& engine_name);
-    void markFrameProcessed(const std::string& video_key, const std::string& engine_name, const std::string& output_path);
-    void markVideoReadingComplete(const std::string& video_key);
-    std::string tryPushOutputLocked(const std::string& video_key, VideoOutputStatus& status);
+                                   const std::string& record_date, const std::string& engine_name,
+                                   int video_index);
+    std::string buildMessageKey(const std::string& serial, const std::string& record_id) const;
+    std::string buildVideoKey(const std::string& message_key, int video_index) const;
+    void registerVideoMessage(const std::string& message_key, const std::string& message);
+    void registerPendingFrame(const std::string& message_key, const std::string& engine_name);
+    void markFrameProcessed(const std::string& message_key, const std::string& engine_name,
+                            const std::string& output_path, int video_index);
+    void markVideoReadingComplete(const std::string& message_key);
+    std::string tryPushOutputLocked(const std::string& message_key, VideoOutputStatus& status);
     bool canPushOutputLocked(const VideoOutputStatus& status) const;
     std::string augmentMessageWithDetectors(const std::string& message,
                                             const std::unordered_map<std::string, std::string>& outputs) const;
