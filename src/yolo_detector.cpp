@@ -976,11 +976,6 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
             }
         }
         
-        // Log before writing
-        {
-            std::lock_guard<std::mutex> lock(frame_log_mutex);
-        }
-        
         if (!writeDetectionsToFile(detections, output_paths[b], frame_numbers[b])) {
             std::cerr << "Error: Failed to write detections for frame " << frame_numbers[b] << std::endl;
             return false;

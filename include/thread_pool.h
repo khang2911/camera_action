@@ -131,10 +131,15 @@ private:
     mutable Statistics stats_;
     
     void readerWorker(int reader_id);
+    void readerWorkerRedis(int reader_id);
     void preprocessorWorker(int worker_id);
     void detectorWorker(int engine_id, int detector_id);
     void monitorWorker();
     int getNextVideo();
+    
+    // Helper functions for Redis mode
+    VideoClip parseJsonToVideoClip(const std::string& json_str);
+    void processVideo(int reader_id, const VideoClip& clip, int video_id);
     
     std::string generateOutputPath(int video_id, int frame_number, int engine_id, int detector_id, const std::string& engine_name);
 };
