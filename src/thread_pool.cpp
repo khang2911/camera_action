@@ -1448,8 +1448,7 @@ void ThreadPool::markFrameProcessed(const std::string& message_key, const std::s
         std::lock_guard<std::mutex> lock(video_output_mutex_);
         auto& status = video_output_status_[message_key];
         if (!output_path.empty()) {
-            std::string key = engine_name + "_v" + std::to_string(video_index);
-            status.detector_outputs[key] = output_path;
+            status.detector_outputs[engine_name][video_index] = output_path;
         }
         int& pending = status.pending_counts[engine_name];
         if (pending > 0) {
@@ -1505,8 +1504,18 @@ bool ThreadPool::canPushOutputLocked(const VideoOutputStatus& status) const {
 }
 
 std::string ThreadPool::augmentMessageWithDetectors(const std::string& message,
-                                                    const std::unordered_map<std::string, std::string>& outputs) const {
-    if (message.empty() || outputs.empty()) {
+                                                    const std::unordered_map<std::string, std::map<int, std::string>>& outputs) const {
+    if (message.empty()) {
+        return message;
+    }
+    bool has_data = false;
+    for (const auto& kv : outputs) {
+        if (!kv.second.empty()) {
+            has_data = true;
+            break;
+        }
+    }
+    if (!has_data) {
         return message;
     }
     
@@ -1518,15 +1527,34 @@ std::string ThreadPool::augmentMessageWithDetectors(const std::string& message,
     
     std::ostringstream extra;
     extra << ", ";
-    bool first = true;
+    bool first_engine = true;
     for (const auto& kv : outputs) {
-        if (!first) {
+        if (kv.second.empty()) {
+            continue;
+        }
+        if (!first_engine) {
             extra << ", ";
         }
-        first = false;
-        extra << "\"" << kv.first << "\": \"" << kv.second << "\"";
+        first_engine = false;
+        extra << "\"" << kv.first << "\": [";
+        bool first_path = true;
+        for (const auto& idx_path : kv.second) {
+            if (idx_path.second.empty()) {
+                continue;
+            }
+            if (!first_path) {
+                extra << ", ";
+            }
+            first_path = false;
+            extra << "\"" << idx_path.second << "\"";
+        }
+        extra << "]";
     }
-    
+
+    if (first_engine) {
+        return message;
+    }
+
     augmented.insert(insert_pos, extra.str());
     return augmented;
 }
@@ -1538,7 +1566,14 @@ std::string ThreadPool::tryPushOutputLocked(const std::string& message_key, Vide
     if (status.original_message.empty()) {
         return "";
     }
-    if (status.detector_outputs.empty()) {
+    bool has_outputs = false;
+    for (const auto& kv : status.detector_outputs) {
+        if (!kv.second.empty()) {
+            has_outputs = true;
+            break;
+        }
+    }
+    if (!has_outputs) {
         LOG_WARNING("RedisOutput", "tryPushOutputLocked: message '" + message_key +
                                    "' has no detector outputs yet, delaying push");
         return "";

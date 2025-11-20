@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <map>
 #include "frame_queue.h"
 #include "preprocessor.h"
 #include "yolo_detector.h"
@@ -108,7 +109,7 @@ private:
     struct VideoOutputStatus {
         std::string original_message;
         std::unordered_map<std::string, int> pending_counts;
-        std::unordered_map<std::string, std::string> detector_outputs;
+        std::unordered_map<std::string, std::map<int, std::string>> detector_outputs;
         bool reading_completed = false;
         bool message_pushed = false;
     };
@@ -176,7 +177,7 @@ private:
     std::string tryPushOutputLocked(const std::string& message_key, VideoOutputStatus& status);
     bool canPushOutputLocked(const VideoOutputStatus& status) const;
     std::string augmentMessageWithDetectors(const std::string& message,
-                                            const std::unordered_map<std::string, std::string>& outputs) const;
+                                            const std::unordered_map<std::string, std::map<int, std::string>>& outputs) const;
     
     bool acquireReaderSlot();
     void releaseReaderSlot();
