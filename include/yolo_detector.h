@@ -140,10 +140,6 @@ private:
                       int dump_batch_index,
                       const std::vector<int>& roi_offset_x = {},
                       const std::vector<int>& roi_offset_y = {});
-                      const std::vector<int>& frame_numbers,
-                      const std::vector<int>& original_widths = {},
-                      const std::vector<int>& original_heights = {},
-                      int dump_batch_index = -1);
     
     bool copyInputsToDevice(const std::vector<std::shared_ptr<std::vector<float>>>& inputs);
     
