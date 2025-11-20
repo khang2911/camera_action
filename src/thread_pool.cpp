@@ -1432,6 +1432,8 @@ void ThreadPool::registerPendingFrame(const std::string& message_key, const std:
     std::lock_guard<std::mutex> lock(video_output_mutex_);
     auto it = video_output_status_.find(message_key);
     if (it == video_output_status_.end()) {
+        LOG_WARNING("RedisOutput", "registerPendingFrame: unknown message_key '" +
+                                 message_key + "' for engine '" + engine_name + "'");
         return;
     }
     it->second.pending_counts[engine_name]++;
@@ -1448,6 +1450,9 @@ void ThreadPool::markFrameProcessed(const std::string& message_key, const std::s
         std::lock_guard<std::mutex> lock(video_output_mutex_);
         auto it = video_output_status_.find(message_key);
         if (it == video_output_status_.end()) {
+            LOG_WARNING("RedisOutput", "markFrameProcessed: unknown message_key '" +
+                                     message_key + "' while processing engine '" +
+                                     engine_name + "', output_path=" + output_path);
             return;
         }
         auto& status = it->second;
