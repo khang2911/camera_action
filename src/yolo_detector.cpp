@@ -63,70 +63,6 @@ YOLODetector::~YOLODetector() {
     }
 }
 
-void YOLODetector::setDumpDirectories(const std::string& input_dir,
-                                      const std::string& output_dir,
-                                      const std::string& prefix) {
-    dump_prefix_ = prefix.empty() ? "detector" : prefix;
-    dump_batch_counter_.store(0);
-    
-    if (!input_dir.empty()) {
-        std::filesystem::path path = std::filesystem::path(input_dir) / dump_prefix_;
-        std::error_code ec;
-        std::filesystem::create_directories(path, ec);
-        input_dump_dir_ = path.string();
-        dump_inputs_enabled_ = true;
-    } else {
-        input_dump_dir_.clear();
-        dump_inputs_enabled_ = false;
-    }
-    
-    if (!output_dir.empty()) {
-        std::filesystem::path path = std::filesystem::path(output_dir) / dump_prefix_;
-        std::error_code ec;
-        std::filesystem::create_directories(path, ec);
-        output_dump_dir_ = path.string();
-        dump_outputs_enabled_ = true;
-    } else {
-        output_dump_dir_.clear();
-        dump_outputs_enabled_ = false;
-    }
-}
-
-void YOLODetector::dumpInputBatch(const std::vector<std::shared_ptr<std::vector<float>>>& inputs,
-                                  int batch_idx) {
-    if (!dump_inputs_enabled_ || input_dump_dir_.empty()) {
-        return;
-    }
-    std::ostringstream oss;
-    oss << input_dump_dir_ << "/inputs_batch" << std::setw(6) << std::setfill('0') << batch_idx << ".bin";
-    std::ofstream ofs(oss.str(), std::ios::binary);
-    if (!ofs) {
-        std::cerr << "[YOLODetector] Failed to open input dump file: " << oss.str() << std::endl;
-        return;
-    }
-    for (int b = 0; b < batch_size_; ++b) {
-        if (!inputs[b]) continue;
-        const auto& tensor = *inputs[b];
-        if (tensor.size() < input_elements_) continue;
-        ofs.write(reinterpret_cast<const char*>(tensor.data()),
-                  static_cast<std::streamsize>(tensor.size() * sizeof(float)));
-    }
-}
-
-void YOLODetector::dumpOutputBatch(const std::vector<float>& output_data, int batch_idx) {
-    if (!dump_outputs_enabled_ || output_dump_dir_.empty()) {
-        return;
-    }
-    std::ostringstream oss;
-    oss << output_dump_dir_ << "/outputs_batch" << std::setw(6) << std::setfill('0') << batch_idx << ".bin";
-    std::ofstream ofs(oss.str(), std::ios::binary);
-    if (!ofs) {
-        std::cerr << "[YOLODetector] Failed to open output dump file: " << oss.str() << std::endl;
-        return;
-    }
-    ofs.write(reinterpret_cast<const char*>(output_data.data()),
-              static_cast<std::streamsize>(output_data.size() * sizeof(float)));
-}
 
 bool YOLODetector::loadEngine() {
     std::ifstream file(engine_path_, std::ios::binary);
@@ -362,20 +298,11 @@ bool YOLODetector::runWithPreprocessedBatch(
         return false;
     }
     
-    int dump_idx = -1;
-    if (dump_inputs_enabled_ || dump_outputs_enabled_) {
-        dump_idx = dump_batch_counter_.fetch_add(1);
-    }
-    
-    if (dump_inputs_enabled_ && dump_idx >= 0) {
-        dumpInputBatch(inputs, dump_idx);
-    }
-    
     if (!copyInputsToDevice(inputs)) {
         return false;
     }
     
-    bool ok = runInference(output_paths, frame_numbers, original_widths, original_heights, dump_idx, 
+    bool ok = runInference(output_paths, frame_numbers, original_widths, original_heights, -1, 
                            roi_offset_x, roi_offset_y, true_original_widths, true_original_heights);
     return ok;
 }
@@ -392,29 +319,6 @@ bool YOLODetector::copyInputsToDevice(const std::vector<std::shared_ptr<std::vec
     
     size_t single_input_bytes = input_size_ / batch_size_;
     
-    // Debug: Check input data before copying (first batch only, first few values)
-    static thread_local bool logged_input_debug = false;
-    if (!logged_input_debug && !inputs.empty() && inputs[0] && !inputs[0]->empty()) {
-        std::cerr << "[DEBUG Input] Batch size: " << batch_size_ << std::endl;
-        std::cerr << "[DEBUG Input] input_size_: " << input_size_ << " bytes" << std::endl;
-        std::cerr << "[DEBUG Input] single_input_bytes: " << single_input_bytes << " bytes" << std::endl;
-        std::cerr << "[DEBUG Input] input_elements_: " << input_elements_ << " elements" << std::endl;
-        std::cerr << "[DEBUG Input] Expected per-frame size: " << (single_input_bytes / sizeof(float)) << " elements" << std::endl;
-        std::cerr << "[DEBUG Input] Actual input[0] size: " << inputs[0]->size() << " elements" << std::endl;
-        std::cerr << "[DEBUG Input] First 10 values of input[0]: ";
-        for (int i = 0; i < std::min(10, static_cast<int>(inputs[0]->size())); ++i) {
-            std::cerr << (*inputs[0])[i] << " ";
-        }
-        std::cerr << std::endl;
-        if (batch_size_ > 1 && inputs.size() > 1 && inputs[1]) {
-            std::cerr << "[DEBUG Input] First 10 values of input[1]: ";
-            for (int i = 0; i < std::min(10, static_cast<int>(inputs[1]->size())); ++i) {
-                std::cerr << (*inputs[1])[i] << " ";
-            }
-            std::cerr << std::endl;
-        }
-        logged_input_debug = true;
-    }
     
     for (int b = 0; b < batch_size_; ++b) {
         if (!inputs[b] || inputs[b]->size() < input_elements_) {
@@ -491,12 +395,6 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
         // Low confidence values may be due to preprocessing differences - need to investigate
         float confidence = output_data[idx_conf];
         
-        // Debug: Log first few raw confidence values (reduced for performance)
-        static int conf_debug_count = 0;
-        if (conf_debug_count < 5 && i < 5) {
-            std::cout << "[DEBUG Conf] Anchor " << i << ": conf=" << confidence << std::endl;
-            conf_debug_count++;
-        }
         
         // Track statistics
         if (confidence > max_confidence) {
@@ -518,14 +416,6 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
             min_confidence_above_threshold = confidence;
         }
         
-        // Debug: Log first few detections (reduced for performance)
-        static int debug_count = 0;
-        if (debug_count < 3) {
-            std::cout << "[DEBUG] Detection " << debug_count << ": "
-                      << "conf=" << confidence << ", bbox=[" 
-                      << x_center << "," << y_center << "," << width << "," << height << "]" << std::endl;
-            debug_count++;
-        }
         
         Detection det;
         det.bbox[0] = x_center;   // x_center (pixel coordinates in preprocessed image space)
@@ -541,11 +431,6 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutput(const std::vector<f
     // Log statistics (reduced for performance)
     static int parse_call_count = 0;
     parse_call_count++;
-    if (parse_call_count <= 3) {  // Log only first 3 calls
-        std::cout << "[DEBUG Parse] Call " << parse_call_count << ": "
-                  << "Anchors: " << total_anchors_checked
-                  << ", Above threshold: " << anchors_above_threshold
-                  << ", Max conf: " << max_confidence << std::endl;
     }
     
     return detections;
@@ -963,16 +848,6 @@ bool YOLODetector::writeDetectionsToFile(const std::vector<Detection>& detection
     int num_dets = static_cast<int>(detections.size());
     out_file.write(reinterpret_cast<const char*>(&num_dets), sizeof(int));
     
-    // Log detection count (reduced for performance)
-    static int write_call_count = 0;
-    static std::mutex write_log_mutex;
-    {
-        std::lock_guard<std::mutex> lock(write_log_mutex);
-        write_call_count++;
-        if (write_call_count <= 5) {  // Log only first 5 writes
-            std::cout << "[DEBUG Write] Frame " << frame_number << ": " << num_dets << " detections" << std::endl;
-        }
-    }
     
     // Write each detection
     for (const auto& det : detections) {
@@ -1036,10 +911,6 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
     cudaMemcpyAsync(output_data.data(), output_buffer_, output_size_, cudaMemcpyDeviceToHost, stream_);
     cudaStreamSynchronize(stream_);
     
-    if (dump_outputs_enabled_ && dump_batch_index >= 0) {
-        dumpOutputBatch(output_data, dump_batch_index);
-    }
-    
     size_t output_per_frame = static_cast<size_t>(num_anchors_) * output_channels_;
     size_t expected_total_output = static_cast<size_t>(batch_size_) * output_per_frame;
     if (output_data.size() != expected_total_output) {
@@ -1083,48 +954,10 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
             detections = parseRawDetectionOutput(frame_output);
         }
         
-        // Log before NMS (enhanced logging to diagnose issues)
-        static int frame_count = 0;
-        static std::mutex frame_log_mutex;
-        {
-            std::lock_guard<std::mutex> lock(frame_log_mutex);
-            frame_count++;
-            if (frame_count <= 10) {
-                std::cout << "[DEBUG Frame] Frame " << frame_numbers[b] << " (batch " << b << "): "
-                          << "Before NMS: " << detections.size() << " detections";
-                if (!detections.empty()) {
-                    std::cout << ", top conf=" << detections[0].confidence 
-                              << ", bbox=[" << detections[0].bbox[0] << "," << detections[0].bbox[1] << "]";
-                }
-                std::cout << std::endl;
-            }
-        }
-        
         detections = applyNMS(detections);
         
-        // Log after NMS
-        {
-            std::lock_guard<std::mutex> lock(frame_log_mutex);
-            if (frame_count <= 10) {
-                std::cout << "[DEBUG Frame] Frame " << frame_numbers[b] << " (batch " << b << "): "
-                          << "After NMS: " << detections.size() << " detections";
-                if (!detections.empty()) {
-                    std::cout << ", top conf=" << detections[0].confidence;
-                }
-                std::cout << std::endl;
-            }
-        }
-        
         if (static_cast<int>(detections.size()) > max_detections_) {
-            size_t before_limit = detections.size();
             detections.resize(max_detections_);
-            static bool warned_max_detections = false;
-            if (!warned_max_detections) {
-                std::cout << "[DEBUG Frame] Warning: Frame " << frame_numbers[b] 
-                          << " had " << before_limit << " detections, limited to " 
-                          << max_detections_ << std::endl;
-                warned_max_detections = true;
-            }
         }
         
         // Scale detections to original frame coordinates if dimensions provided
@@ -1134,13 +967,6 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
                      ? original_heights[b] : 0;
         
         if (orig_w > 0 && orig_h > 0) {
-            // Debug: Log scaling info for first detection (once per batch)
-            static bool logged_scaling_info = false;
-            if (!logged_scaling_info && detections.size() > 0) {
-                std::cout << "[YOLODetector] Scaling detections: original=" << orig_w << "x" << orig_h 
-                          << ", preprocessed=" << input_width_ << "x" << input_height_ << std::endl;
-                logged_scaling_info = true;
-            }
             
             // Get ROI offset for this batch item
             int roi_x = (b < static_cast<int>(roi_offset_x.size())) ? roi_offset_x[b] : 0;
@@ -1210,14 +1036,6 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::shared_ptr<
     // Set CUDA device for this detector (important for multi-GPU setups)
     cudaSetDevice(gpu_id_);
     
-    int dump_idx = -1;
-    if (dump_inputs_enabled_ || dump_outputs_enabled_) {
-        dump_idx = dump_batch_counter_.fetch_add(1);
-    }
-    if (dump_inputs_enabled_ && dump_idx >= 0) {
-        dumpInputBatch(inputs, dump_idx);
-    }
-    
     if (!copyInputsToDevice(inputs)) {
         return false;
     }
@@ -1236,10 +1054,6 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::shared_ptr<
     cudaMemcpyAsync(output_data.data(), output_buffer_, output_size_, cudaMemcpyDeviceToHost, stream_);
     cudaStreamSynchronize(stream_);
     
-    if (dump_outputs_enabled_ && dump_idx >= 0) {
-        dumpOutputBatch(output_data, dump_idx);
-    }
-    
     size_t output_per_frame = static_cast<size_t>(num_anchors_) * output_channels_;
     size_t expected_total_output = static_cast<size_t>(batch_size_) * output_per_frame;
     if (output_data.size() != expected_total_output) {
@@ -1248,16 +1062,478 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::shared_ptr<
         return false;
     }
     
-    // Debug: Write raw output to file for inspection
-    // This function (runInferenceWithDetections) is only called in debug mode, so we can safely write here
-    static bool raw_output_written = false;
-    if (!raw_output_written && batch_size_ > 0) {
-        std::string raw_output_file = "raw_output_debug.txt";
-        std::ofstream raw_file(raw_output_file);
-        if (raw_file.is_open()) {
-            raw_file << "Raw TensorRT Output Debug Dump\n";
-            raw_file << "================================\n";
-            raw_file << "Batch size: " << batch_size_ << "\n";
+    // Raw output debug file writing removed for production
+    // (Previously wrote to raw_output_debug.txt - removed for prod branch)
+    
+    all_detections.clear();
+    all_detections.resize(batch_size_);
+    
+    for (int b = 0; b < batch_size_; ++b) {
+        // Extract output for this batch item
+        // TensorRT output format: [batch, num_anchors, channels] flattened as [batch*num_anchors*channels]
+        // Python does: output[i:i+1] which gets [1, num_anchors, channels], then .T transposes to [channels, num_anchors]
+        // But we read it directly as [num_anchors, channels] which should be correct
+        size_t batch_offset = b * output_per_frame;
+        std::vector<float> batch_output(output_data.begin() + batch_offset,
+                                       output_data.begin() + batch_offset + output_per_frame);
+        
+        // Parse raw output based on model type
+        std::vector<Detection> detections;
+        if (model_type_ == ModelType::POSE) {
+            detections = parseRawPoseOutput(batch_output);
+        } else {
+            detections = parseRawDetectionOutput(batch_output);
+        }
+        
+        // Apply confidence threshold
+        detections.erase(
+            std::remove_if(detections.begin(), detections.end(),
+                [this](const Detection& det) { return det.confidence < conf_threshold_; }),
+            detections.end()
+        );
+        
+        // Apply NMS
+        detections = applyNMS(detections);
+        if (static_cast<int>(detections.size()) > max_detections_) {
+            detections.resize(max_detections_);
+        }
+        
+        // Store detections in preprocessed coordinate space (normalized [0,1] relative to input_width_ x input_height_)
+        // Don't scale back to original - keep them in preprocessed space for debug images
+        all_detections[b] = detections;
+        
+        // Scale detections to original frame coordinates for writing to file
+        int orig_w = (b < static_cast<int>(original_widths.size()) && original_widths[b] > 0) 
+                     ? original_widths[b] : 0;
+        int orig_h = (b < static_cast<int>(original_heights.size()) && original_heights[b] > 0) 
+                     ? original_heights[b] : 0;
+        
+        if (orig_w > 0 && orig_h > 0) {
+            // Create a copy for file writing (scaled to original)
+            std::vector<Detection> detections_for_file = detections;
+            // Get ROI offset for this batch item
+            int roi_x = (b < static_cast<int>(roi_offset_x.size())) ? roi_offset_x[b] : 0;
+            int roi_y = (b < static_cast<int>(roi_offset_y.size())) ? roi_offset_y[b] : 0;
+            // Get true original dimensions for this batch item
+            int true_orig_w = (b < static_cast<int>(true_original_widths.size()) && true_original_widths[b] > 0) 
+                             ? true_original_widths[b] : 0;
+            int true_orig_h = (b < static_cast<int>(true_original_heights.size()) && true_original_heights[b] > 0) 
+                             ? true_original_heights[b] : 0;
+            for (auto& det : detections_for_file) {
+                scaleDetectionToOriginal(det, orig_w, orig_h, roi_x, roi_y, true_orig_w, true_orig_h);
+            }
+            if (!writeDetectionsToFile(detections_for_file, output_paths[b], frame_numbers[b])) {
+                std::cerr << "Error: Failed to write detections for frame " << frame_numbers[b] << std::endl;
+                return false;
+            }
+        } else {
+            if (!writeDetectionsToFile(detections, output_paths[b], frame_numbers[b])) {
+                std::cerr << "Error: Failed to write detections for frame " << frame_numbers[b] << std::endl;
+                return false;
+            }
+        }
+    }
+    
+    return true;
+}
+
+bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
+                                const std::vector<int>& frame_numbers,
+                                const std::vector<int>& original_widths,
+                                const std::vector<int>& original_heights,
+                                int dump_batch_index,
+                                const std::vector<int>& roi_offset_x,
+                                const std::vector<int>& roi_offset_y,
+                                const std::vector<int>& true_original_widths,
+                                const std::vector<int>& true_original_heights) {
+    if (output_paths.size() != static_cast<size_t>(batch_size_) ||
+        frame_numbers.size() != static_cast<size_t>(batch_size_)) {
+        std::cerr << "Error: Output metadata batch size mismatch" << std::endl;
+        return false;
+    }
+    
+    void* bindings[] = {input_buffer_, output_buffer_};
+    
+    // Run inference
+    bool success = context_->enqueueV2(bindings, stream_, nullptr);
+    if (!success) {
+        std::cerr << "Error: Inference execution failed" << std::endl;
+        return false;
+    }
+    
+    // Copy output from GPU to CPU
+    std::vector<float> output_data(output_size_ / sizeof(float));
+    cudaMemcpyAsync(output_data.data(), output_buffer_, output_size_, cudaMemcpyDeviceToHost, stream_);
+    cudaStreamSynchronize(stream_);
+    
+    size_t output_per_frame = static_cast<size_t>(num_anchors_) * output_channels_;
+    size_t expected_total_output = static_cast<size_t>(batch_size_) * output_per_frame;
+    if (output_data.size() != expected_total_output) {
+        std::cerr << "Error: Output size mismatch. Expected " << expected_total_output
+                  << " elements, got " << output_data.size() << std::endl;
+        std::cerr << "  batch_size=" << batch_size_ << ", num_anchors_=" << num_anchors_
+                  << ", output_channels_=" << output_channels_ << std::endl;
+        return false;
+    }
+    
+    for (int b = 0; b < batch_size_; ++b) {
+        // Extract output for this batch item
+        size_t batch_offset = b * output_per_frame;
+        std::vector<float> batch_output(output_data.begin() + batch_offset,
+                                       output_data.begin() + batch_offset + output_per_frame);
+        
+        // Parse raw output based on model type
+        std::vector<Detection> detections;
+        if (model_type_ == ModelType::POSE) {
+            detections = parseRawPoseOutput(batch_output);
+        } else {
+            detections = parseRawDetectionOutput(batch_output);
+        }
+        
+        // Apply confidence threshold
+        detections.erase(
+            std::remove_if(detections.begin(), detections.end(),
+                [this](const Detection& det) { return det.confidence < conf_threshold_; }),
+            detections.end()
+        );
+        
+        // Apply NMS
+        detections = applyNMS(detections);
+        if (static_cast<int>(detections.size()) > max_detections_) {
+            size_t before_limit = detections.size();
+            detections.resize(max_detections_);
+            static bool warned_max_detections = false;
+            if (!warned_max_detections) {
+                std::cerr << "Warning: Frame " << frame_numbers[b] 
+                          << " had " << before_limit << " detections, limited to " 
+                          << max_detections_ << std::endl;
+                warned_max_detections = true;
+            }
+        }
+        
+        // Scale detections to original frame coordinates if dimensions provided
+        int orig_w = (b < static_cast<int>(original_widths.size()) && original_widths[b] > 0) 
+                     ? original_widths[b] : 0;
+        int orig_h = (b < static_cast<int>(original_heights.size()) && original_heights[b] > 0) 
+                     ? original_heights[b] : 0;
+        
+        if (orig_w > 0 && orig_h > 0) {
+            // Get ROI offset for this batch item
+            int roi_x = (b < static_cast<int>(roi_offset_x.size())) ? roi_offset_x[b] : 0;
+            int roi_y = (b < static_cast<int>(roi_offset_y.size())) ? roi_offset_y[b] : 0;
+            // Get true original dimensions for this batch item
+            int true_orig_w = (b < static_cast<int>(true_original_widths.size()) && true_original_widths[b] > 0) 
+                             ? true_original_widths[b] : 0;
+            int true_orig_h = (b < static_cast<int>(true_original_heights.size()) && true_original_heights[b] > 0) 
+                             ? true_original_heights[b] : 0;
+            for (auto& det : detections) {
+                scaleDetectionToOriginal(det, orig_w, orig_h, roi_x, roi_y, true_orig_w, true_orig_h);
+            }
+        } else {
+            // Warning: No original dimensions provided, bbox coordinates are in normalized [0,1] format
+            // relative to preprocessed image (input_width_ x input_height_)
+            // This means they need to be scaled manually or the scaling step was skipped
+            if (detections.size() > 0) {
+                static bool warned = false;
+                if (!warned) {
+                    std::cerr << "Warning: No original frame dimensions provided for scaling. "
+                              << "Bbox coordinates are normalized [0,1] relative to preprocessed image ("
+                              << input_width_ << "x" << input_height_ << "). "
+                              << "Detections may appear incorrectly scaled." << std::endl;
+                    std::cerr << "  Frame " << frame_numbers[b] << " has " << detections.size() 
+                              << " detections but orig_w=" << orig_w << ", orig_h=" << orig_h << std::endl;
+                    warned = true;
+                }
+            }
+        }
+        
+        if (!writeDetectionsToFile(detections, output_paths[b], frame_numbers[b])) {
+            std::cerr << "Error: Failed to write detections for frame " << frame_numbers[b] << std::endl;
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, int original_height, 
+                                               int roi_offset_x, int roi_offset_y,
+                                               int true_original_width, int true_original_height) {
+    if (original_width <= 0 || original_height <= 0) {
+        // Cannot scale without valid dimensions - coordinates remain in preprocessed image pixel space
+        return;
+    }
+    
+    // Reference script logic:
+    // x1 = cx - w * 0.5f; y1 = cy - h * 0.5f;  // Convert to corner format
+    // x1 = (x1 - pad_w) / scale; y1 = (y1 - pad_h) / scale;  // Undo padding & scale
+    // ww = w / scale; hh = h / scale;
+    //
+    // For center format, we do:
+    // cx_orig = (cx_prep - pad_w) / scale
+    // cy_orig = (cy_prep - pad_h) / scale
+    // w_orig = w_prep / scale
+    // h_orig = h_prep / scale
+    
+    // Calculate scale factor used during preprocessing (same as in Preprocessor::addPadding)
+    // Reference: float scale = std::min((float)inputW / ow, (float)inputH / oh);
+    float scale = std::min(static_cast<float>(input_width_) / original_width,
+                          static_cast<float>(input_height_) / original_height);
+    
+    // Calculate dimensions after scaling (before padding)
+    float scaled_w = original_width * scale;
+    float scaled_h = original_height * scale;
+    
+    // Calculate padding offsets (centered padding, same as Preprocessor::addPadding)
+    // Reference: pad_w = (inputW - new_w) / 2; pad_h = (inputH - new_h) / 2;
+    float pad_w = (input_width_ - scaled_w) / 2.0f;
+    float pad_h = (input_height_ - scaled_h) / 2.0f;
+    
+    // det.bbox values are already in pixel coordinates relative to preprocessed image (input_width_ x input_height_)
+    // Reference: float cx = cx_ptr[i]; (direct pixel values)
+    float x_center_prep = det.bbox[0];   // Already in pixel space
+    float y_center_prep = det.bbox[1];
+    float width_prep = det.bbox[2];
+    float height_prep = det.bbox[3];
+    
+    // Remove padding offset to get coordinates in the scaled (unpadded) region
+    // Reference: x1 = (x1 - pad_w) / scale;
+    float x_center_scaled = x_center_prep - pad_w;
+    float y_center_scaled = y_center_prep - pad_h;
+    
+    // Scale back to original image dimensions
+    // Reference: x1 = (x1 - pad_w) / scale; ww = w / scale;
+    float x_center_orig = x_center_scaled / scale;
+    float y_center_orig = y_center_scaled / scale;
+    float width_orig = width_prep / scale;
+    float height_orig = height_prep / scale;
+    
+    // Add ROI offset to scale from cropped frame to true original frame
+    x_center_orig += static_cast<float>(roi_offset_x);
+    y_center_orig += static_cast<float>(roi_offset_y);
+    
+    // Clamp to true original image bounds (after adding ROI offset)
+    // Use true original dimensions if provided, otherwise don't clamp (use very large bounds)
+    // Note: original_width + roi_offset_x is NOT the true original width, it's just an estimate
+    int clamp_width = (true_original_width > 0) ? true_original_width : 999999;
+    int clamp_height = (true_original_height > 0) ? true_original_height : 999999;
+    x_center_orig = std::max(0.0f, std::min(static_cast<float>(clamp_width), x_center_orig));
+    y_center_orig = std::max(0.0f, std::min(static_cast<float>(clamp_height), y_center_orig));
+    width_orig = std::max(0.0f, std::min(static_cast<float>(clamp_width), width_orig));
+    height_orig = std::max(0.0f, std::min(static_cast<float>(clamp_height), height_orig));
+    
+    // Update bbox (still in center-width-height format, now in original image pixel coordinates)
+    det.bbox[0] = x_center_orig;
+    det.bbox[1] = y_center_orig;
+    det.bbox[2] = width_orig;
+    det.bbox[3] = height_orig;
+    
+    // Scale keypoints if present (for pose models)
+    for (auto& kpt : det.keypoints) {
+        // Keypoints are also in pixel coordinates relative to preprocessed image
+        float kpt_x_prep = kpt.x;   // Already in pixel space
+        float kpt_y_prep = kpt.y;
+        
+        // Remove padding and scale back
+        float kpt_x_scaled = kpt_x_prep - pad_w;
+        float kpt_y_scaled = kpt_y_prep - pad_h;
+        
+        float kpt_x_orig = kpt_x_scaled / scale;
+        float kpt_y_orig = kpt_y_scaled / scale;
+        
+        // Add ROI offset to scale from cropped frame to true original frame
+        kpt_x_orig += static_cast<float>(roi_offset_x);
+        kpt_y_orig += static_cast<float>(roi_offset_y);
+        
+        // Clamp to true original image bounds (after adding ROI offset)
+        // Use true original dimensions if provided, otherwise don't clamp (use very large bounds)
+        // Note: original_width + roi_offset_x is NOT the true original width, it's just an estimate
+        int clamp_width = (true_original_width > 0) ? true_original_width : 999999;
+        int clamp_height = (true_original_height > 0) ? true_original_height : 999999;
+        kpt.x = std::max(0.0f, std::min(static_cast<float>(clamp_width), kpt_x_orig));
+        kpt.y = std::max(0.0f, std::min(static_cast<float>(clamp_height), kpt_y_orig));
+    }
+}
+
+void YOLODetector::drawDetections(cv::Mat& frame, const std::vector<Detection>& detections) {
+    // Color palette for different classes (BGR format for OpenCV)
+    std::vector<cv::Scalar> class_colors = {
+        cv::Scalar(0, 255, 0),      // Green
+        cv::Scalar(255, 0, 0),      // Blue
+        cv::Scalar(0, 0, 255),      // Red
+        cv::Scalar(255, 255, 0),    // Cyan
+        cv::Scalar(255, 0, 255),    // Magenta
+        cv::Scalar(0, 255, 255),    // Yellow
+    };
+    
+    // Keypoint colors for pose models (BGR format)
+    std::vector<cv::Scalar> kpt_colors = {
+        cv::Scalar(0, 255, 255),    // Yellow - head (0: nose, 1: left_eye, 2: right_eye, 3: left_ear, 4: right_ear)
+        cv::Scalar(255, 0, 0),      // Blue - left arm (5: left_shoulder, 7: left_elbow, 9: left_wrist)
+        cv::Scalar(0, 0, 255),      // Red - right arm (6: right_shoulder, 8: right_elbow, 10: right_wrist)
+        cv::Scalar(0, 255, 0),      // Green - left leg (11: left_hip, 13: left_knee, 15: left_ankle)
+        cv::Scalar(255, 0, 255),    // Magenta - right leg (12: right_hip, 14: right_knee, 16: right_ankle)
+    };
+    
+    // Skeleton connections for pose models (COCO format)
+    std::vector<std::pair<int, int>> skeleton = {
+        {0, 1}, {0, 2}, {1, 3}, {2, 4},  // Head connections
+        {5, 6}, {5, 7}, {7, 9}, {6, 8}, {8, 10},  // Arm connections
+        {5, 11}, {6, 12}, {11, 12},  // Torso connections
+        {11, 13}, {13, 15}, {12, 14}, {14, 16}  // Leg connections
+    };
+    
+    for (const auto& det : detections) {
+        cv::Scalar color = class_colors[det.class_id % class_colors.size()];
+        
+        // Determine if coordinates are normalized [0,1] or pixel-based
+        bool is_normalized = false;
+        if (det.bbox[0] >= 0.0f && det.bbox[0] <= 1.0f &&
+            det.bbox[1] >= 0.0f && det.bbox[1] <= 1.0f &&
+            det.bbox[2] >= 0.0f && det.bbox[2] <= 1.0f &&
+            det.bbox[3] >= 0.0f && det.bbox[3] <= 1.0f) {
+            is_normalized = true;
+        }
+        
+        float x_center, y_center, width, height;
+        if (is_normalized) {
+            // Convert from normalized [0,1] to pixel coordinates
+            x_center = det.bbox[0] * frame.cols;
+            y_center = det.bbox[1] * frame.rows;
+            width = det.bbox[2] * frame.cols;
+            height = det.bbox[3] * frame.rows;
+        } else {
+            // Already in pixel coordinates, but clamp to frame bounds
+            x_center = std::max(0.0f, std::min(static_cast<float>(frame.cols), det.bbox[0]));
+            y_center = std::max(0.0f, std::min(static_cast<float>(frame.rows), det.bbox[1]));
+            width = std::max(0.0f, std::min(static_cast<float>(frame.cols), det.bbox[2]));
+            height = std::max(0.0f, std::min(static_cast<float>(frame.rows), det.bbox[3]));
+        }
+        
+        // Convert center-width-height to top-left-bottom-right for drawing
+        float x1 = x_center - width * 0.5f;
+        float y1 = y_center - height * 0.5f;
+        float x2 = x_center + width * 0.5f;
+        float y2 = y_center + height * 0.5f;
+        
+        // Clamp to frame bounds
+        x1 = std::max(0.0f, std::min(static_cast<float>(frame.cols - 1), x1));
+        y1 = std::max(0.0f, std::min(static_cast<float>(frame.rows - 1), y1));
+        x2 = std::max(0.0f, std::min(static_cast<float>(frame.cols - 1), x2));
+        y2 = std::max(0.0f, std::min(static_cast<float>(frame.rows - 1), y2));
+        
+        // Draw bounding box
+        cv::rectangle(frame, cv::Point(static_cast<int>(x1), static_cast<int>(y1)),
+                     cv::Point(static_cast<int>(x2), static_cast<int>(y2)), color, 2);
+        
+        // Draw label with confidence
+        std::string label = "Class " + std::to_string(det.class_id);
+        float display_confidence = det.confidence * 100.0f;
+        display_confidence = std::max(0.0f, std::min(100.0f, display_confidence));  // Clamp to 0-100%
+        label += " " + std::to_string(display_confidence).substr(0, 5) + "%";
+        
+        int baseline = 0;
+        cv::Size text_size = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+        cv::rectangle(frame, 
+                     cv::Point(static_cast<int>(x1), static_cast<int>(y1) - text_size.height - 5),
+                     cv::Point(static_cast<int>(x1) + text_size.width, static_cast<int>(y1)),
+                     color, -1);
+        cv::putText(frame, label, cv::Point(static_cast<int>(x1), static_cast<int>(y1) - 5),
+                   cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
+        
+        // Draw keypoints and skeleton for pose models
+        if (model_type_ == ModelType::POSE && !det.keypoints.empty()) {
+            // Draw skeleton connections first (so keypoints appear on top)
+            for (const auto& connection : skeleton) {
+                int idx1 = connection.first;
+                int idx2 = connection.second;
+                if (idx1 < static_cast<int>(det.keypoints.size()) && 
+                    idx2 < static_cast<int>(det.keypoints.size())) {
+                    const auto& kpt1 = det.keypoints[idx1];
+                    const auto& kpt2 = det.keypoints[idx2];
+                    
+                    // Only draw if both keypoints are visible
+                    if (kpt1.confidence > 0.1f && kpt2.confidence > 0.1f) {
+                        float kpt1_x, kpt1_y, kpt2_x, kpt2_y;
+                        
+                        // Handle normalized vs pixel coordinates
+                        if (kpt1.x >= 0.0f && kpt1.x <= 1.0f && kpt1.y >= 0.0f && kpt1.y <= 1.0f) {
+                            kpt1_x = kpt1.x * frame.cols;
+                            kpt1_y = kpt1.y * frame.rows;
+                        } else {
+                            kpt1_x = std::max(0.0f, std::min(static_cast<float>(frame.cols), kpt1.x));
+                            kpt1_y = std::max(0.0f, std::min(static_cast<float>(frame.rows), kpt1.y));
+                        }
+                        
+                        if (kpt2.x >= 0.0f && kpt2.x <= 1.0f && kpt2.y >= 0.0f && kpt2.y <= 1.0f) {
+                            kpt2_x = kpt2.x * frame.cols;
+                            kpt2_y = kpt2.y * frame.rows;
+                        } else {
+                            kpt2_x = std::max(0.0f, std::min(static_cast<float>(frame.cols), kpt2.x));
+                            kpt2_y = std::max(0.0f, std::min(static_cast<float>(frame.rows), kpt2.y));
+                        }
+                        
+                        // Use darker shade of detection color for skeleton
+                        cv::Scalar skeleton_color = color * 0.6;
+                        cv::line(frame, 
+                                cv::Point(static_cast<int>(kpt1_x), static_cast<int>(kpt1_y)),
+                                cv::Point(static_cast<int>(kpt2_x), static_cast<int>(kpt2_y)),
+                                skeleton_color, 2);
+                    }
+                }
+            }
+            
+            // Draw keypoints
+            for (size_t i = 0; i < det.keypoints.size(); ++i) {
+                const auto& kpt = det.keypoints[i];
+                if (kpt.confidence <= 0.1f) continue;  // Skip low-confidence keypoints
+                
+                float kpt_x, kpt_y;
+                // Handle normalized vs pixel coordinates
+                if (kpt.x >= 0.0f && kpt.x <= 1.0f && kpt.y >= 0.0f && kpt.y <= 1.0f) {
+                    kpt_x = kpt.x * frame.cols;
+                    kpt_y = kpt.y * frame.rows;
+                } else {
+                    kpt_x = std::max(0.0f, std::min(static_cast<float>(frame.cols), kpt.x));
+                    kpt_y = std::max(0.0f, std::min(static_cast<float>(frame.rows), kpt.y));
+                }
+                
+                // Determine keypoint color based on body part
+                cv::Scalar kpt_color;
+                if (i <= 4) {
+                    kpt_color = kpt_colors[0];  // Yellow for head
+                } else if (i == 5 || i == 7 || i == 9) {
+                    kpt_color = kpt_colors[1];  // Blue for left arm
+                } else if (i == 6 || i == 8 || i == 10) {
+                    kpt_color = kpt_colors[2];  // Red for right arm
+                } else if (i == 11 || i == 13 || i == 15) {
+                    kpt_color = kpt_colors[3];  // Green for left leg
+                } else {
+                    kpt_color = kpt_colors[4];  // Magenta for right leg
+                }
+                
+                // Draw keypoint as a circle with border
+                cv::circle(frame, cv::Point(static_cast<int>(kpt_x), static_cast<int>(kpt_y)), 5,
+                          cv::Scalar(0, 0, 0), 2);  // Black border
+                cv::circle(frame, cv::Point(static_cast<int>(kpt_x), static_cast<int>(kpt_y)), 3,
+                          kpt_color, -1);  // Filled circle
+                
+                // Optional: Show keypoint index (uncomment for debugging)
+                // cv::putText(frame, std::to_string(i), 
+                //            cv::Point(static_cast<int>(kpt_x) + 7, static_cast<int>(kpt_y)),
+                //            cv::FONT_HERSHEY_SIMPLEX, 0.3, cv::Scalar(255, 255, 255), 1);
+            }
+        }
+    }
+}
+
+// Removed: setDumpDirectories, dumpInputBatch, dumpOutputBatch functions (tensor dump features removed for production)
+// Removed: Raw output debug file writing (raw_output_debug.txt) - removed for production
+    
+    all_detections.clear();
+    all_detections.resize(batch_size_);
+    
+    for (int b = 0; b < batch_size_; ++b) {
             raw_file << "Num anchors: " << num_anchors_ << "\n";
             raw_file << "Output channels: " << output_channels_ << "\n";
             raw_file << "Output per frame: " << output_per_frame << "\n";
@@ -1764,19 +2040,6 @@ void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, 
     float width_prep = det.bbox[2];
     float height_prep = det.bbox[3];
     
-    // Debug: Log before scaling
-    static int debug_scale_count = 0;
-    if (debug_scale_count < 5) {
-        std::cout << "[DEBUG Scale] Before scaling - preprocessed pixel bbox: "
-                  << "x_center=" << x_center_prep 
-                  << ", y_center=" << y_center_prep
-                  << ", width=" << width_prep
-                  << ", height=" << height_prep
-                  << " (original_size=" << original_width << "x" << original_height
-                  << ", input_size=" << input_width_ << "x" << input_height_
-                  << ", scale=" << scale << ", pad_w=" << pad_w << ", pad_h=" << pad_h << ")" << std::endl;
-        debug_scale_count++;
-    }
     
     // Remove padding offset to get coordinates in the scaled (unpadded) region
     // Reference: x1 = (x1 - pad_w) / scale;
@@ -1790,31 +2053,9 @@ void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, 
     float width_orig = width_prep / scale;
     float height_orig = height_prep / scale;
     
-    // Debug: Log after scaling
-    if (debug_scale_count <= 5) {
-        std::cout << "[DEBUG Scale] After scaling - original pixel bbox: "
-                  << "x_center=" << x_center_orig 
-                  << ", y_center=" << y_center_orig
-                  << ", width=" << width_orig
-                  << ", height=" << height_orig << std::endl;
-    }
-    
     // Add ROI offset to scale from cropped frame to true original frame
-    // Debug: Log ROI offset addition
-    static int debug_roi_count = 0;
-    if (debug_roi_count < 5 && (roi_offset_x != 0 || roi_offset_y != 0)) {
-        std::cout << "[DEBUG ROI] Before ROI offset: x_center=" << x_center_orig 
-                  << ", y_center=" << y_center_orig
-                  << ", roi_offset=(" << roi_offset_x << "," << roi_offset_y << ")"
-                  << ", true_original=" << true_original_width << "x" << true_original_height << std::endl;
-        debug_roi_count++;
-    }
     x_center_orig += static_cast<float>(roi_offset_x);
     y_center_orig += static_cast<float>(roi_offset_y);
-    if (debug_roi_count <= 5 && (roi_offset_x != 0 || roi_offset_y != 0)) {
-        std::cout << "[DEBUG ROI] After ROI offset: x_center=" << x_center_orig 
-                  << ", y_center=" << y_center_orig << std::endl;
-    }
     
     // Clamp to true original image bounds (after adding ROI offset)
     // Use true original dimensions if provided, otherwise don't clamp (use very large bounds)

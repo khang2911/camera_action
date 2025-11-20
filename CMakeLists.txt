@@ -116,19 +116,3 @@ endif()
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ALL_LIBS})
-
-# Create cross-check tool executable
-set(CROSS_CHECK_SOURCES
-    src/trt_infer_cpp.cpp
-    src/preprocessor.cpp
-    src/yolo_detector.cpp
-    src/logger.cpp
-)
-
-add_executable(trt_infer_cpp ${CROSS_CHECK_SOURCES})
-
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_options(trt_infer_cpp PRIVATE -g)
-endif()
-
-target_link_libraries(trt_infer_cpp PRIVATE ${ALL_LIBS})

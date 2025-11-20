@@ -65,10 +65,6 @@ public:
     int getInputHeight() const { return input_height_; }
     int getGpuId() const { return gpu_id_; }
     
-    void setDumpDirectories(const std::string& input_dir,
-                            const std::string& output_dir,
-                            const std::string& prefix);
-    
     // Run inference and return detections (for debug mode)
     bool runInferenceWithDetections(const std::vector<std::shared_ptr<std::vector<float>>>& inputs,
                                     const std::vector<std::string>& output_paths,
@@ -156,14 +152,6 @@ private:
                                    int roi_offset_x = 0, int roi_offset_y = 0,
                                    int true_original_width = 0, int true_original_height = 0);
 
-    bool dump_inputs_enabled_ = false;
-    bool dump_outputs_enabled_ = false;
-    std::string input_dump_dir_;
-    std::string output_dump_dir_;
-    std::string dump_prefix_;
-    std::atomic<int> dump_batch_counter_{0};
-    void dumpInputBatch(const std::vector<std::shared_ptr<std::vector<float>>>& inputs, int batch_idx);
-    void dumpOutputBatch(const std::vector<float>& output_data, int batch_idx);
 };
 
 #endif // YOLO_DETECTOR_H

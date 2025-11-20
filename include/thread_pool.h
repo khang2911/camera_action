@@ -102,12 +102,6 @@ private:
     std::thread monitor_thread_;
     std::unique_ptr<FrameQueue> raw_frame_queue_;
     
-    std::string input_dump_dir_;
-    std::string output_dump_dir_;
-    bool dump_inputs_enabled_ = false;
-    bool dump_outputs_enabled_ = false;
-    int global_frame_limit_ = -1;
-    std::atomic<int> global_frames_processed_{0};
     
     std::atomic<bool> stop_flag_;
     std::vector<bool> video_processed_;  // Use regular bool with mutex (atomic vectors are not resizable)
