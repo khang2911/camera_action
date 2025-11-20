@@ -46,6 +46,7 @@ private:
     uint8_t* rgb_buffer_;
     SwsContext* sws_ctx_;
     AVPacket* packet_;
+    cv::Mat frame_mat_;  // Pre-allocated Mat to avoid cloning
     int video_stream_index_;
     
     std::string video_path_;

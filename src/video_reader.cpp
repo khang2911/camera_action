@@ -154,6 +154,12 @@ void VideoReader::initializeMetadata() {
         return;
     }
 
+    // Enable multi-threaded decoding for better performance
+    // Set thread_count to 0 to auto-detect optimal thread count
+    codec_ctx_->thread_count = 0;
+    // Use frame-level threading if available (faster for most codecs)
+    codec_ctx_->thread_type = FF_THREAD_FRAME;
+    
     // Open codec
     if (avcodec_open2(codec_ctx_, codec_, nullptr) < 0) {
         std::cerr << "Error: Could not open codec" << std::endl;
@@ -192,7 +198,7 @@ void VideoReader::initializeMetadata() {
         return;
     }
 
-    // Allocate buffer for RGB frame
+    // Allocate buffer for RGB frame (kept for compatibility, but we'll use frame_mat_ directly)
     int num_bytes = av_image_get_buffer_size(AV_PIX_FMT_BGR24, original_width_, original_height_, 1);
     rgb_buffer_ = (uint8_t*)av_malloc(num_bytes * sizeof(uint8_t));
     if (!rgb_buffer_) {
@@ -203,11 +209,15 @@ void VideoReader::initializeMetadata() {
     av_image_fill_arrays(frame_rgb_->data, frame_rgb_->linesize, rgb_buffer_, AV_PIX_FMT_BGR24,
                          original_width_, original_height_, 1);
 
+    // Pre-allocate OpenCV Mat to avoid reallocation and reduce cloning overhead
+    frame_mat_ = cv::Mat(original_height_, original_width_, CV_8UC3);
+
     // Initialize SWS context for color conversion
+    // Use SWS_FAST_BILINEAR for better performance (faster than SWS_BILINEAR)
     sws_ctx_ = sws_getContext(
         codec_ctx_->width, codec_ctx_->height, codec_ctx_->pix_fmt,
         original_width_, original_height_, AV_PIX_FMT_BGR24,
-        SWS_BILINEAR, nullptr, nullptr, nullptr);
+        SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
 
     if (!sws_ctx_) {
         std::cerr << "Error: Could not initialize SWS context" << std::endl;
@@ -345,63 +355,56 @@ bool VideoReader::decodeFrame(cv::Mat& frame) {
         return false;
     }
 
-    while (av_read_frame(format_ctx_, packet_) >= 0) {
-        if (packet_->stream_index == video_stream_index_) {
-            // Send packet to decoder
-            int ret = avcodec_send_packet(codec_ctx_, packet_);
-            if (ret < 0) {
-                av_packet_unref(packet_);
-                continue;
-            }
-
-            // Receive frame from decoder
-            ret = avcodec_receive_frame(codec_ctx_, frame_);
-            if (ret == 0) {
-                // Check if frame is within time window
-                // Use frame_->pts if available (more accurate), otherwise fall back to packet_->pts
-                int64_t frame_pts = (frame_->pts != AV_NOPTS_VALUE) ? frame_->pts : packet_->pts;
-                
-                if (frame_pts != AV_NOPTS_VALUE) {
-                    double current_timestamp = ptsToTimestamp(frame_pts);
-                    
-                    if (has_clip_metadata_ && clip_.has_time_window) {
-                        if (std::isfinite(current_timestamp)) {
-                            if (current_timestamp < clip_.start_timestamp) {
-                                av_packet_unref(packet_);
-                                continue;
-                            }
-                            if (std::isfinite(clip_.end_timestamp) && current_timestamp > clip_.end_timestamp) {
-                                av_packet_unref(packet_);
-                                return false;
-                            }
-                        }
+    // Main decode loop - try to get buffered frames first, then read packets
+    while (true) {
+        // Try to receive a frame from decoder (might have buffered frames from previous packets)
+        int ret = avcodec_receive_frame(codec_ctx_, frame_);
+        if (ret == 0) {
+            // We have a frame, check if it's within time window
+            int64_t frame_pts = (frame_->pts != AV_NOPTS_VALUE) ? frame_->pts : AV_NOPTS_VALUE;
+            
+            if (frame_pts != AV_NOPTS_VALUE && has_clip_metadata_ && clip_.has_time_window) {
+                double current_timestamp = ptsToTimestamp(frame_pts);
+                if (std::isfinite(current_timestamp)) {
+                    if (current_timestamp < clip_.start_timestamp) {
+                        // Frame is before start, continue to next frame
+                        continue;
+                    }
+                    if (std::isfinite(clip_.end_timestamp) && current_timestamp > clip_.end_timestamp) {
+                        return false;
                     }
                 }
-
-                // Convert frame to BGR24 (OpenCV format)
-                sws_scale(sws_ctx_,
-                         frame_->data, frame_->linesize, 0, codec_ctx_->height,
-                         frame_rgb_->data, frame_rgb_->linesize);
-
-                // Create OpenCV Mat from RGB frame
-                frame = cv::Mat(original_height_, original_width_, CV_8UC3, frame_rgb_->data[0], frame_rgb_->linesize[0]).clone();
-
-                av_packet_unref(packet_);
-                return true;
-            } else if (ret == AVERROR(EAGAIN)) {
-                // Need more input
-                av_packet_unref(packet_);
-                continue;
-            } else if (ret == AVERROR_EOF) {
-                // End of stream
-                av_packet_unref(packet_);
-                return false;
             }
-        }
-        av_packet_unref(packet_);
-    }
 
-    return false;
+            // Convert frame to BGR24 (OpenCV format) directly into pre-allocated Mat
+            sws_scale(sws_ctx_,
+                     frame_->data, frame_->linesize, 0, codec_ctx_->height,
+                     frame_mat_.data, frame_mat_.step);
+
+            // Copy to output frame (need copy since frame_mat_ is reused)
+            frame = frame_mat_.clone();
+            return true;
+        } else if (ret == AVERROR(EAGAIN)) {
+            // Need more input, read a packet
+            if (av_read_frame(format_ctx_, packet_) < 0) {
+                return false;  // End of file or error
+            }
+            
+            if (packet_->stream_index == video_stream_index_) {
+                // Send packet to decoder
+                ret = avcodec_send_packet(codec_ctx_, packet_);
+                if (ret < 0 && ret != AVERROR(EAGAIN)) {
+                    av_packet_unref(packet_);
+                    continue;  // Skip this packet and try next
+                }
+                // Continue loop to receive frame
+            }
+            av_packet_unref(packet_);
+        } else {
+            // Error or EOF
+            return false;
+        }
+    }
 }
 
 bool VideoReader::readFrame(cv::Mat& frame) {
