@@ -156,8 +156,11 @@ private:
     int getNextVideo();
     
     // Helper functions for Redis mode
-    VideoClip parseJsonToVideoClip(const std::string& json_str);
-    void processVideo(int reader_id, const VideoClip& clip, int video_id, const std::string& redis_message = "");
+    std::vector<VideoClip> parseJsonToVideoClips(const std::string& json_str);
+    void processVideo(int reader_id, const VideoClip& clip, int video_id,
+                      const std::string& redis_message = "",
+                      bool register_message = true,
+                      bool finalize_message = true);
     
     std::string generateOutputPath(const std::string& serial, const std::string& record_id, 
                                    const std::string& record_date, const std::string& engine_name);

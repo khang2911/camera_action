@@ -490,24 +490,32 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
             " (messages remaining in queue: " + std::to_string(queue_length) + ")" : "";
         
         try {
-            // Parse JSON message (one line from video_list.jsonl format)
-            // Each message is a single JSON object, same format as video_list.jsonl
-            VideoClip clip = parseJsonToVideoClip(message);
+            auto clips = parseJsonToVideoClips(message);
+            std::vector<VideoClip> valid_clips;
+            for (auto& clip : clips) {
+                if (!clip.path.empty()) {
+                    valid_clips.push_back(std::move(clip));
+                }
+            }
             
-            if (clip.path.empty()) {
+            if (valid_clips.empty()) {
                 LOG_WARNING("Reader", "Reader " + std::to_string(reader_id) + 
-                         " received message with empty video path, skipping" + queue_status);
+                         " parsed Redis message but found no playable videos" + queue_status);
                 releaseReaderSlot();
                 continue;
             }
             
-            LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
-                     " processing video from Redis: " + clip.path + queue_status);
+            for (size_t idx = 0; idx < valid_clips.size(); ++idx) {
+                auto& clip = valid_clips[idx];
+                LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
+                         " processing video from Redis: " + clip.path + queue_status);
+                
+                bool register_message = (idx == 0);
+                bool finalize_message = (idx == valid_clips.size() - 1);
+                processVideo(reader_id, clip, video_id_counter, message, register_message, finalize_message);
+                video_id_counter++;
+            }
             
-            // Process the video
-            processVideo(reader_id, clip, video_id_counter, message);
-            
-            video_id_counter++;
             releaseReaderSlot();
         } catch (const std::exception& e) {
             LOG_ERROR("Reader", "Failed to parse Redis message: " + std::string(e.what()));
@@ -524,8 +532,8 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
     LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + " finished (Redis mode)");
 }
 
-VideoClip ThreadPool::parseJsonToVideoClip(const std::string& json_str) {
-    VideoClip clip;
+std::vector<VideoClip> ThreadPool::parseJsonToVideoClips(const std::string& json_str) {
+    std::vector<VideoClip> clips;
     try {
         YAML::Node root = YAML::Load(json_str);
         YAML::Node alarm = root["alarm"];
@@ -540,99 +548,123 @@ VideoClip ThreadPool::parseJsonToVideoClip(const std::string& json_str) {
             }
         };
         
-        // Video path (take first playback_location entry)
-        YAML::Node playback = root["playback_location"];
-        if (playback && playback.IsSequence() && playback.size() > 0) {
-            clip.path = playback[0].as<std::string>("");
-        }
+        std::string serial = getString(raw_alarm, "serial");
+        if (serial.empty()) serial = getString(alarm, "serial");
+        std::string record_id = getString(alarm, "record_id");
+        if (record_id.empty()) record_id = getString(raw_alarm, "record_id");
         
-        // Serial and record_id
-        clip.serial = getString(raw_alarm, "serial");
-        if (clip.serial.empty()) {
-            clip.serial = getString(alarm, "serial");
-        }
-        clip.record_id = getString(alarm, "record_id");
-        if (clip.record_id.empty()) {
-            clip.record_id = getString(raw_alarm, "record_id");
-        }
-        
-        // Record date from send_at or record_start_time
+        std::string record_date;
         std::string send_at = getString(raw_alarm, "send_at");
         if (send_at.length() >= 8) {
-            clip.record_date = send_at.substr(0, 4) + "-" + send_at.substr(4, 2) + "-" + send_at.substr(6, 2);
+            record_date = send_at.substr(0, 4) + "-" + send_at.substr(4, 2) + "-" + send_at.substr(6, 2);
         } else {
             std::string record_start_time = getString(alarm, "record_start_time");
             if (record_start_time.length() >= 10) {
-                clip.record_date = record_start_time.substr(0, 10);
+                record_date = record_start_time.substr(0, 10);
             }
         }
         
-        // Time window
-        clip.start_timestamp = ConfigParser::parseTimestamp(getString(raw_alarm, "video_start_time"));
-        clip.end_timestamp = ConfigParser::parseTimestamp(getString(raw_alarm, "video_end_time"));
+        double start_ts = ConfigParser::parseTimestamp(getString(raw_alarm, "video_start_time"));
+        double end_ts = ConfigParser::parseTimestamp(getString(raw_alarm, "video_end_time"));
         
+        YAML::Node playback = root["playback_location"];
         YAML::Node record_list = raw_alarm ? raw_alarm["record_list"] : YAML::Node();
-        if (record_list && record_list.IsSequence() && record_list.size() > 0) {
-            const auto& entry = record_list[0];
-            if (entry["moment_time"]) {
-                clip.moment_time = entry["moment_time"].as<double>(0.0);
-            } else if (entry["recordtimestamp"]) {
-                clip.moment_time = ConfigParser::parseTimestamp(entry["recordtimestamp"].as<std::string>());
-            }
-            if (entry["duration"]) {
-                try {
-                    clip.duration_seconds = entry["duration"].as<double>(0.0);
-                } catch (...) {
-                    clip.duration_seconds = 0.0;
-                }
-            }
+        size_t clip_count = 0;
+        if (playback && playback.IsSequence()) {
+            clip_count = playback.size();
         }
-        if (std::isfinite(clip.start_timestamp) && std::isfinite(clip.end_timestamp) && 
-            std::isfinite(clip.moment_time)) {
-            clip.has_time_window = true;
+        if (record_list && record_list.IsSequence()) {
+            clip_count = std::max(clip_count, record_list.size());
+        }
+        if (clip_count == 0 && playback && playback.IsSequence()) {
+            clip_count = playback.size();
         }
         
-        // ROI box
         YAML::Node config_node = root["config"];
         YAML::Node box_node = config_node ? config_node["box"] : YAML::Node();
+        bool has_roi = false;
+        float roi_x1 = 0.0f, roi_y1 = 0.0f, roi_x2 = 1.0f, roi_y2 = 1.0f;
         if (box_node && box_node.IsSequence() && box_node.size() >= 3) {
             try {
                 auto first = box_node[0];
                 auto third = box_node[2];
                 if (first.IsSequence() && first.size() >= 2 &&
                     third.IsSequence() && third.size() >= 2) {
-                    clip.roi_x1 = first[0].as<float>();
-                    clip.roi_y1 = first[1].as<float>();
-                    clip.roi_x2 = third[0].as<float>();
-                    clip.roi_y2 = third[1].as<float>();
-                    clip.has_roi = true;
+                    roi_x1 = first[0].as<float>();
+                    roi_y1 = first[1].as<float>();
+                    roi_x2 = third[0].as<float>();
+                    roi_y2 = third[1].as<float>();
+                    has_roi = true;
                 }
             } catch (...) {
-                clip.has_roi = false;
+                has_roi = false;
             }
         }
         
-        // Fallback to download_info if playback missing
-        if (clip.path.empty()) {
-            YAML::Node download_info = root["download_info"];
-            if (download_info && download_info.IsSequence() && download_info.size() > 0) {
-                clip.path = getString(download_info[0], "local_filepath");
+        YAML::Node download_info = root["download_info"];
+        
+        for (size_t i = 0; i < clip_count; ++i) {
+            VideoClip clip;
+            clip.serial = serial;
+            clip.record_id = record_id;
+            clip.record_date = record_date;
+            clip.start_timestamp = start_ts;
+            clip.end_timestamp = end_ts;
+            if (std::isfinite(start_ts) && std::isfinite(end_ts)) {
+                clip.has_time_window = true;
             }
+            clip.has_roi = has_roi;
+            clip.roi_x1 = roi_x1;
+            clip.roi_y1 = roi_y1;
+            clip.roi_x2 = roi_x2;
+            clip.roi_y2 = roi_y2;
+            
+            if (playback && playback.IsSequence() && i < playback.size()) {
+                try {
+                    clip.path = playback[i].as<std::string>("");
+                } catch (...) {
+                    clip.path.clear();
+                }
+            }
+            if (clip.path.empty() && download_info && download_info.IsSequence() && i < download_info.size()) {
+                clip.path = getString(download_info[i], "local_filepath");
+            }
+            
+            if (record_list && record_list.IsSequence() && i < record_list.size()) {
+                const auto& entry = record_list[i];
+                if (entry["moment_time"]) {
+                    clip.moment_time = entry["moment_time"].as<double>(0.0);
+                } else if (entry["recordtimestamp"]) {
+                    clip.moment_time = ConfigParser::parseTimestamp(entry["recordtimestamp"].as<std::string>());
+                }
+                if (entry["duration"]) {
+                    try {
+                        clip.duration_seconds = entry["duration"].as<double>(0.0);
+                    } catch (...) {
+                        clip.duration_seconds = 0.0;
+                    }
+                }
+            }
+            
+            clips.push_back(clip);
         }
     } catch (const YAML::Exception& e) {
         LOG_ERROR("Reader", "Failed to parse Redis message JSON: " + std::string(e.what()));
     }
     
-    return clip;
+    return clips;
 }
 
-void ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id, const std::string& redis_message) {
+void ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
+                              const std::string& redis_message,
+                              bool register_message,
+                              bool finalize_message) {
     LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
              " processing video " + std::to_string(video_id) + ": " + clip.path);
     
     const std::string video_key = buildVideoKey(clip.serial, clip.record_id, video_id);
     
-    if (use_redis_queue_ && output_queue_ && !redis_message.empty()) {
+    if (register_message && use_redis_queue_ && output_queue_ && !redis_message.empty()) {
         registerVideoMessage(video_key, redis_message);
     }
     
@@ -708,7 +740,9 @@ void ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id
                  " finished video " + std::to_string(video_id) + " (" + 
                  std::to_string(frame_count) + " frames)");
     
-    markVideoReadingComplete(video_key);
+    if (finalize_message) {
+        markVideoReadingComplete(video_key);
+    }
 }
 
 void ThreadPool::preprocessorWorker(int worker_id) {
