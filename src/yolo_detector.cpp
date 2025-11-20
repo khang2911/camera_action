@@ -456,9 +456,6 @@ std::vector<Detection> YOLODetector::parseRawDetectionOutputTransposed(const std
         float height = output_data[3 * num_anchors_ + i];
         float confidence = output_data[4 * num_anchors_ + i];
         
-        // Debug: Log first few values
-        static int debug_count = 0;
-        
         // Apply confidence threshold
         if (confidence < conf_threshold_) {
             continue;
@@ -554,9 +551,6 @@ std::vector<Detection> YOLODetector::parseRawPoseOutput(const std::vector<float>
             float raw_x = output_data[idx_kpt_x];
             float raw_y = output_data[idx_kpt_y];
             float raw_conf = output_data[idx_kpt_conf];
-            
-            // Debug: Log first few keypoints to diagnose parsing issues
-            static bool logged_kpt_debug = false;
             
             det.keypoints[k].x = raw_x;   // Pixel coordinates
             det.keypoints[k].y = raw_y;   // Pixel coordinates
@@ -1376,163 +1370,6 @@ void YOLODetector::drawDetections(cv::Mat& frame, const std::vector<Detection>& 
             }
         }
     }
-}
-
-// Removed: setDumpDirectories, dumpInputBatch, dumpOutputBatch functions (tensor dump features removed for production)
-// Removed: Raw output debug file writing (raw_output_debug.txt) - removed for production
-    
-    all_detections.clear();
-            raw_output_written = true;
-        }
-    }
-    
-    all_detections.clear();
-    all_detections.resize(batch_size_);
-    
-    for (int b = 0; b < batch_size_; ++b) {
-        // Extract output for this batch item
-        // TensorRT output format: [batch, num_anchors, channels] flattened as [batch*num_anchors*channels]
-        // Python does: output[i:i+1] which gets [1, num_anchors, channels], then .T transposes to [channels, num_anchors]
-        // But we read it directly as [num_anchors, channels] which should be correct
-        std::vector<float> frame_output(output_per_frame);
-        size_t batch_offset = static_cast<size_t>(b) * output_per_frame;
-        
-        if (batch_offset + output_per_frame > output_data.size()) {
-            std::cerr << "Error: Batch " << b << " offset out of bounds. "
-                      << "batch_offset=" << batch_offset << ", output_per_frame=" << output_per_frame
-                      << ", output_data.size()=" << output_data.size() << std::endl;
-            return false;
-        }
-        
-        // CRITICAL FIX: TensorRT outputs [batch, channels, num_anchors] = [batch, 5, 8400]
-        // Python does: output[0] gets [channels, num_anchors] = [5, 8400], then .T transposes to [num_anchors, channels] = [8400, 5]
-        // So we need to transpose the extracted batch data from [channels, num_anchors] to [num_anchors, channels]
-        
-        // Extract batch data in [channels, num_anchors] format
-        std::vector<float> batch_data_channels_first(output_per_frame);
-        std::copy(output_data.begin() + batch_offset,
-                  output_data.begin() + batch_offset + output_per_frame,
-                  batch_data_channels_first.begin());
-        
-        // Transpose from [channels, num_anchors] to [num_anchors, channels] to match Python's output[0].T
-        // frame_output[anchor * channels + channel] = batch_data_channels_first[channel * num_anchors + anchor]
-        // 
-        // Example for Anchor 0:
-        //   Before: Channel 0, Anchor 0 at index 0 -> After: Anchor 0, Channel 0 at index 0 (same)
-        //   Before: Channel 1, Anchor 0 at index num_anchors -> After: Anchor 0, Channel 1 at index 1
-        //   Before: Channel 4, Anchor 0 at index 4*num_anchors -> After: Anchor 0, Channel 4 at index 4
-        for (int anchor = 0; anchor < num_anchors_; ++anchor) {
-            for (int channel = 0; channel < output_channels_; ++channel) {
-                int src_idx = channel * num_anchors_ + anchor;  // [channels, num_anchors] format
-                int dst_idx = anchor * output_channels_ + channel;  // [num_anchors, channels] format
-                if (src_idx >= static_cast<int>(batch_data_channels_first.size()) || 
-                    dst_idx >= static_cast<int>(frame_output.size())) {
-                    std::cerr << "Error: Transpose index out of bounds! src_idx=" << src_idx 
-                              << ", dst_idx=" << dst_idx << ", batch_data size=" << batch_data_channels_first.size()
-                              << ", frame_output size=" << frame_output.size() << std::endl;
-                    return false;
-                }
-                frame_output[dst_idx] = batch_data_channels_first[src_idx];
-            }
-        }
-        
-        // Debug: Verify transpose worked - check first anchor's values
-        static bool transpose_debug_logged = false;
-        if (!transpose_debug_logged && b == 0) {
-            // Before transpose: [channels, num_anchors] format
-            // Channel 0, Anchor 0: index = 0 * num_anchors + 0 = 0
-            // Channel 1, Anchor 0: index = 1 * num_anchors + 0 = num_anchors
-            // Channel 4, Anchor 0: index = 4 * num_anchors + 0 = 4 * num_anchors
-            float before_cx = batch_data_channels_first[0 * num_anchors_ + 0];
-            float before_cy = batch_data_channels_first[1 * num_anchors_ + 0];
-            float before_conf = batch_data_channels_first[4 * num_anchors_ + 0];
-            
-            // After transpose: [num_anchors, channels] format
-            // Anchor 0, Channel 0: index = 0 * output_channels + 0 = 0
-            // Anchor 0, Channel 1: index = 0 * output_channels + 1 = 1
-            // Anchor 0, Channel 4: index = 0 * output_channels + 4 = 4
-            float after_cx = frame_output[0 * output_channels_ + 0];
-            float after_cy = frame_output[0 * output_channels_ + 1];
-            float after_conf = frame_output[0 * output_channels_ + 4];
-            
-            std::cout << "[DEBUG Transpose] num_anchors_=" << num_anchors_ << ", output_channels_=" << output_channels_ << std::endl;
-            std::cout << "[DEBUG Transpose] Before transpose [channels, num_anchors]: "
-                      << "cx=" << before_cx << " (idx=" << (0 * num_anchors_ + 0) << "), "
-                      << "cy=" << before_cy << " (idx=" << (1 * num_anchors_ + 0) << "), "
-                      << "conf=" << before_conf << " (idx=" << (4 * num_anchors_ + 0) << ")" << std::endl;
-            std::cout << "[DEBUG Transpose] After transpose [num_anchors, channels]: "
-                      << "cx=" << after_cx << " (idx=" << (0 * output_channels_ + 0) << "), "
-                      << "cy=" << after_cy << " (idx=" << (0 * output_channels_ + 1) << "), "
-                      << "conf=" << after_conf << " (idx=" << (0 * output_channels_ + 4) << ")" << std::endl;
-            
-            // Also check what the transpose should produce
-            // After transpose, Anchor 0, Channel 0 should equal Channel 0, Anchor 0 (before) - both at index 0
-            // After transpose, Anchor 0, Channel 1 should equal Channel 1, Anchor 0 (before) - different indices!
-            // After transpose, Anchor 0, Channel 4 should equal Channel 4, Anchor 0 (before) - different indices!
-            std::cout << "[DEBUG Transpose] Expected after transpose: "
-                      << "cx=" << before_cx << " (should equal Channel 0, Anchor 0), "
-                      << "cy=" << before_cy << " (should equal Channel 1, Anchor 0), "
-                      << "conf=" << before_conf << " (should equal Channel 4, Anchor 0)" << std::endl;
-            
-            // Verify the transpose by checking a different anchor
-            // Anchor 1, Channel 0 should equal Channel 0, Anchor 1 (before)
-            float anchor1_ch0_before = batch_data_channels_first[0 * num_anchors_ + 1];  // Channel 0, Anchor 1
-            float anchor1_ch0_after = frame_output[1 * output_channels_ + 0];  // Anchor 1, Channel 0
-            std::cout << "[DEBUG Transpose] Anchor 1, Channel 0: before=" << anchor1_ch0_before 
-                      << " (Channel 0, Anchor 1), after=" << anchor1_ch0_after 
-                      << " (Anchor 1, Channel 0) - should be equal!" << std::endl;
-            
-            transpose_debug_logged = true;
-        }
-        std::vector<Detection> detections;
-        if (model_type_ == ModelType::POSE) {
-            detections = parseRawPoseOutput(frame_output);
-        } else {
-            detections = parseRawDetectionOutput(frame_output);
-        }
-        
-        detections = applyNMS(detections);
-        if (static_cast<int>(detections.size()) > max_detections_) {
-            detections.resize(max_detections_);
-        }
-        
-        // Store detections in preprocessed coordinate space (normalized [0,1] relative to input_width_ x input_height_)
-        // Don't scale back to original - keep them in preprocessed space for debug images
-        all_detections[b] = detections;
-        
-        // Scale detections to original frame coordinates for writing to file
-        int orig_w = (b < static_cast<int>(original_widths.size()) && original_widths[b] > 0) 
-                     ? original_widths[b] : 0;
-        int orig_h = (b < static_cast<int>(original_heights.size()) && original_heights[b] > 0) 
-                     ? original_heights[b] : 0;
-        
-        if (orig_w > 0 && orig_h > 0) {
-            // Create a copy for file writing (scaled to original)
-            std::vector<Detection> detections_for_file = detections;
-            // Get ROI offset for this batch item
-            int roi_x = (b < static_cast<int>(roi_offset_x.size())) ? roi_offset_x[b] : 0;
-            int roi_y = (b < static_cast<int>(roi_offset_y.size())) ? roi_offset_y[b] : 0;
-            // Get true original dimensions for this batch item
-            int true_orig_w = (b < static_cast<int>(true_original_widths.size()) && true_original_widths[b] > 0) 
-                             ? true_original_widths[b] : 0;
-            int true_orig_h = (b < static_cast<int>(true_original_heights.size()) && true_original_heights[b] > 0) 
-                             ? true_original_heights[b] : 0;
-            for (auto& det : detections_for_file) {
-                scaleDetectionToOriginal(det, orig_w, orig_h, roi_x, roi_y, true_orig_w, true_orig_h);
-            }
-            if (!writeDetectionsToFile(detections_for_file, output_paths[b], frame_numbers[b])) {
-                std::cerr << "Error: Failed to write detections for frame " << frame_numbers[b] << std::endl;
-                return false;
-            }
-        } else {
-            if (!writeDetectionsToFile(detections, output_paths[b], frame_numbers[b])) {
-                std::cerr << "Error: Failed to write detections for frame " << frame_numbers[b] << std::endl;
-                return false;
-            }
-        }
-    }
-    
-    return true;
 }
 
 void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, int original_height, 

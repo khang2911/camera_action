@@ -98,6 +98,9 @@ public:
     std::string getInputQueueName() const { return input_queue_name_; }
     std::string getOutputQueueName() const { return output_queue_name_; }
     
+    // Utility helpers
+    static double parseTimestamp(const std::string& iso);
+    
 private:
     std::vector<EngineConfig> engine_configs_;
     std::vector<VideoClip> video_clips_;
@@ -124,7 +127,6 @@ private:
     void addVideoClip(const VideoClip& clip);
     std::pair<double, double> computeTimeWindow(const std::string& start_iso,
                                                 const std::string& end_iso) const;
-    static double parseTimestamp(const std::string& iso);
 };
 
 #endif // CONFIG_PARSER_H
