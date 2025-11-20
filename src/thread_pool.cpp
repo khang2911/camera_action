@@ -524,7 +524,7 @@ void ThreadPool::preprocessorWorker(int worker_id) {
                         static bool logged_roi_missing = false;
                         if (!logged_roi_missing && worker_id == 0) {
                             if (!clip.has_roi) {
-                                LOG_WARN("Preprocessor", "ROI cropping enabled for engine " + engine_group->engine_name +
+                                LOG_WARNING("Preprocessor", "ROI cropping enabled for engine " + engine_group->engine_name +
                                          " but video " + std::to_string(video_id) + " has no ROI defined");
                             }
                             logged_roi_missing = true;
@@ -780,7 +780,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             } else {
                 success = engine_group->detectors[detector_id]->runWithPreprocessedData(
                     tensor, output_path, frame_data.frame_number,
-                    frame_data.original_width, frame_data.original_height
+                    frame_data.original_width, frame_data.original_height,
+                    frame_data.roi_offset_x, frame_data.roi_offset_y
                 );
             }
             

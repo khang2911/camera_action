@@ -46,7 +46,8 @@ public:
     bool detectBatch(const std::vector<cv::Mat>& frames, const std::vector<std::string>& output_paths, const std::vector<int>& frame_numbers);
     bool runWithPreprocessedData(const std::shared_ptr<std::vector<float>>& input_data,
                                  const std::string& output_path, int frame_number,
-                                 int original_width = 0, int original_height = 0);
+                                 int original_width = 0, int original_height = 0,
+                                 int roi_offset_x = 0, int roi_offset_y = 0);
     bool runWithPreprocessedBatch(const std::vector<std::shared_ptr<std::vector<float>>>& inputs,
                                   const std::vector<std::string>& output_paths,
                                   const std::vector<int>& frame_numbers,

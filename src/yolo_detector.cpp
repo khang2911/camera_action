@@ -321,7 +321,9 @@ bool YOLODetector::runWithPreprocessedData(const std::shared_ptr<std::vector<flo
                                            const std::string& output_path,
                                            int frame_number,
                                            int original_width,
-                                           int original_height) {
+                                           int original_height,
+                                           int roi_offset_x,
+                                           int roi_offset_y) {
     if (batch_size_ != 1) {
         std::cerr << "Error: runWithPreprocessedData requires batch_size=1 (current batch_size="
                   << batch_size_ << ")" << std::endl;
@@ -329,7 +331,8 @@ bool YOLODetector::runWithPreprocessedData(const std::shared_ptr<std::vector<flo
     }
     
     return runWithPreprocessedBatch({input_data}, {output_path}, {frame_number},
-                                    {original_width}, {original_height}, {}, {});
+                                    {original_width}, {original_height}, 
+                                    {roi_offset_x}, {roi_offset_y});
 }
 
 bool YOLODetector::runWithPreprocessedBatch(
