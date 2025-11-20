@@ -506,12 +506,17 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
             }
             
             int frame_offset = 0;
+            if (use_redis_queue_ && !valid_clips.empty()) {
+                const std::string& message_key = valid_clips[0].message_key;
+                registerVideoMessage(message_key, message);
+            }
+            
             for (size_t idx = 0; idx < valid_clips.size(); ++idx) {
                 auto& clip = valid_clips[idx];
                 LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
                          " processing video from Redis: " + clip.path + queue_status);
                 
-                bool register_message = (idx == 0);
+                bool register_message = false;  // already registered before loop
                 bool finalize_message = (idx == valid_clips.size() - 1);
                 int frames_processed = processVideo(reader_id, clip, video_id_counter, message,
                                                     register_message, finalize_message, frame_offset);
@@ -1418,8 +1423,6 @@ void ThreadPool::registerVideoMessage(const std::string& message_key, const std:
     std::lock_guard<std::mutex> lock(video_output_mutex_);
     VideoOutputStatus& status = video_output_status_[message_key];
     status.original_message = message;
-    status.pending_counts.clear();
-    status.detector_outputs.clear();
     status.reading_completed = false;
     status.message_pushed = false;
 }
@@ -1430,13 +1433,8 @@ void ThreadPool::registerPendingFrame(const std::string& message_key, const std:
     }
     
     std::lock_guard<std::mutex> lock(video_output_mutex_);
-    auto it = video_output_status_.find(message_key);
-    if (it == video_output_status_.end()) {
-        LOG_WARNING("RedisOutput", "registerPendingFrame: unknown message_key '" +
-                                 message_key + "' for engine '" + engine_name + "'");
-        return;
-    }
-    it->second.pending_counts[engine_name]++;
+    VideoOutputStatus& status = video_output_status_[message_key];
+    status.pending_counts[engine_name]++;
 }
 
 void ThreadPool::markFrameProcessed(const std::string& message_key, const std::string& engine_name,
@@ -1448,14 +1446,7 @@ void ThreadPool::markFrameProcessed(const std::string& message_key, const std::s
     std::string message_to_push;
     {
         std::lock_guard<std::mutex> lock(video_output_mutex_);
-        auto it = video_output_status_.find(message_key);
-        if (it == video_output_status_.end()) {
-            LOG_WARNING("RedisOutput", "markFrameProcessed: unknown message_key '" +
-                                     message_key + "' while processing engine '" +
-                                     engine_name + "', output_path=" + output_path);
-            return;
-        }
-        auto& status = it->second;
+        auto& status = video_output_status_[message_key];
         if (!output_path.empty()) {
             std::string key = engine_name + "_v" + std::to_string(video_index);
             status.detector_outputs[key] = output_path;
