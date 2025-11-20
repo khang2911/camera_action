@@ -519,6 +519,58 @@ VideoClip ThreadPool::parseJsonToVideoClip(const std::string& json_str) {
     // Simple JSON parsing using string operations
     // This is a basic parser - for production, consider using a proper JSON library
     
+    // Parse alarm.serial (camera serial)
+    size_t serial_pos = json_str.find("\"serial\"");
+    if (serial_pos != std::string::npos) {
+        size_t colon_pos = json_str.find(":", serial_pos);
+        if (colon_pos != std::string::npos) {
+            size_t start = json_str.find("\"", colon_pos) + 1;
+            if (start != std::string::npos && start > colon_pos) {
+                size_t end = json_str.find("\"", start);
+                if (end != std::string::npos) {
+                    clip.serial = json_str.substr(start, end - start);
+                }
+            }
+        }
+    }
+    
+    // Parse alarm.record_id
+    size_t record_id_pos = json_str.find("\"record_id\"");
+    if (record_id_pos != std::string::npos) {
+        size_t colon_pos = json_str.find(":", record_id_pos);
+        if (colon_pos != std::string::npos) {
+            size_t start = json_str.find("\"", colon_pos) + 1;
+            if (start != std::string::npos && start > colon_pos) {
+                size_t end = json_str.find("\"", start);
+                if (end != std::string::npos) {
+                    clip.record_id = json_str.substr(start, end - start);
+                }
+            }
+        }
+    }
+    
+    // Parse raw_alarm.send_at (for date extraction)
+    // Format: "20251118200434" -> extract "2025-11-18" (YYYY-MM-DD)
+    size_t send_at_pos = json_str.find("\"send_at\"");
+    if (send_at_pos != std::string::npos) {
+        size_t colon_pos = json_str.find(":", send_at_pos);
+        if (colon_pos != std::string::npos) {
+            size_t start = json_str.find("\"", colon_pos) + 1;
+            if (start != std::string::npos && start > colon_pos) {
+                size_t end = json_str.find("\"", start);
+                if (end != std::string::npos) {
+                    std::string send_at_str = json_str.substr(start, end - start);
+                    if (send_at_str.length() >= 8) {
+                        std::string year = send_at_str.substr(0, 4);
+                        std::string month = send_at_str.substr(4, 2);
+                        std::string day = send_at_str.substr(6, 2);
+                        clip.record_date = year + "-" + month + "-" + day;
+                    }
+                }
+            }
+        }
+    }
+    
     // Parse playback_location
     size_t playback_pos = json_str.find("\"playback_location\"");
     if (playback_pos != std::string::npos) {
@@ -534,6 +586,29 @@ VideoClip ThreadPool::parseJsonToVideoClip(const std::string& json_str) {
         }
     }
     
+    if (clip.record_date.empty()) {
+        // Fallback to alarm.record_start_time (ISO format)
+        size_t record_start_time_pos = json_str.find("\"record_start_time\"");
+        if (record_start_time_pos != std::string::npos) {
+            size_t colon_pos = json_str.find(":", record_start_time_pos);
+            if (colon_pos != std::string::npos) {
+                size_t start = json_str.find("\"", colon_pos) + 1;
+                if (start != std::string::npos && start > colon_pos) {
+                    size_t end = json_str.find("\"", start);
+                    if (end != std::string::npos) {
+                        std::string record_start_time_str = json_str.substr(start, end - start);
+                        size_t date_end = record_start_time_str.find("T");
+                        if (date_end != std::string::npos) {
+                            clip.record_date = record_start_time_str.substr(0, date_end);
+                        } else if (record_start_time_str.length() >= 10) {
+                            clip.record_date = record_start_time_str.substr(0, 10);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Parse raw_alarm.video_start_time and video_end_time
     size_t start_time_pos = json_str.find("\"video_start_time\"");
     if (start_time_pos != std::string::npos) {
@@ -644,14 +719,17 @@ void ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id
     LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
              " processing video " + std::to_string(video_id) + ": " + clip.path);
     
+    const std::string video_key = buildVideoKey(clip.serial, clip.record_id, video_id);
+    
+    if (use_redis_queue_ && output_queue_ && !redis_message.empty()) {
+        registerVideoMessage(video_key, redis_message);
+    }
+    
     VideoReader reader(clip, video_id);
     
     if (!reader.isOpened()) {
         LOG_ERROR("Reader", "Cannot open video " + std::to_string(video_id) + ": " + clip.path);
-        // Push message to output queue even if failed
-        if (use_redis_queue_ && output_queue_ && !redis_message.empty()) {
-            output_queue_->pushMessage(output_queue_name_, redis_message);
-        }
+        markVideoReadingComplete(video_key);
         return;
     }
     
@@ -674,7 +752,8 @@ void ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id
             
             // Create frame data with original frame (shared to preprocessor queue)
             // Note: Frame is NOT cropped here - ROI cropping is applied per-engine in preprocessor
-            FrameData frame_data(frame.clone(), video_id, reader.getFrameNumber(), clip.path);
+            FrameData frame_data(frame.clone(), video_id, reader.getFrameNumber(), clip.path, 
+                                clip.record_id, clip.record_date, clip.serial, video_key);
             // Store original frame dimensions (before any ROI cropping)
             frame_data.original_width = frame.cols;
             frame_data.original_height = frame.rows;
@@ -717,14 +796,7 @@ void ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id
                  " finished video " + std::to_string(video_id) + " (" + 
                  std::to_string(frame_count) + " frames)");
     
-    // Push message to output queue after processing (Redis mode)
-    if (use_redis_queue_ && output_queue_ && !redis_message.empty()) {
-        if (output_queue_->pushMessage(output_queue_name_, redis_message)) {
-            LOG_INFO("Reader", "Pushed processed message to output queue: " + output_queue_name_);
-        } else {
-            LOG_ERROR("Reader", "Failed to push message to output queue: " + output_queue_name_);
-        }
-    }
+    markVideoReadingComplete(video_key);
 }
 
 void ThreadPool::preprocessorWorker(int worker_id) {
@@ -814,6 +886,10 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             processed.video_id = raw_frame.video_id;
             processed.frame_number = raw_frame.frame_number;
             processed.video_path = raw_frame.video_path;
+            processed.record_id = raw_frame.record_id;  // Copy record_id for output path
+            processed.record_date = raw_frame.record_date;  // Copy record_date for output path
+            processed.serial = raw_frame.serial;
+            processed.video_key = raw_frame.video_key;
             processed.frame = frame_to_process;  // Keep reference for potential debugging/logging
             processed.original_width = cropped_width;  // Cropped frame width (for scale calculation)
             processed.original_height = cropped_height;  // Cropped frame height (for scale calculation)
@@ -822,6 +898,7 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             processed.roi_offset_x = roi_offset_x;  // ROI offset X in true original frame
             processed.roi_offset_y = roi_offset_y;  // ROI offset Y in true original frame
             
+            registerPendingFrame(processed.video_key, engine_group->engine_name);
             engine_group->frame_queue->push(processed);
         }
         
@@ -871,6 +948,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             std::vector<int> batch_roi_offset_y;  // ROI offset Y for each frame
             std::vector<cv::Mat> batch_frames;  // Store frames for debug mode
             std::vector<int> batch_video_ids;   // Store video IDs for debug mode
+            std::vector<std::string> batch_video_keys;
             
             // Collect batch_size frames
             while (static_cast<int>(batch_tensors.size()) < batch_size && !stop_flag_) {
@@ -890,13 +968,10 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 }
                 
                 // Generate output path with engine name
+                std::string serial_value = frame_data.serial.empty() ? frame_data.video_key : frame_data.serial;
+                std::string record_value = frame_data.record_id.empty() ? frame_data.video_key : frame_data.record_id;
                 std::string output_path = generateOutputPath(
-                    frame_data.video_id, 
-                    frame_data.frame_number, 
-                    engine_id,
-                    detector_id,
-                    engine_group->engine_name
-                );
+                    serial_value, record_value, frame_data.record_date, engine_group->engine_name);
                 
                 std::shared_ptr<std::vector<float>> tensor = frame_data.preprocessed_data;
                 if (!tensor) {
@@ -923,6 +998,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     batch_frames.push_back(frame_data.frame.clone());
                     batch_video_ids.push_back(frame_data.video_id);
                 }
+                batch_video_keys.push_back(frame_data.video_key);
             }
             
             // Process batch if we have enough frames
@@ -1004,6 +1080,10 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     }
                     LOG_ERROR("Detector", "Batch detection failed for " + std::to_string(batch_size) + " frames");
                 }
+
+                for (size_t b = 0; b < batch_video_keys.size(); ++b) {
+                    markFrameProcessed(batch_video_keys[b], engine_group->engine_name, batch_output_paths[b]);
+                }
             }
         } else {
             // batch_size = 1: process frames one at a time (original behavior)
@@ -1023,11 +1103,12 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             }
             
             // Generate output path with engine name
+            std::string serial_value = frame_data.serial.empty() ? frame_data.video_key : frame_data.serial;
+            std::string record_value = frame_data.record_id.empty() ? frame_data.video_key : frame_data.record_id;
             std::string output_path = generateOutputPath(
-                frame_data.video_id, 
-                frame_data.frame_number, 
-                engine_id,
-                detector_id,
+                serial_value,
+                record_value,
+                frame_data.record_date,
                 engine_group->engine_name
             );
             
@@ -1126,6 +1207,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 }
                 LOG_ERROR("Detector", "Detection failed: " + output_path);
             }
+
+            markFrameProcessed(frame_data.video_key, engine_group->engine_name, output_path);
             
             // Also log every 50 frames with summary
             if (processed_count % 50 == 0) {
@@ -1262,13 +1345,184 @@ void ThreadPool::getStatisticsSnapshot(long long& frames_read, long long& frames
     start_time = stats_.start_time;
 }
 
-std::string ThreadPool::generateOutputPath(int video_id, int frame_number, 
-                                            int engine_id, int detector_id, 
-                                            const std::string& engine_name) {
-    // Generate path for one file per video per engine (frame_number and detector_id not used in path)
+std::string ThreadPool::generateOutputPath(const std::string& serial,
+                                           const std::string& record_id,
+                                           const std::string& record_date,
+                                           const std::string& engine_name) {
+    // Generate path in format: /detector_name/dd-mm-yy/serial_recordid.bin
+    // Example: /alcohol/18-11-25/c03o24120001941_de8e0004-cd5b-4ce2-8244-5055b012bcbf.bin
+    
+    auto sanitize_component = [](const std::string& value, const std::string& fallback) {
+        return value.empty() ? fallback : value;
+    };
+    
+    std::string serial_part = sanitize_component(serial, "unknown_serial");
+    std::string record_part = sanitize_component(record_id, "video");
+    
+    // Convert date from YYYY-MM-DD to dd-mm-yy
+    std::string date_formatted = record_date;
+    if (record_date.length() >= 10 && record_date.find("-") != std::string::npos) {
+        std::string year = record_date.substr(0, 4);
+        std::string month = record_date.substr(5, 2);
+        std::string day = record_date.substr(8, 2);
+        date_formatted = day + "-" + month + "-" + year.substr(2, 2);
+    } else {
+        date_formatted = "unknown-date";
+    }
+    
     std::ostringstream oss;
-    oss << output_dir_ << "/video_" << std::setfill('0') << std::setw(4) << video_id
-        << "_" << engine_name << ".bin";
+    oss << output_dir_ << "/" << engine_name << "/" << date_formatted << "/"
+        << serial_part << "_" << record_part << ".bin";
     return oss.str();
+}
+
+std::string ThreadPool::buildVideoKey(const std::string& serial, const std::string& record_id, int video_id) const {
+    if (!serial.empty() && !record_id.empty()) {
+        return serial + "_" + record_id;
+    }
+    if (!record_id.empty()) {
+        return record_id;
+    }
+    if (!serial.empty()) {
+        return serial;
+    }
+    return "video_" + std::to_string(video_id);
+}
+
+void ThreadPool::registerVideoMessage(const std::string& video_key, const std::string& message) {
+    if (!use_redis_queue_ || !output_queue_ || video_key.empty() || message.empty()) {
+        return;
+    }
+    
+    std::lock_guard<std::mutex> lock(video_output_mutex_);
+    VideoOutputStatus& status = video_output_status_[video_key];
+    status.original_message = message;
+    status.pending_counts.clear();
+    status.detector_outputs.clear();
+    status.reading_completed = false;
+    status.message_pushed = false;
+}
+
+void ThreadPool::registerPendingFrame(const std::string& video_key, const std::string& engine_name) {
+    if (!use_redis_queue_ || !output_queue_ || video_key.empty() || engine_name.empty()) {
+        return;
+    }
+    
+    std::lock_guard<std::mutex> lock(video_output_mutex_);
+    auto it = video_output_status_.find(video_key);
+    if (it == video_output_status_.end()) {
+        return;
+    }
+    it->second.pending_counts[engine_name]++;
+}
+
+void ThreadPool::markFrameProcessed(const std::string& video_key, const std::string& engine_name, const std::string& output_path) {
+    if (!use_redis_queue_ || !output_queue_ || video_key.empty() || engine_name.empty()) {
+        return;
+    }
+    
+    std::string message_to_push;
+    {
+        std::lock_guard<std::mutex> lock(video_output_mutex_);
+        auto it = video_output_status_.find(video_key);
+        if (it == video_output_status_.end()) {
+            return;
+        }
+        auto& status = it->second;
+        if (!output_path.empty()) {
+            status.detector_outputs[engine_name] = output_path;
+        }
+        int& pending = status.pending_counts[engine_name];
+        if (pending > 0) {
+            pending--;
+        }
+        message_to_push = tryPushOutputLocked(video_key, status);
+    }
+    
+    if (!message_to_push.empty()) {
+        if (output_queue_->pushMessage(output_queue_name_, message_to_push)) {
+            LOG_INFO("RedisOutput", "Pushed processed message to output queue: " + output_queue_name_);
+        } else {
+            LOG_ERROR("RedisOutput", "Failed to push message to output queue: " + output_queue_name_);
+        }
+    }
+}
+
+void ThreadPool::markVideoReadingComplete(const std::string& video_key) {
+    if (!use_redis_queue_ || !output_queue_ || video_key.empty()) {
+        return;
+    }
+    
+    std::string message_to_push;
+    {
+        std::lock_guard<std::mutex> lock(video_output_mutex_);
+        auto it = video_output_status_.find(video_key);
+        if (it == video_output_status_.end()) {
+            return;
+        }
+        it->second.reading_completed = true;
+        message_to_push = tryPushOutputLocked(video_key, it->second);
+    }
+    
+    if (!message_to_push.empty()) {
+        if (output_queue_->pushMessage(output_queue_name_, message_to_push)) {
+            LOG_INFO("RedisOutput", "Pushed processed message to output queue: " + output_queue_name_);
+        } else {
+            LOG_ERROR("RedisOutput", "Failed to push message to output queue: " + output_queue_name_);
+        }
+    }
+}
+
+bool ThreadPool::canPushOutputLocked(const VideoOutputStatus& status) const {
+    if (!status.reading_completed || status.message_pushed) {
+        return false;
+    }
+    for (const auto& kv : status.pending_counts) {
+        if (kv.second > 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string ThreadPool::augmentMessageWithDetectors(const std::string& message,
+                                                    const std::unordered_map<std::string, std::string>& outputs) const {
+    if (message.empty() || outputs.empty()) {
+        return message;
+    }
+    
+    std::string augmented = message;
+    size_t insert_pos = augmented.find_last_of('}');
+    if (insert_pos == std::string::npos) {
+        return message;
+    }
+    
+    std::ostringstream extra;
+    extra << ", ";
+    bool first = true;
+    for (const auto& kv : outputs) {
+        if (!first) {
+            extra << ", ";
+        }
+        first = false;
+        extra << "\"" << kv.first << "\": \"" << kv.second << "\"";
+    }
+    
+    augmented.insert(insert_pos, extra.str());
+    return augmented;
+}
+
+std::string ThreadPool::tryPushOutputLocked(const std::string& video_key, VideoOutputStatus& status) {
+    if (!canPushOutputLocked(status)) {
+        return "";
+    }
+    if (status.original_message.empty()) {
+        return "";
+    }
+    
+    status.message_pushed = true;
+    std::string final_message = augmentMessageWithDetectors(status.original_message, status.detector_outputs);
+    video_output_status_.erase(video_key);
+    return final_message;
 }
 

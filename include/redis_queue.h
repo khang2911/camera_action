@@ -9,7 +9,7 @@
 
 class RedisQueue {
 public:
-    RedisQueue(const std::string& host, int port, const std::string& password = "");
+    RedisQueue(const std::string& host, int port, const std::string& password = "", int db = 0);
     ~RedisQueue();
     
     // Connection management
@@ -30,6 +30,7 @@ private:
     std::string host_;
     int port_;
     std::string password_;
+    int db_;
     std::unique_ptr<cpp_redis::client> redis_client_;
     mutable std::mutex mutex_;  // mutable to allow locking in const methods
     

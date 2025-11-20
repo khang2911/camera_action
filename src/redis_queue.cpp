@@ -4,8 +4,8 @@
 #include <thread>
 #include <stdexcept>
 
-RedisQueue::RedisQueue(const std::string& host, int port, const std::string& password)
-    : host_(host), port_(port), password_(password), redis_client_(nullptr) {
+RedisQueue::RedisQueue(const std::string& host, int port, const std::string& password, int db)
+    : host_(host), port_(port), password_(password), db_(db), redis_client_(nullptr) {
 }
 
 RedisQueue::~RedisQueue() {
@@ -69,6 +69,29 @@ bool RedisQueue::connect() {
         redis_client_->sync_commit();
         
         if (ping_future.get()) {
+            // Select Redis database (even if 0, to ensure explicit selection)
+            if (db_ >= 0) {
+                std::promise<bool> select_promise;
+                auto select_future = select_promise.get_future();
+                
+                redis_client_->select(db_, [&select_promise](cpp_redis::reply& reply) {
+                    if (reply.is_error()) {
+                        LOG_ERROR("Redis", "SELECT DB failed: " + reply.as_string());
+                        select_promise.set_value(false);
+                    } else {
+                        select_promise.set_value(true);
+                    }
+                });
+                
+                redis_client_->sync_commit();
+                
+                if (!select_future.get()) {
+                    LOG_ERROR("Redis", "Failed to select Redis DB");
+                    redis_client_.reset();
+                    return false;
+                }
+            }
+            
             LOG_INFO("Redis", "Connected to Redis at " + host_ + ":" + std::to_string(port_));
             return true;
         } else {

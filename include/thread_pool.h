@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include "frame_queue.h"
 #include "preprocessor.h"
 #include "yolo_detector.h"
@@ -103,6 +104,14 @@ public:
                                std::chrono::steady_clock::time_point& start_time) const;
     
 private:
+    struct VideoOutputStatus {
+        std::string original_message;
+        std::unordered_map<std::string, int> pending_counts;
+        std::unordered_map<std::string, std::string> detector_outputs;
+        bool reading_completed = false;
+        bool message_pushed = false;
+    };
+
     int num_readers_;
     int num_preprocessors_;
     std::vector<VideoClip> video_clips_;
@@ -127,6 +136,8 @@ private:
     std::atomic<bool> stop_flag_;
     std::vector<bool> video_processed_;  // Use regular bool with mutex (atomic vectors are not resizable)
     std::mutex video_mutex_;
+    std::mutex video_output_mutex_;
+    std::unordered_map<std::string, VideoOutputStatus> video_output_status_;
     
     mutable Statistics stats_;
     
@@ -141,7 +152,17 @@ private:
     VideoClip parseJsonToVideoClip(const std::string& json_str);
     void processVideo(int reader_id, const VideoClip& clip, int video_id, const std::string& redis_message = "");
     
-    std::string generateOutputPath(int video_id, int frame_number, int engine_id, int detector_id, const std::string& engine_name);
+    std::string generateOutputPath(const std::string& serial, const std::string& record_id, 
+                                   const std::string& record_date, const std::string& engine_name);
+    std::string buildVideoKey(const std::string& serial, const std::string& record_id, int video_id) const;
+    void registerVideoMessage(const std::string& video_key, const std::string& message);
+    void registerPendingFrame(const std::string& video_key, const std::string& engine_name);
+    void markFrameProcessed(const std::string& video_key, const std::string& engine_name, const std::string& output_path);
+    void markVideoReadingComplete(const std::string& video_key);
+    std::string tryPushOutputLocked(const std::string& video_key, VideoOutputStatus& status);
+    bool canPushOutputLocked(const VideoOutputStatus& status) const;
+    std::string augmentMessageWithDetectors(const std::string& message,
+                                            const std::unordered_map<std::string, std::string>& outputs) const;
 };
 
 #endif // THREAD_POOL_H

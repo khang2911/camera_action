@@ -248,6 +248,17 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
                 if (redis["password"]) {
                     redis_password_ = redis["password"].as<std::string>();
                 }
+                if (redis["db"]) {
+                    try {
+                        redis_db_ = redis["db"].as<int>();
+                    } catch (const YAML::Exception&) {
+                        std::string db_str = redis["db"].as<std::string>();
+                        redis_db_ = std::stoi(db_str);
+                    }
+                    if (redis_db_ < 0) {
+                        redis_db_ = 0;
+                    }
+                }
                 if (redis["input_queue"]) {
                     input_queue_name_ = redis["input_queue"].as<std::string>();
                 }
@@ -391,6 +402,23 @@ void ConfigParser::loadJsonVideoList(const std::string& path) {
             }
         }
 
+        // Parse serial, record_id, and record_date from alarm/raw_alarm
+        std::string serial = nodeToString(alarm["serial"]);
+        std::string record_id = nodeToString(alarm["record_id"]);
+        std::string record_start_time = nodeToString(alarm["record_start_time"]);
+        std::string send_at = nodeToString(raw_alarm["send_at"]);
+        std::string record_date;
+        if (send_at.length() >= 8) {
+            record_date = send_at.substr(0, 4) + "-" + send_at.substr(4, 2) + "-" + send_at.substr(6, 2);
+        } else if (!record_start_time.empty()) {
+            if (record_start_time.length() >= 10) {
+                record_date = record_start_time.substr(0, 10);
+            } else {
+                record_date.clear();
+            }
+        }
+        std::string raw_serial = nodeToString(raw_alarm["serial"]);
+
         const size_t clip_count = std::min(record_list.size(), playback.size());
         for (size_t i = 0; i < clip_count; ++i) {
             VideoClip clip;
@@ -405,6 +433,11 @@ void ConfigParser::loadJsonVideoList(const std::string& path) {
             clip.start_timestamp = time_window.first;
             clip.end_timestamp = time_window.second;
             clip.has_time_window = std::isfinite(clip.start_timestamp) || std::isfinite(clip.end_timestamp);
+            
+            // Set record_id and record_date for output file naming
+            clip.record_id = record_id;
+            clip.record_date = record_date;
+            clip.serial = !raw_serial.empty() ? raw_serial : serial;
             
             // Set ROI if available
             if (has_roi_box) {

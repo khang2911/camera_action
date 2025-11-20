@@ -142,6 +142,7 @@ int main(int argc, char* argv[]) {
         LOG_INFO("Main", "=== REDIS QUEUE MODE ===");
         LOG_INFO("Main", "Redis host: " + config.getRedisHost());
         LOG_INFO("Main", "Redis port: " + std::to_string(config.getRedisPort()));
+        LOG_INFO("Main", "Redis DB: " + std::to_string(config.getRedisDb()));
         LOG_INFO("Main", "Input queue: " + config.getInputQueueName());
         LOG_INFO("Main", "Output queue: " + config.getOutputQueueName());
     } else {
@@ -162,9 +163,9 @@ int main(int argc, char* argv[]) {
     if (use_redis) {
         // Redis queue mode
         auto input_queue = std::make_shared<RedisQueue>(
-            config.getRedisHost(), config.getRedisPort(), config.getRedisPassword());
+            config.getRedisHost(), config.getRedisPort(), config.getRedisPassword(), config.getRedisDb());
         auto output_queue = std::make_shared<RedisQueue>(
-            config.getRedisHost(), config.getRedisPort(), config.getRedisPassword());
+            config.getRedisHost(), config.getRedisPort(), config.getRedisPassword(), config.getRedisDb());
         
         if (!input_queue->connect()) {
             LOG_ERROR("Main", "Failed to connect to Redis input queue");

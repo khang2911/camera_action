@@ -95,6 +95,7 @@ public:
     std::string getRedisHost() const { return redis_host_; }
     int getRedisPort() const { return redis_port_; }
     std::string getRedisPassword() const { return redis_password_; }
+    int getRedisDb() const { return redis_db_; }
     std::string getInputQueueName() const { return input_queue_name_; }
     std::string getOutputQueueName() const { return output_queue_name_; }
     
@@ -117,6 +118,7 @@ private:
     std::string redis_host_ = "localhost";
     int redis_port_ = 6379;
     std::string redis_password_ = "";
+    int redis_db_ = 0;
     std::string input_queue_name_ = "input_queue";
     std::string output_queue_name_ = "output_queue";
     

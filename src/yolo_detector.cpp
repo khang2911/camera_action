@@ -773,6 +773,18 @@ float YOLODetector::calculateIoU(const float* box1, const float* box2) {
 }
 
 bool YOLODetector::writeDetectionsToFile(const std::vector<Detection>& detections, const std::string& output_path, int frame_number) {
+    // Create directory structure if it doesn't exist
+    std::filesystem::path path_obj(output_path);
+    std::filesystem::path dir = path_obj.parent_path();
+    if (!dir.empty() && !std::filesystem::exists(dir)) {
+        try {
+            std::filesystem::create_directories(dir);
+        } catch (const std::filesystem::filesystem_error& e) {
+            std::cerr << "Error: Cannot create output directory: " << dir << " - " << e.what() << std::endl;
+            return false;
+        }
+    }
+    
     // Get or create mutex for this file path (thread-safe)
     std::mutex* file_mutex = nullptr;
     {

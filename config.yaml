@@ -44,6 +44,7 @@ redis_queue:
   host: "localhost"                # Redis server host
   port: 6379                        # Redis server port
   password: ""                      # Redis password (leave empty if no password)
+  db: 0                             # Redis logical database index (0-15, default 0)
   input_queue: "input_queue"        # Redis queue name for input messages
   output_queue: "output_queue"      # Redis queue name for output messages
 
