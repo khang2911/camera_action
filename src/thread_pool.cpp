@@ -476,6 +476,9 @@ void ThreadPool::preprocessorWorker(int worker_id) {
         
         for (auto& engine_group : engine_groups_) {
             cv::Mat frame_to_process = raw_frame.frame;
+            // Store TRUE original frame dimensions (before any cropping)
+            int true_original_width = raw_frame.true_original_width > 0 ? raw_frame.true_original_width : raw_frame.original_width;
+            int true_original_height = raw_frame.true_original_height > 0 ? raw_frame.true_original_height : raw_frame.original_height;
             int cropped_width = raw_frame.original_width;
             int cropped_height = raw_frame.original_height;
             int roi_offset_x = raw_frame.roi_offset_x;
