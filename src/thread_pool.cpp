@@ -13,6 +13,7 @@
 #include <chrono>
 #include <thread>
 #include <fstream>
+#include <yaml-cpp/yaml.h>
 
 EngineGroup::~EngineGroup() {
     std::lock_guard<std::mutex> lock(buffer_pool_mutex);
@@ -516,201 +517,101 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
 
 VideoClip ThreadPool::parseJsonToVideoClip(const std::string& json_str) {
     VideoClip clip;
-    
-    // Simple JSON parsing using string operations
-    // This is a basic parser - for production, consider using a proper JSON library
-    
-    // Parse alarm.serial (camera serial)
-    size_t serial_pos = json_str.find("\"serial\"");
-    if (serial_pos != std::string::npos) {
-        size_t colon_pos = json_str.find(":", serial_pos);
-        if (colon_pos != std::string::npos) {
-            size_t start = json_str.find("\"", colon_pos) + 1;
-            if (start != std::string::npos && start > colon_pos) {
-                size_t end = json_str.find("\"", start);
-                if (end != std::string::npos) {
-                    clip.serial = json_str.substr(start, end - start);
-                }
+    try {
+        YAML::Node root = YAML::Load(json_str);
+        YAML::Node alarm = root["alarm"];
+        YAML::Node raw_alarm = alarm ? alarm["raw_alarm"] : YAML::Node();
+        
+        auto getString = [](const YAML::Node& node, const std::string& key) -> std::string {
+            if (!node || !node[key]) return "";
+            try {
+                return node[key].as<std::string>();
+            } catch (...) {
+                return "";
+            }
+        };
+        
+        // Video path (take first playback_location entry)
+        YAML::Node playback = root["playback_location"];
+        if (playback && playback.IsSequence() && playback.size() > 0) {
+            clip.path = playback[0].as<std::string>("");
+        }
+        
+        // Serial and record_id
+        clip.serial = getString(raw_alarm, "serial");
+        if (clip.serial.empty()) {
+            clip.serial = getString(alarm, "serial");
+        }
+        clip.record_id = getString(alarm, "record_id");
+        if (clip.record_id.empty()) {
+            clip.record_id = getString(raw_alarm, "record_id");
+        }
+        
+        // Record date from send_at or record_start_time
+        std::string send_at = getString(raw_alarm, "send_at");
+        if (send_at.length() >= 8) {
+            clip.record_date = send_at.substr(0, 4) + "-" + send_at.substr(4, 2) + "-" + send_at.substr(6, 2);
+        } else {
+            std::string record_start_time = getString(alarm, "record_start_time");
+            if (record_start_time.length() >= 10) {
+                clip.record_date = record_start_time.substr(0, 10);
             }
         }
-    }
-    
-    // Parse alarm.record_id
-    size_t record_id_pos = json_str.find("\"record_id\"");
-    if (record_id_pos != std::string::npos) {
-        size_t colon_pos = json_str.find(":", record_id_pos);
-        if (colon_pos != std::string::npos) {
-            size_t start = json_str.find("\"", colon_pos) + 1;
-            if (start != std::string::npos && start > colon_pos) {
-                size_t end = json_str.find("\"", start);
-                if (end != std::string::npos) {
-                    clip.record_id = json_str.substr(start, end - start);
-                }
+        
+        // Time window
+        clip.start_timestamp = ConfigParser::parseTimestamp(getString(raw_alarm, "video_start_time"));
+        clip.end_timestamp = ConfigParser::parseTimestamp(getString(raw_alarm, "video_end_time"));
+        
+        YAML::Node record_list = raw_alarm ? raw_alarm["record_list"] : YAML::Node();
+        if (record_list && record_list.IsSequence() && record_list.size() > 0) {
+            const auto& entry = record_list[0];
+            if (entry["moment_time"]) {
+                clip.moment_time = entry["moment_time"].as<double>(0.0);
+            } else if (entry["recordtimestamp"]) {
+                clip.moment_time = ConfigParser::parseTimestamp(entry["recordtimestamp"].as<std::string>());
             }
-        }
-    }
-    
-    // Parse raw_alarm.send_at (for date extraction)
-    // Format: "20251118200434" -> extract "2025-11-18" (YYYY-MM-DD)
-    size_t send_at_pos = json_str.find("\"send_at\"");
-    if (send_at_pos != std::string::npos) {
-        size_t colon_pos = json_str.find(":", send_at_pos);
-        if (colon_pos != std::string::npos) {
-            size_t start = json_str.find("\"", colon_pos) + 1;
-            if (start != std::string::npos && start > colon_pos) {
-                size_t end = json_str.find("\"", start);
-                if (end != std::string::npos) {
-                    std::string send_at_str = json_str.substr(start, end - start);
-                    if (send_at_str.length() >= 8) {
-                        std::string year = send_at_str.substr(0, 4);
-                        std::string month = send_at_str.substr(4, 2);
-                        std::string day = send_at_str.substr(6, 2);
-                        clip.record_date = year + "-" + month + "-" + day;
-                    }
-                }
-            }
-        }
-    }
-    
-    // Parse playback_location
-    size_t playback_pos = json_str.find("\"playback_location\"");
-    if (playback_pos != std::string::npos) {
-        size_t colon_pos = json_str.find(":", playback_pos);
-        if (colon_pos != std::string::npos) {
-            size_t start = json_str.find("\"", colon_pos) + 1;
-            if (start != std::string::npos && start > colon_pos) {
-                size_t end = json_str.find("\"", start);
-                if (end != std::string::npos) {
-                    clip.path = json_str.substr(start, end - start);
-                }
-            }
-        }
-    }
-    
-    if (clip.record_date.empty()) {
-        // Fallback to alarm.record_start_time (ISO format)
-        size_t record_start_time_pos = json_str.find("\"record_start_time\"");
-        if (record_start_time_pos != std::string::npos) {
-            size_t colon_pos = json_str.find(":", record_start_time_pos);
-            if (colon_pos != std::string::npos) {
-                size_t start = json_str.find("\"", colon_pos) + 1;
-                if (start != std::string::npos && start > colon_pos) {
-                    size_t end = json_str.find("\"", start);
-                    if (end != std::string::npos) {
-                        std::string record_start_time_str = json_str.substr(start, end - start);
-                        size_t date_end = record_start_time_str.find("T");
-                        if (date_end != std::string::npos) {
-                            clip.record_date = record_start_time_str.substr(0, date_end);
-                        } else if (record_start_time_str.length() >= 10) {
-                            clip.record_date = record_start_time_str.substr(0, 10);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Parse raw_alarm.video_start_time and video_end_time
-    size_t start_time_pos = json_str.find("\"video_start_time\"");
-    if (start_time_pos != std::string::npos) {
-        size_t colon_pos = json_str.find(":", start_time_pos);
-        if (colon_pos != std::string::npos) {
-            size_t start = json_str.find("\"", colon_pos) + 1;
-            if (start != std::string::npos && start > colon_pos) {
-                size_t end = json_str.find("\"", start);
-                if (end != std::string::npos) {
-                    std::string start_time_str = json_str.substr(start, end - start);
-                    clip.start_timestamp = ConfigParser::parseTimestamp(start_time_str);
-                }
-            }
-        }
-    }
-    
-    size_t end_time_pos = json_str.find("\"video_end_time\"");
-    if (end_time_pos != std::string::npos) {
-        size_t colon_pos = json_str.find(":", end_time_pos);
-        if (colon_pos != std::string::npos) {
-            size_t start = json_str.find("\"", colon_pos) + 1;
-            if (start != std::string::npos && start > colon_pos) {
-                size_t end = json_str.find("\"", start);
-                if (end != std::string::npos) {
-                    std::string end_time_str = json_str.substr(start, end - start);
-                    clip.end_timestamp = ConfigParser::parseTimestamp(end_time_str);
-                }
-            }
-        }
-    }
-    
-    // Parse record_list[0].moment_time and duration
-    size_t moment_time_pos = json_str.find("\"moment_time\"");
-    if (moment_time_pos != std::string::npos) {
-        size_t colon_pos = json_str.find(":", moment_time_pos);
-        if (colon_pos != std::string::npos) {
-            size_t start = json_str.find("\"", colon_pos) + 1;
-            if (start != std::string::npos && start > colon_pos) {
-                size_t end = json_str.find("\"", start);
-                if (end != std::string::npos) {
-                    std::string moment_time_str = json_str.substr(start, end - start);
-                    clip.moment_time = ConfigParser::parseTimestamp(moment_time_str);
-                }
-            }
-        }
-    }
-    
-    size_t duration_pos = json_str.find("\"duration\"");
-    if (duration_pos != std::string::npos) {
-        size_t colon_pos = json_str.find(":", duration_pos);
-        if (colon_pos != std::string::npos) {
-            std::string duration_str = json_str.substr(colon_pos + 1);
-            // Remove whitespace and find number
-            size_t num_start = duration_str.find_first_of("0123456789.-");
-            if (num_start != std::string::npos) {
-                size_t num_end = duration_str.find_first_not_of("0123456789.-", num_start);
-                if (num_end == std::string::npos) num_end = duration_str.length();
+            if (entry["duration"]) {
                 try {
-                    clip.duration_seconds = std::stod(duration_str.substr(num_start, num_end - num_start));
+                    clip.duration_seconds = entry["duration"].as<double>(0.0);
                 } catch (...) {
                     clip.duration_seconds = 0.0;
                 }
             }
         }
-    }
-    
-    if (std::isfinite(clip.start_timestamp) && std::isfinite(clip.end_timestamp) && 
-        std::isfinite(clip.moment_time)) {
-        clip.has_time_window = true;
-    }
-    
-    // Parse config.box (simplified - assumes format [[x1,y1],[x2,y1],[x2,y2],[x1,y2]])
-    size_t box_pos = json_str.find("\"box\"");
-    if (box_pos != std::string::npos) {
-        size_t bracket_start = json_str.find("[[", box_pos);
-        if (bracket_start != std::string::npos) {
-            clip.has_roi = true;
-            // Simple parsing - extract first and third coordinates
-            // This is a simplified parser - for production use proper JSON library
-            std::istringstream iss(json_str.substr(bracket_start));
-            char c;
-            float x1, y1, x2, y2;
-            if (iss >> c && c == '[' && 
-                iss >> c && c == '[' &&
-                iss >> x1 >> c && c == ',' &&
-                iss >> y1 >> c && c == ']') {
-                clip.roi_x1 = x1;
-                clip.roi_y1 = y1;
-                // Find third coordinate [x2, y2]
-                size_t third_bracket = json_str.find("[[", bracket_start + 1);
-                if (third_bracket != std::string::npos) {
-                    std::istringstream iss2(json_str.substr(third_bracket));
-                    if (iss2 >> c && c == '[' &&
-                        iss2 >> x2 >> c && c == ',' &&
-                        iss2 >> y2 >> c && c == ']') {
-                        clip.roi_x2 = x2;
-                        clip.roi_y2 = y2;
-                    }
+        if (std::isfinite(clip.start_timestamp) && std::isfinite(clip.end_timestamp) && 
+            std::isfinite(clip.moment_time)) {
+            clip.has_time_window = true;
+        }
+        
+        // ROI box
+        YAML::Node config_node = root["config"];
+        YAML::Node box_node = config_node ? config_node["box"] : YAML::Node();
+        if (box_node && box_node.IsSequence() && box_node.size() >= 3) {
+            try {
+                auto first = box_node[0];
+                auto third = box_node[2];
+                if (first.IsSequence() && first.size() >= 2 &&
+                    third.IsSequence() && third.size() >= 2) {
+                    clip.roi_x1 = first[0].as<float>();
+                    clip.roi_y1 = first[1].as<float>();
+                    clip.roi_x2 = third[0].as<float>();
+                    clip.roi_y2 = third[1].as<float>();
+                    clip.has_roi = true;
                 }
+            } catch (...) {
+                clip.has_roi = false;
             }
         }
+        
+        // Fallback to download_info if playback missing
+        if (clip.path.empty()) {
+            YAML::Node download_info = root["download_info"];
+            if (download_info && download_info.IsSequence() && download_info.size() > 0) {
+                clip.path = getString(download_info[0], "local_filepath");
+            }
+        }
+    } catch (const YAML::Exception& e) {
+        LOG_ERROR("Reader", "Failed to parse Redis message JSON: " + std::string(e.what()));
     }
     
     return clip;
