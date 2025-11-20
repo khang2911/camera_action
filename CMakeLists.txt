@@ -58,8 +58,8 @@ find_package(yaml-cpp REQUIRED)
 
 # Redis (cpp_redis)
 # Try to find cpp_redis library
-# cpp_redis is typically installed as a header-only library or with shared/static libraries
-find_path(CPP_REDIS_INCLUDE_DIR cpp_redis/cpp_redis.h
+# cpp_redis main header is cpp_redis/cpp_redis (no extension)
+find_path(CPP_REDIS_INCLUDE_DIR cpp_redis/cpp_redis
     PATHS
     /usr/include
     /usr/local/include
