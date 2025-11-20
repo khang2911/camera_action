@@ -4,7 +4,8 @@
 #include <string>
 #include <memory>
 #include <mutex>
-#include <sw/redis++/redis++.h>
+#include <future>
+#include <cpp_redis/cpp_redis>
 
 class RedisQueue {
 public:
@@ -28,12 +29,11 @@ private:
     std::string host_;
     int port_;
     std::string password_;
-    std::unique_ptr<sw::redis::Redis> redis_client_;
+    std::unique_ptr<cpp_redis::client> redis_client_;
     std::mutex mutex_;
     
     bool reconnect();
     void handleError(const std::string& operation);
-    std::string buildConnectionString() const;
 };
 
 #endif // REDIS_QUEUE_H

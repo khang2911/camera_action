@@ -56,29 +56,29 @@ find_library(TensorRT_LIBRARY nvinfer
 # yaml-cpp (for configuration file parsing)
 find_package(yaml-cpp REQUIRED)
 
-# Redis (redis-plus-plus / lcpp_redis)
-find_path(REDIS_PLUS_PLUS_INCLUDE_DIR sw/redis++/redis++.h
+# Redis (cpp_redis)
+find_path(CPP_REDIS_INCLUDE_DIR cpp_redis/cpp_redis.h
     PATHS
     /usr/include
     /usr/local/include
-    ${REDIS_PLUS_PLUS_ROOT}/include
+    ${CPP_REDIS_ROOT}/include
     ${REDIS_ROOT}/include
 )
 
-find_library(REDIS_PLUS_PLUS_LIBRARY redis++
+find_library(CPP_REDIS_LIBRARY cpp_redis
     PATHS
     /usr/lib
     /usr/lib/x86_64-linux-gnu
     /usr/local/lib
-    ${REDIS_PLUS_PLUS_ROOT}/lib
+    ${CPP_REDIS_ROOT}/lib
     ${REDIS_ROOT}/lib
 )
 
-if(REDIS_PLUS_PLUS_INCLUDE_DIR AND REDIS_PLUS_PLUS_LIBRARY)
-    message(STATUS "redis-plus-plus found")
-    message(STATUS "  REDIS_PLUS_PLUS_INCLUDE_DIR: ${REDIS_PLUS_PLUS_INCLUDE_DIR}")
+if(CPP_REDIS_INCLUDE_DIR AND CPP_REDIS_LIBRARY)
+    message(STATUS "cpp_redis found")
+    message(STATUS "  CPP_REDIS_INCLUDE_DIR: ${CPP_REDIS_INCLUDE_DIR}")
 else()
-    message(FATAL_ERROR "redis-plus-plus library not found. Please install redis-plus-plus development library.")
+    message(FATAL_ERROR "cpp_redis library not found. Please install cpp_redis development library.")
 endif()
 
 # Build type
@@ -92,7 +92,7 @@ include_directories(
     ${OpenCV_INCLUDE_DIRS}
     ${TensorRT_INCLUDE_DIR}
     ${yaml-cpp_INCLUDE_DIRS}
-    ${REDIS_PLUS_PLUS_INCLUDE_DIR}
+    ${CPP_REDIS_INCLUDE_DIR}
 )
 
 # Source files
@@ -132,7 +132,7 @@ set(ALL_LIBS
     cudart
     pthread
     ${OpenMP_CXX_LIBRARIES}
-    ${REDIS_PLUS_PLUS_LIBRARY}
+    ${CPP_REDIS_LIBRARY}
 )
 
 # Create executable
