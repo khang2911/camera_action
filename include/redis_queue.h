@@ -4,10 +4,7 @@
 #include <string>
 #include <memory>
 #include <mutex>
-
-extern "C" {
-#include <hiredis/hiredis.h>
-}
+#include <sw/redis++/redis++.h>
 
 class RedisQueue {
 public:
@@ -17,10 +14,10 @@ public:
     // Connection management
     bool connect();
     void disconnect();
-    bool isConnected() const { return context_ != nullptr && context_->err == 0; }
+    bool isConnected() const;
     
     // Queue operations
-    bool popMessage(std::string& message, int timeout_seconds = 0);  // 0 = blocking, >0 = timeout
+    bool popMessage(std::string& message, int timeout_seconds = 0, const std::string& queue_name = "input_queue");
     bool pushMessage(const std::string& queue_name, const std::string& message);
     
     // Get connection info
@@ -31,12 +28,12 @@ private:
     std::string host_;
     int port_;
     std::string password_;
-    redisContext* context_;
+    std::unique_ptr<sw::redis::Redis> redis_client_;
     std::mutex mutex_;
     
     bool reconnect();
     void handleError(const std::string& operation);
+    std::string buildConnectionString() const;
 };
 
 #endif // REDIS_QUEUE_H
-

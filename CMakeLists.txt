@@ -56,27 +56,29 @@ find_library(TensorRT_LIBRARY nvinfer
 # yaml-cpp (for configuration file parsing)
 find_package(yaml-cpp REQUIRED)
 
-# Redis (hiredis)
-find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h
+# Redis (redis-plus-plus / lcpp_redis)
+find_path(REDIS_PLUS_PLUS_INCLUDE_DIR sw/redis++/redis++.h
     PATHS
     /usr/include
     /usr/local/include
-    ${HIREDIS_ROOT}/include
+    ${REDIS_PLUS_PLUS_ROOT}/include
+    ${REDIS_ROOT}/include
 )
 
-find_library(HIREDIS_LIBRARY hiredis
+find_library(REDIS_PLUS_PLUS_LIBRARY redis++
     PATHS
     /usr/lib
     /usr/lib/x86_64-linux-gnu
     /usr/local/lib
-    ${HIREDIS_ROOT}/lib
+    ${REDIS_PLUS_PLUS_ROOT}/lib
+    ${REDIS_ROOT}/lib
 )
 
-if(HIREDIS_INCLUDE_DIR AND HIREDIS_LIBRARY)
-    message(STATUS "hiredis found")
-    message(STATUS "  HIREDIS_INCLUDE_DIR: ${HIREDIS_INCLUDE_DIR}")
+if(REDIS_PLUS_PLUS_INCLUDE_DIR AND REDIS_PLUS_PLUS_LIBRARY)
+    message(STATUS "redis-plus-plus found")
+    message(STATUS "  REDIS_PLUS_PLUS_INCLUDE_DIR: ${REDIS_PLUS_PLUS_INCLUDE_DIR}")
 else()
-    message(FATAL_ERROR "hiredis library not found. Please install hiredis development library.")
+    message(FATAL_ERROR "redis-plus-plus library not found. Please install redis-plus-plus development library.")
 endif()
 
 # Build type
@@ -90,7 +92,7 @@ include_directories(
     ${OpenCV_INCLUDE_DIRS}
     ${TensorRT_INCLUDE_DIR}
     ${yaml-cpp_INCLUDE_DIRS}
-    ${HIREDIS_INCLUDE_DIR}
+    ${REDIS_PLUS_PLUS_INCLUDE_DIR}
 )
 
 # Source files
@@ -130,7 +132,7 @@ set(ALL_LIBS
     cudart
     pthread
     ${OpenMP_CXX_LIBRARIES}
-    ${HIREDIS_LIBRARY}
+    ${REDIS_PLUS_PLUS_LIBRARY}
 )
 
 # Create executable

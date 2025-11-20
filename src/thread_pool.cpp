@@ -459,8 +459,9 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
     
     while (!stop_flag_) {
         std::string message;
-        if (!input_queue_->popMessage(message, 1, input_queue_name_)) {  // 1 second timeout
-            // No message available, continue waiting
+        // Use 1 second timeout for BLPOP - returns false on timeout (no message)
+        if (!input_queue_->popMessage(message, 1, input_queue_name_)) {
+            // No message available (timeout), continue waiting
             consecutive_empty_polls++;
             
             // Log waiting status every 30 seconds to show process is alive

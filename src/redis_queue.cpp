@@ -1,62 +1,72 @@
 #include "redis_queue.h"
 #include "logger.h"
-#include <cstring>
 #include <chrono>
 #include <thread>
+#include <sstream>
 
 RedisQueue::RedisQueue(const std::string& host, int port, const std::string& password)
-    : host_(host), port_(port), password_(password), context_(nullptr) {
+    : host_(host), port_(port), password_(password), redis_client_(nullptr) {
 }
 
 RedisQueue::~RedisQueue() {
     disconnect();
 }
 
+std::string RedisQueue::buildConnectionString() const {
+    std::ostringstream oss;
+    oss << "tcp://";
+    if (!password_.empty()) {
+        oss << ":" << password_ << "@";
+    }
+    oss << host_ << ":" << port_;
+    return oss.str();
+}
+
 bool RedisQueue::connect() {
     std::lock_guard<std::mutex> lock(mutex_);
     
-    if (context_ != nullptr) {
-        redisFree(context_);
-        context_ = nullptr;
-    }
-    
-    struct timeval timeout = {1, 500000};  // 1.5 seconds
-    context_ = redisConnectWithTimeout(host_.c_str(), port_, timeout);
-    
-    if (context_ == nullptr || context_->err) {
-        if (context_) {
-            LOG_ERROR("Redis", "Connection error: " + std::string(context_->errstr));
-            redisFree(context_);
-            context_ = nullptr;
+    try {
+        std::string conn_str = buildConnectionString();
+        redis_client_ = std::make_unique<sw::redis::Redis>(conn_str);
+        
+        // Test connection with PING
+        auto pong = redis_client_->ping();
+        if (pong == "PONG") {
+            LOG_INFO("Redis", "Connected to Redis at " + host_ + ":" + std::to_string(port_));
+            return true;
         } else {
-            LOG_ERROR("Redis", "Connection error: can't allocate redis context");
-        }
-        return false;
-    }
-    
-    // Authenticate if password is provided
-    if (!password_.empty()) {
-        redisReply* reply = (redisReply*)redisCommand(context_, "AUTH %s", password_.c_str());
-        if (reply == nullptr || reply->type == REDIS_REPLY_ERROR) {
-            std::string error = reply ? reply->str : "AUTH command failed";
-            LOG_ERROR("Redis", "Authentication failed: " + error);
-            freeReplyObject(reply);
-            redisFree(context_);
-            context_ = nullptr;
+            LOG_ERROR("Redis", "Connection test failed: PING did not return PONG");
+            redis_client_.reset();
             return false;
         }
-        freeReplyObject(reply);
+    } catch (const sw::redis::Error& e) {
+        LOG_ERROR("Redis", "Connection error: " + std::string(e.what()));
+        redis_client_.reset();
+        return false;
+    } catch (const std::exception& e) {
+        LOG_ERROR("Redis", "Connection error: " + std::string(e.what()));
+        redis_client_.reset();
+        return false;
     }
-    
-    LOG_INFO("Redis", "Connected to Redis at " + host_ + ":" + std::to_string(port_));
-    return true;
 }
 
 void RedisQueue::disconnect() {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (context_ != nullptr) {
-        redisFree(context_);
-        context_ = nullptr;
+    redis_client_.reset();
+}
+
+bool RedisQueue::isConnected() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!redis_client_) {
+        return false;
+    }
+    
+    try {
+        // Test connection with PING
+        auto pong = redis_client_->ping();
+        return (pong == "PONG");
+    } catch (...) {
+        return false;
     }
 }
 
@@ -67,81 +77,72 @@ bool RedisQueue::reconnect() {
 }
 
 void RedisQueue::handleError(const std::string& operation) {
-    if (context_ && context_->err) {
-        LOG_ERROR("Redis", operation + " error: " + std::string(context_->errstr));
-        if (context_->err == REDIS_ERR_IO || context_->err == REDIS_ERR_EOF) {
-            // Connection lost, try to reconnect
-            LOG_INFO("Redis", "Attempting to reconnect...");
-            reconnect();
-        }
-    }
+    LOG_ERROR("Redis", operation + " error occurred");
+    // Try to reconnect on error
+    LOG_INFO("Redis", "Attempting to reconnect...");
+    reconnect();
 }
 
 bool RedisQueue::popMessage(std::string& message, int timeout_seconds, const std::string& queue_name) {
     std::lock_guard<std::mutex> lock(mutex_);
     
-    if (!isConnected()) {
+    if (!redis_client_) {
         if (!reconnect()) {
             return false;
         }
     }
     
-    // Use BLPOP for blocking pop with timeout
-    redisReply* reply = nullptr;
-    if (timeout_seconds > 0) {
-        reply = (redisReply*)redisCommand(context_, "BLPOP %s %d", queue_name.c_str(), timeout_seconds);
-    } else {
-        reply = (redisReply*)redisCommand(context_, "BLPOP %s 0", queue_name.c_str());
-    }
-    
-    if (reply == nullptr) {
+    try {
+        // Use BLPOP for blocking pop with timeout
+        // BLPOP returns optional<std::pair<key, value>> or throws TimeoutError
+        std::vector<std::string> keys = {queue_name};
+        
+        // Convert timeout to chrono duration
+        std::chrono::seconds timeout(timeout_seconds > 0 ? timeout_seconds : 1);
+        
+        // Blocking pop with timeout
+        auto result = redis_client_->blpop(keys.begin(), keys.end(), timeout);
+        if (result) {
+            message = result->second;
+            return true;
+        }
+        
+        // Timeout occurred (no message available)
+        return false;
+    } catch (const sw::redis::TimeoutError&) {
+        // Timeout is expected when no message is available, not an error
+        return false;
+    } catch (const sw::redis::Error& e) {
+        LOG_ERROR("Redis", "BLPOP error: " + std::string(e.what()));
+        handleError("BLPOP");
+        return false;
+    } catch (const std::exception& e) {
+        LOG_ERROR("Redis", "BLPOP exception: " + std::string(e.what()));
         handleError("BLPOP");
         return false;
     }
-    
-    if (reply->type == REDIS_REPLY_ERROR) {
-        LOG_ERROR("Redis", "BLPOP error: " + std::string(reply->str));
-        freeReplyObject(reply);
-        return false;
-    }
-    
-    if (reply->type == REDIS_REPLY_ARRAY && reply->elements >= 2) {
-        // BLPOP returns [queue_name, message]
-        message = std::string(reply->element[1]->str, reply->element[1]->len);
-        freeReplyObject(reply);
-        return true;
-    }
-    
-    // Timeout or empty
-    freeReplyObject(reply);
-    return false;
 }
 
 bool RedisQueue::pushMessage(const std::string& queue_name, const std::string& message) {
     std::lock_guard<std::mutex> lock(mutex_);
     
-    if (!isConnected()) {
+    if (!redis_client_) {
         if (!reconnect()) {
             return false;
         }
     }
     
-    redisReply* reply = (redisReply*)redisCommand(context_, "RPUSH %s %b", 
-                                                  queue_name.c_str(), 
-                                                  message.c_str(), 
-                                                  message.length());
-    
-    if (reply == nullptr) {
+    try {
+        // Use RPUSH to push message to queue
+        redis_client_->rpush(queue_name, message);
+        return true;
+    } catch (const sw::redis::Error& e) {
+        LOG_ERROR("Redis", "RPUSH error: " + std::string(e.what()));
+        handleError("RPUSH");
+        return false;
+    } catch (const std::exception& e) {
+        LOG_ERROR("Redis", "RPUSH exception: " + std::string(e.what()));
         handleError("RPUSH");
         return false;
     }
-    
-    bool success = (reply->type != REDIS_REPLY_ERROR);
-    if (!success && reply->type == REDIS_REPLY_ERROR) {
-        LOG_ERROR("Redis", "RPUSH error: " + std::string(reply->str));
-    }
-    
-    freeReplyObject(reply);
-    return success;
 }
-
