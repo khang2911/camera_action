@@ -11,6 +11,16 @@ struct VideoClip {
     double start_timestamp = -std::numeric_limits<double>::infinity();
     double end_timestamp = std::numeric_limits<double>::infinity();
     bool has_time_window = false;
+    
+    // ROI (Region of Interest) for cropping frames before detection
+    // Box format: [[x1, y1], [x2, y1], [x2, y2], [x1, y2]] in normalized coordinates [0, 1]
+    bool has_roi = false;
+    float roi_x1 = 0.0f;  // Normalized x1 coordinate
+    float roi_y1 = 0.0f;  // Normalized y1 coordinate
+    float roi_x2 = 1.0f;  // Normalized x2 coordinate
+    float roi_y2 = 1.0f;  // Normalized y2 coordinate
+    int roi_offset_x = 0;  // Pixel offset X (for scaling detections back to original frame)
+    int roi_offset_y = 0;  // Pixel offset Y (for scaling detections back to original frame)
 
     VideoClip() = default;
     explicit VideoClip(std::string p) : path(std::move(p)) {}

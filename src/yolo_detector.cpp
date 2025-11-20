@@ -1127,8 +1127,11 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
                 logged_scaling_info = true;
             }
             
+            // Get ROI offset if available (for now, default to 0 - will be passed through in future update)
+            int roi_x = 0;
+            int roi_y = 0;
             for (auto& det : detections) {
-                scaleDetectionToOriginal(det, orig_w, orig_h);
+                scaleDetectionToOriginal(det, orig_w, orig_h, roi_x, roi_y);
             }
         } else {
             // Warning: No original dimensions provided, bbox coordinates are in normalized [0,1] format
@@ -1671,8 +1674,11 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::shared_ptr<
         if (orig_w > 0 && orig_h > 0) {
             // Create a copy for file writing (scaled to original)
             std::vector<Detection> detections_for_file = detections;
+            // Get ROI offset if available (for now, default to 0 - will be passed through in future update)
+            int roi_x = 0;
+            int roi_y = 0;
             for (auto& det : detections_for_file) {
-                scaleDetectionToOriginal(det, orig_w, orig_h);
+                scaleDetectionToOriginal(det, orig_w, orig_h, roi_x, roi_y);
             }
             if (!writeDetectionsToFile(detections_for_file, output_paths[b], frame_numbers[b])) {
                 std::cerr << "Error: Failed to write detections for frame " << frame_numbers[b] << std::endl;
@@ -1689,7 +1695,7 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::shared_ptr<
     return true;
 }
 
-void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, int original_height) {
+void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, int original_height, int roi_offset_x, int roi_offset_y) {
     if (original_width <= 0 || original_height <= 0) {
         // Cannot scale without valid dimensions - coordinates remain in preprocessed image pixel space
         return;
@@ -1768,6 +1774,10 @@ void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, 
     width_orig = std::max(0.0f, std::min(static_cast<float>(original_width), width_orig));
     height_orig = std::max(0.0f, std::min(static_cast<float>(original_height), height_orig));
     
+    // Add ROI offset to scale from cropped frame to true original frame
+    x_center_orig += static_cast<float>(roi_offset_x);
+    y_center_orig += static_cast<float>(roi_offset_y);
+    
     // Update bbox (still in center-width-height format, now in original image pixel coordinates)
     det.bbox[0] = x_center_orig;
     det.bbox[1] = y_center_orig;
@@ -1787,9 +1797,15 @@ void YOLODetector::scaleDetectionToOriginal(Detection& det, int original_width, 
         float kpt_x_orig = kpt_x_scaled / scale;
         float kpt_y_orig = kpt_y_scaled / scale;
         
-        // Clamp to original image bounds
-        kpt.x = std::max(0.0f, std::min(static_cast<float>(original_width), kpt_x_orig));
-        kpt.y = std::max(0.0f, std::min(static_cast<float>(original_height), kpt_y_orig));
+        // Add ROI offset to scale from cropped frame to true original frame
+        kpt_x_orig += static_cast<float>(roi_offset_x);
+        kpt_y_orig += static_cast<float>(roi_offset_y);
+        
+        // Clamp to original image bounds (accounting for ROI offset, so use larger bounds)
+        int true_original_width = original_width + roi_offset_x;
+        int true_original_height = original_height + roi_offset_y;
+        kpt.x = std::max(0.0f, std::min(static_cast<float>(true_original_width), kpt_x_orig));
+        kpt.y = std::max(0.0f, std::min(static_cast<float>(true_original_height), kpt_y_orig));
     }
 }
 

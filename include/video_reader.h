@@ -18,6 +18,8 @@ public:
     int getFrameNumber() const { return frame_number_; }
     int getVideoId() const { return video_id_; }
     std::string getVideoPath() const { return video_path_; }
+    int getOriginalWidth() const { return original_width_; }
+    int getOriginalHeight() const { return original_height_; }
     
 private:
     void initializeMetadata();
@@ -31,6 +33,8 @@ private:
     double fps_;
     bool has_clip_metadata_;
     VideoClip clip_;
+    int original_width_;   // Original frame width before ROI cropping
+    int original_height_;  // Original frame height before ROI cropping
 };
 
 #endif // VIDEO_READER_H

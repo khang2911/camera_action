@@ -54,3 +54,10 @@ debug:
   enabled: true                    # Enable debug mode (process limited frames for testing)
   max_frames_per_video: 32          # Maximum frames to process per video (0 = no limit, only used if enabled=true)
 
+# ROI Cropping Configuration
+# When enabled, frames will be cropped using the ROI box from video_list.jsonl config.box
+# The box format is: [[x1, y1], [x2, y1], [x2, y2], [x1, y2]] in normalized coordinates [0, 1]
+# Detection results will be automatically scaled back to the original (uncropped) frame coordinates
+roi_cropping:
+  enabled: false                   # Enable ROI cropping from config.box in video_list.jsonl
+

@@ -50,6 +50,7 @@ public:
     std::string getOutputDir() const { return output_dir_; }
     bool isDebugMode() const { return debug_mode_; }
     int getMaxFramesPerVideo() const { return max_frames_per_video_; }
+    bool isRoiCroppingEnabled() const { return roi_cropping_enabled_; }
     
     // Backward compatibility getters
     std::string getModelPath() const { 
@@ -97,6 +98,7 @@ private:
     double time_padding_seconds_ = 0.0;
     bool debug_mode_ = false;
     int max_frames_per_video_ = 0;  // 0 means no limit
+    bool roi_cropping_enabled_ = false;  // Enable ROI cropping from config.box
     
     void loadVideoListFromFile(const std::string& path);
     void loadPlainVideoList(std::istream& stream);

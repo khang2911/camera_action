@@ -81,7 +81,8 @@ ConfigParser::ConfigParser()
       output_dir_("./output"),
       time_padding_seconds_(0.0),
       debug_mode_(false),
-      max_frames_per_video_(0) {}
+      max_frames_per_video_(0),
+      roi_cropping_enabled_(false) {}
  
 ConfigParser::~ConfigParser() = default;
  
@@ -178,6 +179,21 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
             }
         }
  
+        // ROI cropping settings
+        if (config["roi_cropping"]) {
+            const auto& roi = config["roi_cropping"];
+            if (roi["enabled"]) {
+                try {
+                    roi_cropping_enabled_ = roi["enabled"].as<bool>();
+                } catch (const YAML::Exception&) {
+                    std::string enabled_str = roi["enabled"].as<std::string>();
+                    std::transform(enabled_str.begin(), enabled_str.end(), enabled_str.begin(), ::tolower);
+                    roi_cropping_enabled_ = (enabled_str == "true" || enabled_str == "1" || enabled_str == "yes");
+                }
+                std::cout << "[Config] ROI cropping: " << (roi_cropping_enabled_ ? "enabled" : "disabled") << std::endl;
+            }
+        }
+
         // Video sources
         if (config["videos"]) {
             const auto& videos = config["videos"];
@@ -302,6 +318,38 @@ void ConfigParser::loadJsonVideoList(const std::string& path) {
         const std::string end_value = nodeToString(raw_alarm["video_end_time"]);
         const auto time_window = computeTimeWindow(start_value, end_value);
  
+        // Parse ROI box from config if ROI cropping is enabled
+        YAML::Node config_node = root["config"];
+        bool has_roi_box = false;
+        float roi_x1 = 0.0f, roi_y1 = 0.0f, roi_x2 = 1.0f, roi_y2 = 1.0f;
+        if (roi_cropping_enabled_ && config_node && config_node["box"] && config_node["box"].IsSequence()) {
+            const auto& box = config_node["box"];
+            if (box.size() >= 4) {
+                // Box format: [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
+                // Extract x1, y1, x2, y2 from the first and third points
+                try {
+                    if (box[0].IsSequence() && box[0].size() >= 2) {
+                        roi_x1 = box[0][0].as<float>();
+                        roi_y1 = box[0][1].as<float>();
+                    }
+                    if (box[2].IsSequence() && box[2].size() >= 2) {
+                        roi_x2 = box[2][0].as<float>();
+                        roi_y2 = box[2][1].as<float>();
+                    }
+                    // Validate and clamp to [0, 1]
+                    if (roi_x1 >= 0.0f && roi_x1 <= 1.0f && roi_y1 >= 0.0f && roi_y1 <= 1.0f &&
+                        roi_x2 >= 0.0f && roi_x2 <= 1.0f && roi_y2 >= 0.0f && roi_y2 <= 1.0f &&
+                        roi_x1 < roi_x2 && roi_y1 < roi_y2) {
+                        has_roi_box = true;
+                    } else {
+                        std::cerr << "[Config] Invalid ROI box coordinates, skipping ROI for this video" << std::endl;
+                    }
+                } catch (const YAML::Exception& ex) {
+                    std::cerr << "[Config] Failed to parse ROI box: " << ex.what() << std::endl;
+                }
+            }
+        }
+
         const size_t clip_count = std::min(record_list.size(), playback.size());
         for (size_t i = 0; i < clip_count; ++i) {
             VideoClip clip;
@@ -309,14 +357,23 @@ void ConfigParser::loadJsonVideoList(const std::string& path) {
             if (clip.path.empty()) {
                 continue;
             }
- 
+
             const auto& entry = record_list[i];
             clip.moment_time = nodeToDouble(entry["moment_time"], 0.0);
             clip.duration_seconds = nodeToDouble(entry["duration"], 0.0);
             clip.start_timestamp = time_window.first;
             clip.end_timestamp = time_window.second;
             clip.has_time_window = std::isfinite(clip.start_timestamp) || std::isfinite(clip.end_timestamp);
- 
+            
+            // Set ROI if available
+            if (has_roi_box) {
+                clip.has_roi = true;
+                clip.roi_x1 = roi_x1;
+                clip.roi_y1 = roi_y1;
+                clip.roi_x2 = roi_x2;
+                clip.roi_y2 = roi_y2;
+            }
+
             addVideoClip(clip);
         }
     }

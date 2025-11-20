@@ -417,6 +417,18 @@ void ThreadPool::readerWorker(int reader_id) {
             
             // Create frame data with original frame (shared to preprocessor queue)
             FrameData frame_data(frame.clone(), video_id, reader.getFrameNumber(), clip.path);
+            // Use cropped frame dimensions for scaling (frame is already cropped if ROI is enabled)
+            // The frame dimensions after cropping are what we use for scaling
+            frame_data.original_width = frame.cols;  // Cropped frame width
+            frame_data.original_height = frame.rows;  // Cropped frame height
+            // Store ROI offset for scaling detections back to true original frame
+            if (clip.has_roi) {
+                frame_data.roi_offset_x = clip.roi_offset_x;
+                frame_data.roi_offset_y = clip.roi_offset_y;
+            } else {
+                frame_data.roi_offset_x = 0;
+                frame_data.roi_offset_y = 0;
+            }
             if (raw_frame_queue_) {
                 raw_frame_queue_->push(frame_data);
             }
@@ -516,6 +528,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             std::vector<int> batch_frame_numbers;
             std::vector<int> batch_original_widths;
             std::vector<int> batch_original_heights;
+            std::vector<int> batch_roi_offset_x;  // ROI offset X for each frame
+            std::vector<int> batch_roi_offset_y;  // ROI offset Y for each frame
             std::vector<cv::Mat> batch_frames;  // Store frames for debug mode
             std::vector<int> batch_video_ids;   // Store video IDs for debug mode
             
@@ -560,6 +574,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 batch_frame_numbers.push_back(frame_data.frame_number);
                 batch_original_widths.push_back(frame_data.original_width);
                 batch_original_heights.push_back(frame_data.original_height);
+                batch_roi_offset_x.push_back(frame_data.roi_offset_x);
+                batch_roi_offset_y.push_back(frame_data.roi_offset_y);
                 
                 // Store frame and video_id for debug mode
                 if (debug_mode_) {
