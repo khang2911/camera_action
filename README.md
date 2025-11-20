@@ -39,6 +39,7 @@ The number of each process type is configurable, allowing dynamic scaling based 
 - **CUDA Toolkit** (compatible with your GPU, typically 10.0+)
 - **TensorRT** (compatible with your CUDA version)
 - **yaml-cpp** (for configuration file parsing)
+- **cpp_redis** (for Redis queue integration)
 
 ## Installation
 
@@ -69,6 +70,46 @@ brew install opencv
 
 # Install yaml-cpp
 brew install yaml-cpp
+```
+
+### 1.5. Install cpp_redis (for Redis queue support)
+
+#### Ubuntu/Debian
+```bash
+# Clone cpp_redis repository
+git clone https://github.com/Cylix/cpp_redis.git
+cd cpp_redis
+
+# Initialize and update submodules (tacopie dependency)
+git submodule init
+git submodule update
+
+# Build and install
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local
+make -j$(nproc)
+sudo make install
+
+# Update library cache
+sudo ldconfig
+```
+
+#### macOS (using Homebrew)
+```bash
+# cpp_redis is not available via Homebrew, so build from source:
+git clone https://github.com/Cylix/cpp_redis.git
+cd cpp_redis
+git submodule init
+git submodule update
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local
+make -j4
+sudo make install
+```
+
+**Note**: If you install cpp_redis to a custom location, set the `CPP_REDIS_ROOT` environment variable:
+```bash
+export CPP_REDIS_ROOT=/path/to/cpp_redis
 ```
 
 ### 2. Install CUDA Toolkit
@@ -117,6 +158,7 @@ cmake \
     -DOpenCV_DIR=/path/to/opencv \
     -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
     -DTensorRT_ROOT=/path/to/TensorRT \
+    -DCPP_REDIS_ROOT=/path/to/cpp_redis \
     ..
 ```
 
@@ -337,6 +379,26 @@ git clone https://github.com/jbeder/yaml-cpp.git
 cd yaml-cpp
 mkdir build && cd build
 cmake .. && make && sudo make install
+```
+
+**Problem**: cpp_redis library not found
+```bash
+# Quick install using the provided script
+./install_cpp_redis.sh
+
+# Or manual installation
+git clone https://github.com/Cylix/cpp_redis.git
+cd cpp_redis
+git submodule init
+git submodule update
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local
+make -j$(nproc)
+sudo make install
+sudo ldconfig  # Linux only
+
+# Or specify custom installation path when running cmake
+cmake -DCPP_REDIS_ROOT=/path/to/cpp_redis ..
 ```
 
 ### Runtime Issues

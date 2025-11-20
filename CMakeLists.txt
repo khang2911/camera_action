@@ -57,28 +57,57 @@ find_library(TensorRT_LIBRARY nvinfer
 find_package(yaml-cpp REQUIRED)
 
 # Redis (cpp_redis)
+# Try to find cpp_redis library
+# cpp_redis is typically installed as a header-only library or with shared/static libraries
 find_path(CPP_REDIS_INCLUDE_DIR cpp_redis/cpp_redis.h
     PATHS
     /usr/include
     /usr/local/include
+    /opt/cpp_redis/include
     ${CPP_REDIS_ROOT}/include
     ${REDIS_ROOT}/include
+    ${CMAKE_SOURCE_DIR}/third_party/cpp_redis/include
+    ${CMAKE_SOURCE_DIR}/../cpp_redis/include
 )
 
-find_library(CPP_REDIS_LIBRARY cpp_redis
+# Try to find the library (cpp_redis may be header-only, so library might not exist)
+find_library(CPP_REDIS_LIBRARY 
+    NAMES cpp_redis cpp_redis_static cpp_redis_shared
     PATHS
     /usr/lib
     /usr/lib/x86_64-linux-gnu
     /usr/local/lib
+    /opt/cpp_redis/lib
     ${CPP_REDIS_ROOT}/lib
     ${REDIS_ROOT}/lib
+    ${CMAKE_SOURCE_DIR}/third_party/cpp_redis/lib
+    ${CMAKE_SOURCE_DIR}/../cpp_redis/lib
 )
 
-if(CPP_REDIS_INCLUDE_DIR AND CPP_REDIS_LIBRARY)
+if(CPP_REDIS_INCLUDE_DIR)
     message(STATUS "cpp_redis found")
     message(STATUS "  CPP_REDIS_INCLUDE_DIR: ${CPP_REDIS_INCLUDE_DIR}")
+    if(CPP_REDIS_LIBRARY)
+        message(STATUS "  CPP_REDIS_LIBRARY: ${CPP_REDIS_LIBRARY}")
+    else()
+        message(STATUS "  cpp_redis appears to be header-only (no library found)")
+    endif()
 else()
-    message(FATAL_ERROR "cpp_redis library not found. Please install cpp_redis development library.")
+    message(WARNING "cpp_redis library not found.")
+    message(STATUS "")
+    message(STATUS "To install cpp_redis:")
+    message(STATUS "  1. Clone the repository:")
+    message(STATUS "     git clone https://github.com/cpp-redis/cpp_redis.git")
+    message(STATUS "  2. Build and install:")
+    message(STATUS "     cd cpp_redis")
+    message(STATUS "     mkdir build && cd build")
+    message(STATUS "     cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local")
+    message(STATUS "     make && sudo make install")
+    message(STATUS "")
+    message(STATUS "Or set CPP_REDIS_ROOT to the installation directory:")
+    message(STATUS "  cmake -DCPP_REDIS_ROOT=/path/to/cpp_redis ..")
+    message(STATUS "")
+    message(FATAL_ERROR "Please install cpp_redis or set CPP_REDIS_ROOT")
 endif()
 
 # Build type
@@ -132,8 +161,12 @@ set(ALL_LIBS
     cudart
     pthread
     ${OpenMP_CXX_LIBRARIES}
-    ${CPP_REDIS_LIBRARY}
 )
+
+# Add cpp_redis library if found (it may be header-only)
+if(CPP_REDIS_LIBRARY)
+    list(APPEND ALL_LIBS ${CPP_REDIS_LIBRARY})
+endif()
 
 # Create executable
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
