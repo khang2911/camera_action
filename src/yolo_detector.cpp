@@ -1045,20 +1045,37 @@ bool YOLODetector::runInferenceWithDetections(const std::vector<std::shared_ptr<
     all_detections.resize(batch_size_);
     
     for (int b = 0; b < batch_size_; ++b) {
-        // Extract output for this batch item
-        // TensorRT output format: [batch, num_anchors, channels] flattened as [batch*num_anchors*channels]
-        // Python does: output[i:i+1] which gets [1, num_anchors, channels], then .T transposes to [channels, num_anchors]
-        // But we read it directly as [num_anchors, channels] which should be correct
-        size_t batch_offset = b * output_per_frame;
-        std::vector<float> batch_output(output_data.begin() + batch_offset,
-                                       output_data.begin() + batch_offset + output_per_frame);
-        
+        // Extract batch data in [channels, num_anchors] format (TensorRT output format)
+        std::vector<float> batch_data_channels_first(output_per_frame);
+        size_t batch_offset = static_cast<size_t>(b) * output_per_frame;
+        std::copy(output_data.begin() + batch_offset,
+                  output_data.begin() + batch_offset + output_per_frame,
+                  batch_data_channels_first.begin());
+
+        // Transpose from [channels, num_anchors] to [num_anchors, channels] to match Python's output[0].T
+        std::vector<float> frame_output(output_per_frame);
+        for (int anchor = 0; anchor < num_anchors_; ++anchor) {
+            for (int channel = 0; channel < output_channels_; ++channel) {
+                int src_idx = channel * num_anchors_ + anchor;
+                int dst_idx = anchor * output_channels_ + channel;
+                if (src_idx >= static_cast<int>(batch_data_channels_first.size()) ||
+                    dst_idx >= static_cast<int>(frame_output.size())) {
+                    std::cerr << "Error: Transpose index out of bounds in runInferenceWithDetections! src_idx="
+                              << src_idx << ", dst_idx=" << dst_idx
+                              << ", batch_data size=" << batch_data_channels_first.size()
+                              << ", frame_output size=" << frame_output.size() << std::endl;
+                    return false;
+                }
+                frame_output[dst_idx] = batch_data_channels_first[src_idx];
+            }
+        }
+
         // Parse raw output based on model type
         std::vector<Detection> detections;
         if (model_type_ == ModelType::POSE) {
-            detections = parseRawPoseOutput(batch_output);
+            detections = parseRawPoseOutput(frame_output);
         } else {
-            detections = parseRawDetectionOutput(batch_output);
+            detections = parseRawDetectionOutput(frame_output);
         }
         
         // Apply confidence threshold

@@ -1259,6 +1259,16 @@ void ThreadPool::monitorWorker() {
             if (i < engine_groups_.size() - 1) stats_oss << ", ";
         }
         stats_oss << std::endl;
+
+        if (use_redis_queue_ && input_queue_) {
+            int input_len = input_queue_->getQueueLength(input_queue_name_);
+            stats_oss << "Redis Input Queue (" << input_queue_name_ << "): " << input_len;
+            if (output_queue_) {
+                int output_len = output_queue_->getQueueLength(output_queue_name_);
+                stats_oss << " | Redis Output Queue (" << output_queue_name_ << "): " << output_len;
+            }
+            stats_oss << std::endl;
+        }
         
         // Per-engine statistics
         {
