@@ -5,6 +5,7 @@
 #include <vector>
 #include <atomic>
 #include <mutex>
+#include <condition_variable>
 #include <functional>
 #include <memory>
 #include <string>
@@ -139,6 +140,12 @@ private:
     std::mutex video_output_mutex_;
     std::unordered_map<std::string, VideoOutputStatus> video_output_status_;
     
+    // Redis throttling
+    int max_active_redis_readers_ = 0;
+    std::atomic<int> active_redis_readers_{0};
+    std::mutex reader_slot_mutex_;
+    std::condition_variable reader_slot_cv_;
+    
     mutable Statistics stats_;
     
     void readerWorker(int reader_id);
@@ -163,6 +170,9 @@ private:
     bool canPushOutputLocked(const VideoOutputStatus& status) const;
     std::string augmentMessageWithDetectors(const std::string& message,
                                             const std::unordered_map<std::string, std::string>& outputs) const;
+    
+    bool acquireReaderSlot();
+    void releaseReaderSlot();
 };
 
 #endif // THREAD_POOL_H

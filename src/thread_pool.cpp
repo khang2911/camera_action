@@ -183,6 +183,8 @@ ThreadPool::ThreadPool(int num_readers,
     std::filesystem::create_directories(output_dir);
     raw_frame_queue_ = std::make_unique<FrameQueue>(500);
     
+    max_active_redis_readers_ = num_readers_;
+    
     // Initialize engine groups (one per engine)
     for (size_t i = 0; i < engine_configs.size(); ++i) {
         const auto& config = engine_configs[i];
@@ -460,10 +462,14 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
     int consecutive_empty_polls = 0;
     
     while (!stop_flag_) {
+        if (!acquireReaderSlot()) {
+            break;
+        }
         std::string message;
         // Use 1 second timeout for BLPOP - returns false on timeout (no message)
         if (!input_queue_->popMessage(message, 1, input_queue_name_)) {
             // No message available (timeout), continue waiting
+            releaseReaderSlot();
             consecutive_empty_polls++;
             
             // Log waiting status every 30 seconds to show process is alive
@@ -491,6 +497,7 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
             if (clip.path.empty()) {
                 LOG_WARNING("Reader", "Reader " + std::to_string(reader_id) + 
                          " received message with empty video path, skipping" + queue_status);
+                releaseReaderSlot();
                 continue;
             }
             
@@ -501,6 +508,7 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
             processVideo(reader_id, clip, video_id_counter, message);
             
             video_id_counter++;
+            releaseReaderSlot();
         } catch (const std::exception& e) {
             LOG_ERROR("Reader", "Failed to parse Redis message: " + std::string(e.what()));
             if (!message.empty()) {
@@ -508,6 +516,7 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
                 LOG_ERROR("Reader", "Message content (first " + std::to_string(preview_len) + " chars): " + 
                          message.substr(0, preview_len));
             }
+            releaseReaderSlot();
             continue;
         }
     }
@@ -1463,5 +1472,37 @@ std::string ThreadPool::tryPushOutputLocked(const std::string& video_key, VideoO
     std::string final_message = augmentMessageWithDetectors(status.original_message, status.detector_outputs);
     video_output_status_.erase(video_key);
     return final_message;
+}
+
+bool ThreadPool::acquireReaderSlot() {
+    if (!use_redis_queue_ || max_active_redis_readers_ <= 0) {
+        return true;
+    }
+    
+    std::unique_lock<std::mutex> lock(reader_slot_mutex_);
+    reader_slot_cv_.wait(lock, [this]() {
+        return stop_flag_ || active_redis_readers_.load() < max_active_redis_readers_;
+    });
+    
+    if (stop_flag_) {
+        return false;
+    }
+    
+    active_redis_readers_++;
+    return true;
+}
+
+void ThreadPool::releaseReaderSlot() {
+    if (!use_redis_queue_ || max_active_redis_readers_ <= 0) {
+        return;
+    }
+    
+    {
+        std::lock_guard<std::mutex> lock(reader_slot_mutex_);
+        if (active_redis_readers_ > 0) {
+            active_redis_readers_--;
+        }
+    }
+    reader_slot_cv_.notify_one();
 }
 
