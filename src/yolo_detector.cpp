@@ -367,7 +367,7 @@ bool YOLODetector::runWithPreprocessedBatch(
         return false;
     }
     
-    bool ok = runInference(output_paths, frame_numbers, original_widths, original_heights, dump_idx);
+    bool ok = runInference(output_paths, frame_numbers, original_widths, original_heights, dump_idx, roi_offset_x, roi_offset_y);
     return ok;
 }
 
@@ -998,7 +998,9 @@ bool YOLODetector::runInference(const std::vector<std::string>& output_paths,
                                 const std::vector<int>& frame_numbers,
                                 const std::vector<int>& original_widths,
                                 const std::vector<int>& original_heights,
-                                int dump_batch_index) {
+                                int dump_batch_index,
+                                const std::vector<int>& roi_offset_x,
+                                const std::vector<int>& roi_offset_y) {
     if (static_cast<int>(output_paths.size()) != batch_size_ ||
         static_cast<int>(frame_numbers.size()) != batch_size_) {
         std::cerr << "Error: Output metadata batch size mismatch (expected "
