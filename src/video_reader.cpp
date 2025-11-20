@@ -377,9 +377,12 @@ bool VideoReader::decodeFrame(cv::Mat& frame) {
             }
 
             // Convert frame to BGR24 (OpenCV format) directly into pre-allocated Mat
+            // sws_scale expects an array of pointers, not a single pointer
+            uint8_t* dst_data[1] = {frame_mat_.data};
+            int dst_stride[1] = {static_cast<int>(frame_mat_.step)};
             sws_scale(sws_ctx_,
                      frame_->data, frame_->linesize, 0, codec_ctx_->height,
-                     frame_mat_.data, frame_mat_.step);
+                     dst_data, dst_stride);
 
             // Copy to output frame (need copy since frame_mat_ is reused)
             frame = frame_mat_.clone();
