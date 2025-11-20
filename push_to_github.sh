@@ -1,7 +1,11 @@
 #!/bin/bash
 
-# Simple script to push code to GitHub
-# Usage: ./push_to_github.sh [commit_message]
+# Script to push code to GitHub with branch support
+# Usage: 
+#   ./push_to_github.sh [commit_message]              # Push current branch
+#   ./push_to_github.sh -b <branch_name> [commit_msg] # Push specific branch
+#   ./push_to_github.sh --all                          # Push all branches
+#   ./push_to_github.sh --list                         # List all branches
 
 set -e  # Exit on error
 
@@ -33,8 +37,97 @@ if ! git remote | grep -q "^origin$"; then
     echo -e "${GREEN}✓ Remote 'origin' added${NC}"
 fi
 
-# Get current branch
+# Parse arguments
+PUSH_ALL=false
+LIST_BRANCHES=false
+TARGET_BRANCH=""
+COMMIT_MSG=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --all)
+            PUSH_ALL=true
+            shift
+            ;;
+        --list)
+            LIST_BRANCHES=true
+            shift
+            ;;
+        -b|--branch)
+            TARGET_BRANCH="$2"
+            shift 2
+            ;;
+        *)
+            if [ -z "$COMMIT_MSG" ]; then
+                COMMIT_MSG="$1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Handle list branches
+if [ "$LIST_BRANCHES" = true ]; then
+    echo -e "${GREEN}=== Local Branches ===${NC}"
+    git branch
+    echo ""
+    echo -e "${GREEN}=== Remote Branches ===${NC}"
+    git branch -r 2>/dev/null || echo "No remote branches found"
+    echo ""
+    echo -e "${GREEN}=== All Branches ===${NC}"
+    git branch -a 2>/dev/null || echo "No branches found"
+    exit 0
+fi
+
+# Get current branch if not specified
+if [ -z "$TARGET_BRANCH" ]; then
+    TARGET_BRANCH=$(git branch --show-current 2>/dev/null || echo "main")
+fi
+
+# Validate branch exists
+if ! git show-ref --verify --quiet refs/heads/"$TARGET_BRANCH" && [ "$PUSH_ALL" = false ]; then
+    echo -e "${RED}Error: Branch '$TARGET_BRANCH' does not exist locally.${NC}"
+    echo "Available branches:"
+    git branch
+    exit 1
+fi
+
+# Handle push all branches
+if [ "$PUSH_ALL" = true ]; then
+    echo -e "${GREEN}=== Pushing All Branches ===${NC}"
+    echo ""
+    branches=$(git branch --format='%(refname:short)')
+    for branch in $branches; do
+        echo -e "${YELLOW}Pushing branch: $branch${NC}"
+        git checkout "$branch" 2>/dev/null || continue
+        if [ -n "$(git status --porcelain)" ]; then
+            echo -e "${YELLOW}  Branch has uncommitted changes, skipping...${NC}"
+            continue
+        fi
+        if git push -u origin "$branch" 2>/dev/null; then
+            echo -e "${GREEN}  ✓ Pushed: $branch${NC}"
+        else
+            echo -e "${RED}  ✗ Failed: $branch${NC}"
+        fi
+        echo ""
+    done
+    # Return to original branch
+    git checkout "$TARGET_BRANCH" 2>/dev/null || true
+    echo -e "${GREEN}✓ Finished pushing all branches${NC}"
+    exit 0
+fi
+
+# Switch to target branch if different from current
 current_branch=$(git branch --show-current 2>/dev/null || echo "main")
+if [ "$current_branch" != "$TARGET_BRANCH" ]; then
+    echo -e "${YELLOW}Switching to branch: $TARGET_BRANCH${NC}"
+    git checkout "$TARGET_BRANCH" || {
+        echo -e "${RED}Error: Failed to checkout branch '$TARGET_BRANCH'${NC}"
+        exit 1
+    }
+    echo -e "${GREEN}✓ Switched to branch: $TARGET_BRANCH${NC}"
+    echo ""
+fi
 
 # Check for changes
 if [ -z "$(git status --porcelain)" ]; then
@@ -60,8 +153,8 @@ else
     fi
     
     # Get commit message
-    if [ -n "$1" ]; then
-        commit_msg="$1"
+    if [ -n "$COMMIT_MSG" ]; then
+        commit_msg="$COMMIT_MSG"
     else
         read -p "Enter commit message: " commit_msg
         if [ -z "$commit_msg" ]; then
@@ -78,12 +171,12 @@ fi
 # Check if branch exists on remote
 echo ""
 echo "Checking remote status..."
-if git ls-remote --heads origin "$current_branch" 2>/dev/null | grep -q "$current_branch"; then
-    echo -e "${YELLOW}Branch '$current_branch' exists on remote.${NC}"
+if git ls-remote --heads origin "$TARGET_BRANCH" 2>/dev/null | grep -q "$TARGET_BRANCH"; then
+    echo -e "${YELLOW}Branch '$TARGET_BRANCH' exists on remote.${NC}"
     read -p "Pull latest changes first? (y/n): " pull_first
     if [ "$pull_first" = "y" ]; then
         echo "Pulling latest changes..."
-        git pull origin "$current_branch" --no-rebase || {
+        git pull origin "$TARGET_BRANCH" --no-rebase || {
             echo -e "${RED}Warning: Pull failed. You may have conflicts.${NC}"
             read -p "Continue with push anyway? (y/n): " continue_push
             if [ "$continue_push" != "y" ]; then
@@ -92,22 +185,27 @@ if git ls-remote --heads origin "$current_branch" 2>/dev/null | grep -q "$curren
         }
     fi
 else
-    echo -e "${GREEN}Branch '$current_branch' is new on remote.${NC}"
+    echo -e "${GREEN}Branch '$TARGET_BRANCH' is new on remote.${NC}"
+    read -p "Create and push this new branch? (y/n): " create_branch
+    if [ "$create_branch" != "y" ]; then
+        echo "Aborted."
+        exit 0
+    fi
 fi
 
 # Push to GitHub
 echo ""
 echo "Pushing to GitHub..."
 echo "Repository: $(git remote get-url origin)"
-echo "Branch: $current_branch"
+echo "Branch: $TARGET_BRANCH"
 echo ""
 
-if git push -u origin "$current_branch"; then
+if git push -u origin "$TARGET_BRANCH"; then
     echo ""
     echo -e "${GREEN}✓ Successfully pushed to GitHub!${NC}"
     echo ""
     echo "Repository: $(git remote get-url origin)"
-    echo "Branch: $current_branch"
+    echo "Branch: $TARGET_BRANCH"
     echo ""
     echo "View on GitHub:"
     repo_url=$(git remote get-url origin)
@@ -115,7 +213,7 @@ if git push -u origin "$current_branch"; then
     if [[ "$repo_url" == git@github.com:* ]]; then
         repo_url=$(echo "$repo_url" | sed 's/git@github.com:/https:\/\/github.com\//' | sed 's/\.git$//')
     fi
-    echo "  $repo_url"
+    echo "  $repo_url/tree/$TARGET_BRANCH"
 else
     echo ""
     echo -e "${RED}✗ Push failed!${NC}"
