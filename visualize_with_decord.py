@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Visualize detection results from bin file on video using decord for efficient frame reading.
+Visualize detection results from bin file on video using OpenCV (cv2) to match C++ process frame indexing.
 Uses frame index from bin file to directly seek to the correct frame in the video.
 """
 
@@ -10,7 +10,6 @@ import os
 import argparse
 import cv2
 import numpy as np
-from decord import VideoReader, cpu
 
 # COCO keypoint names (17 keypoints)
 KEYPOINT_NAMES = [
@@ -212,7 +211,7 @@ def draw_detection(frame, detection, color, is_pose=False):
 
 
 def visualize_video(video_path, bin_file, output_dir=None, max_frames=None):
-    """Visualize detections on video using decord for efficient frame reading."""
+    """Visualize detections on video using OpenCV (cv2) to match C++ process frame indexing."""
     
     # Read detections from bin file
     print(f"Reading detections from: {bin_file}")
@@ -236,15 +235,17 @@ def visualize_video(video_path, bin_file, output_dir=None, max_frames=None):
         frame_numbers = frame_numbers[:max_frames]
         print(f"Limiting to first {max_frames} frames")
     
-    # Open video with decord
+    # Open video with OpenCV (matches C++ process)
     print(f"Opening video: {video_path}")
-    try:
-        vr = VideoReader(video_path, ctx=cpu(0))
-        total_video_frames = len(vr)
-        print(f"Video has {total_video_frames} frames")
-    except Exception as e:
-        print(f"Error opening video with decord: {e}")
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print(f"Error: Cannot open video file: {video_path}")
         return
+    
+    # Get video properties
+    total_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    print(f"Video has {total_video_frames} frames at {fps:.2f} FPS")
     
     # Create output directory if specified
     if output_dir:
@@ -262,13 +263,13 @@ def visualize_video(video_path, bin_file, output_dir=None, max_frames=None):
             skipped_count += 1
             continue
         
-        # Read frame using decord (0-indexed)
-        try:
-            frame = vr[frame_number].asnumpy()
-            # Convert RGB to BGR for OpenCV
-            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        except Exception as e:
-            print(f"Error reading frame {frame_number}: {e}")
+        # Seek to the specific frame (matches C++ process behavior)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        
+        # Read frame using OpenCV (already in BGR format)
+        ret, frame = cap.read()
+        if not ret or frame is None:
+            print(f"Error reading frame {frame_number}: failed to read")
             skipped_count += 1
             continue
         
@@ -301,6 +302,9 @@ def visualize_video(video_path, bin_file, output_dir=None, max_frames=None):
         
         processed_count += 1
     
+    # Release video capture
+    cap.release()
+    
     print(f"\n{'='*60}")
     print(f"Processing complete!")
     print(f"  Processed: {processed_count} frames")
@@ -311,7 +315,7 @@ def visualize_video(video_path, bin_file, output_dir=None, max_frames=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Visualize detection results from bin file on video using decord"
+        description="Visualize detection results from bin file on video using OpenCV (cv2) to match C++ process"
     )
     parser.add_argument("--video", required=True, help="Path to input video file")
     parser.add_argument("--bin-file", required=True, help="Path to detection bin file")
