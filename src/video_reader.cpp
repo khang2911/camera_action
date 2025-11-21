@@ -9,6 +9,7 @@ VideoReader::VideoReader(const std::string& video_path, int video_id)
       video_id_(video_id),
       frame_number_(0),
       total_frames_read_(0),
+      actual_frame_position_(0),
       fps_(0.0),
       has_clip_metadata_(false),
       original_width_(0),
@@ -22,6 +23,7 @@ VideoReader::VideoReader(const VideoClip& clip, int video_id)
       video_id_(video_id),
       frame_number_(0),
       total_frames_read_(0),
+      actual_frame_position_(0),
       fps_(0.0),
       has_clip_metadata_(true),
       clip_(clip),
@@ -52,13 +54,19 @@ bool VideoReader::readFrame(cv::Mat& frame) {
         }
 
         ++total_frames_read_;
+        
+        // Get the frame position BEFORE checking if we should skip it
+        // CAP_PROP_POS_FRAMES returns the NEXT frame, so subtract 1 to get current frame
+        double pos = cap_.get(cv::CAP_PROP_POS_FRAMES);
+        int current_frame_pos = static_cast<int>(pos) - 1;
+        if (current_frame_pos < 0) current_frame_pos = 0;
 
         if (has_clip_metadata_ && clip_.has_time_window) {
             const double effective_fps = (fps_ > 0.0) ? fps_ : 30.0;
             const double current_ts =
                 clip_.moment_time + static_cast<double>(total_frames_read_) / effective_fps;
             if (current_ts < clip_.start_timestamp) {
-                continue;
+                continue;  // Skip this frame, but actual_frame_position_ not updated yet
             }
             if (current_ts > clip_.end_timestamp) {
                 return false;
@@ -84,22 +92,17 @@ bool VideoReader::readFrame(cv::Mat& frame) {
             }
         }
 
+        // Update actual_frame_position_ to the frame that was actually processed (not skipped)
+        actual_frame_position_ = current_frame_pos;
         ++frame_number_;
         return true;
     }
 }
 
 int VideoReader::getActualFramePosition() const {
-    if (!cap_.isOpened()) {
-        return -1;
-    }
-    // Get the actual current frame position in the video file
-    // CAP_PROP_POS_FRAMES returns the NEXT frame to be read, so we subtract 1
-    // to get the frame that was just read
-    double pos = cap_.get(cv::CAP_PROP_POS_FRAMES);
-    int frame_pos = static_cast<int>(pos);
-    // Subtract 1 because cap.read() advances the position, so pos is the next frame
-    return (frame_pos > 0) ? (frame_pos - 1) : 0;
+    // Return the tracked actual frame position of the last processed frame
+    // This is updated in readFrame() when a frame passes the time window check
+    return actual_frame_position_;
 }
 
 void VideoReader::initializeMetadata() {
@@ -120,6 +123,7 @@ void VideoReader::initializeMetadata() {
             const double start_frame = std::max(0.0, std::floor(offset_seconds * fps_));
             cap_.set(cv::CAP_PROP_POS_FRAMES, start_frame);
             total_frames_read_ = static_cast<long long>(start_frame);
+            actual_frame_position_ = static_cast<int>(start_frame);
         }
     }
 }

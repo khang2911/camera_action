@@ -31,6 +31,7 @@ private:
     int video_id_;
     int frame_number_;
     long long total_frames_read_;
+    int actual_frame_position_;  // Track the actual frame position that was processed (for bin file)
     double fps_;
     bool has_clip_metadata_;
     VideoClip clip_;
