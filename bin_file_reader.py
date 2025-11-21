@@ -18,58 +18,64 @@ KEYPOINT_NAMES = [
 
 
 @dataclass
-class Keypoint:
-    """Represents a single keypoint."""
-    x: float
-    y: float
-    confidence: float
-    name: str = ""
-    
-    def __post_init__(self):
-        """Set keypoint name based on index if not provided."""
-        if not self.name:
-            # Name will be set by the Detection class based on index
-            pass
+class Keypoints:
+    """Represents keypoints for pose detection."""
+    xy: List  # List of [x, y] pairs
+    conf: List  # List of confidence values
 
 
 @dataclass
-class Detection:
-    """Represents a single detection in a frame."""
-    bbox: tuple  # (x_center, y_center, width, height)
-    confidence: float
+class DetectionsOutput:
+    """Represents a detection output (for detection models)."""
+    bbox: List  # [x_center, y_center, width, height]
+    conf: float
     class_id: int
-    keypoints: List[Keypoint]
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert detection to dictionary."""
-        return {
-            'bbox': self.bbox,
-            'confidence': self.confidence,
-            'class_id': self.class_id,
-            'keypoints': [
-                {
-                    'x': kpt.x,
-                    'y': kpt.y,
-                    'confidence': kpt.confidence,
-                    'name': kpt.name
-                }
-                for kpt in self.keypoints
-            ]
-        }
+    id: int = None
+
+
+@dataclass
+class PoseOutput:
+    """Represents a pose output (for pose models)."""
+    bbox: List  # [x_center, y_center, width, height]
+    keypoints: Keypoints
+    conf: float
+    class_id: int
+    id: int = None
 
 
 @dataclass
 class Frame:
     """Represents a single frame with its detections."""
     frame_number: int
-    detections: List[Detection]
+    detections: List  # List of DetectionsOutput or PoseOutput
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert frame to dictionary."""
+        detections_dict = []
+        for det in self.detections:
+            if isinstance(det, PoseOutput):
+                detections_dict.append({
+                    'bbox': det.bbox,
+                    'keypoints': {
+                        'xy': det.keypoints.xy,
+                        'conf': det.keypoints.conf
+                    },
+                    'conf': det.conf,
+                    'class_id': det.class_id,
+                    'id': det.id
+                })
+            else:  # DetectionsOutput
+                detections_dict.append({
+                    'bbox': det.bbox,
+                    'conf': det.conf,
+                    'class_id': det.class_id,
+                    'id': det.id
+                })
+        
         return {
             'frame_number': self.frame_number,
             'num_detections': len(self.detections),
-            'detections': [det.to_dict() for det in self.detections]
+            'detections': detections_dict
         }
 
 
@@ -149,29 +155,38 @@ class BinFileReader:
                     num_keypoints = struct.unpack('i', num_keypoints_data)[0]
                     
                     # Read keypoints
-                    keypoints = []
+                    keypoint_xy = []
+                    keypoint_conf = []
                     for k in range(num_keypoints):
                         kpt_data = f.read(3 * 4)
                         if len(kpt_data) < 12:
                             break
                         x, y, conf = struct.unpack('3f', kpt_data)
-                        
-                        # Get keypoint name
-                        kpt_name = KEYPOINT_NAMES[k] if k < len(KEYPOINT_NAMES) else f"kpt_{k}"
-                        
-                        keypoints.append(Keypoint(
-                            x=x,
-                            y=y,
-                            confidence=conf,
-                            name=kpt_name
-                        ))
+                        keypoint_xy.append([x, y])
+                        keypoint_conf.append(conf)
                     
-                    detections.append(Detection(
-                        bbox=bbox,
-                        confidence=confidence,
-                        class_id=class_id,
-                        keypoints=keypoints
-                    ))
+                    # Create detection object based on model type
+                    if num_keypoints > 0:
+                        # Pose model - use PoseOutput
+                        keypoints_obj = Keypoints(
+                            xy=keypoint_xy,
+                            conf=keypoint_conf
+                        )
+                        detections.append(PoseOutput(
+                            bbox=list(bbox),  # Convert tuple to list
+                            keypoints=keypoints_obj,
+                            conf=confidence,
+                            class_id=class_id,
+                            id=None  # ID not stored in bin file
+                        ))
+                    else:
+                        # Detection model - use DetectionsOutput
+                        detections.append(DetectionsOutput(
+                            bbox=list(bbox),  # Convert tuple to list
+                            conf=confidence,
+                            class_id=class_id,
+                            id=None  # ID not stored in bin file
+                        ))
                 
                 # Create Frame object with all detections
                 frame = Frame(
@@ -217,12 +232,12 @@ class BinFileReader:
                 return frame
         return None
     
-    def get_all_detections(self) -> List[Detection]:
+    def get_all_detections(self) -> List:
         """
         Get all detections from all frames as a flat list.
         
         Returns:
-            List[Detection]: All detections from all frames
+            List: All detections (DetectionsOutput or PoseOutput) from all frames
         """
         if not self.frames:
             self.read()
@@ -276,10 +291,13 @@ if __name__ == "__main__":
                 print(f"  Detection {i+1}:")
                 print(f"    BBox: x_center={detection.bbox[0]:.2f}, y_center={detection.bbox[1]:.2f}, "
                       f"width={detection.bbox[2]:.2f}, height={detection.bbox[3]:.2f}")
-                print(f"    Confidence: {detection.confidence:.4f}")
+                print(f"    Confidence: {detection.conf:.4f}")
                 print(f"    Class ID: {detection.class_id}")
-                if detection.keypoints:
-                    print(f"    Keypoints: {len(detection.keypoints)}")
+                if isinstance(detection, PoseOutput):
+                    print(f"    Keypoints: {len(detection.keypoints.xy)} keypoints")
+                    for k, (xy, conf) in enumerate(zip(detection.keypoints.xy, detection.keypoints.conf)):
+                        if k < len(KEYPOINT_NAMES):
+                            print(f"      {KEYPOINT_NAMES[k]}: ({xy[0]:.2f}, {xy[1]:.2f}) conf={conf:.3f}")
         
         # Example: Get specific frame
         if frames:
@@ -289,6 +307,8 @@ if __name__ == "__main__":
             if first_frame.detections:
                 first_detection = first_frame.detections[0]
                 print(f"First detection bbox: {first_detection.bbox}")
+                if isinstance(first_detection, PoseOutput):
+                    print(f"First detection has {len(first_detection.keypoints.xy)} keypoints")
         
     except Exception as e:
         print(f"Error: {e}")
