@@ -58,7 +58,8 @@ public:
                const std::vector<EngineConfig>& engine_configs,
                const std::string& output_dir,
                bool debug_mode = false,
-               int max_frames_per_video = 0);
+               int max_frames_per_video = 0,
+               size_t queue_size = 500);
     
     // Constructor for Redis queue mode
     ThreadPool(int num_readers,
@@ -70,7 +71,8 @@ public:
                const std::string& input_queue_name,
                const std::string& output_queue_name,
                bool debug_mode = false,
-               int max_frames_per_video = 0);
+               int max_frames_per_video = 0,
+               size_t queue_size = 500);
     
     ~ThreadPool();
     
@@ -148,6 +150,11 @@ private:
     std::condition_variable reader_slot_cv_;
     
     mutable Statistics stats_;
+    
+    // Output path cache: key = (video_key, engine_name), value = output_path
+    // This avoids regenerating the same path for every frame
+    mutable std::unordered_map<std::string, std::string> output_path_cache_;
+    mutable std::mutex output_path_cache_mutex_;
     
     void readerWorker(int reader_id);
     void readerWorkerRedis(int reader_id);

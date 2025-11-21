@@ -339,7 +339,9 @@ bool YOLODetector::copyInputsToDevice(const std::vector<std::shared_ptr<std::vec
                         stream_);
     }
     
-    cudaStreamSynchronize(stream_);
+    // OPTIMIZATION: Don't synchronize here - let enqueueV2 wait for the async copy
+    // The sync will happen before reading output, allowing pipelining
+    // cudaStreamSynchronize(stream_);  // Removed for performance
     return true;
 }
 

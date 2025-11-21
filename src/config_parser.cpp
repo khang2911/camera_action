@@ -79,6 +79,7 @@ ConfigParser::ConfigParser()
     : num_readers_(10),
       num_preprocessors_(10),
       output_dir_("./output"),
+      queue_size_(500),
       time_padding_seconds_(0.0),
       debug_mode_(false),
       max_frames_per_video_(0),
@@ -155,6 +156,9 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
                 num_preprocessors_ = threads["num_preprocessors"].as<int>();
             } else if (num_preprocessors_ <= 0) {
                 num_preprocessors_ = num_readers_;
+            }
+            if (threads["queue_size"]) {
+                queue_size_ = threads["queue_size"].as<size_t>();
             }
         }
  
