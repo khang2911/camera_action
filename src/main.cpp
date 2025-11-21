@@ -179,12 +179,12 @@ int main(int argc, char* argv[]) {
         pool = std::make_unique<ThreadPool>(
             num_readers, num_preprocessors, engine_configs, output_dir,
             input_queue, output_queue, config.getInputQueueName(), config.getOutputQueueName(),
-            debug_mode, max_frames_per_video, config.getQueueSize());
+            debug_mode, max_frames_per_video);
     } else {
         // File-based mode
         pool = std::make_unique<ThreadPool>(
             num_readers, num_preprocessors, video_clips, engine_configs, output_dir,
-            debug_mode, max_frames_per_video, config.getQueueSize());
+            debug_mode, max_frames_per_video);
     }
     
     // Set up signal handlers for graceful shutdown (especially important for Redis mode)

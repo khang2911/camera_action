@@ -49,7 +49,6 @@ public:
     int getNumReaders() const { return num_readers_; }
     int getNumPreprocessors() const { return num_preprocessors_; }
     std::string getOutputDir() const { return output_dir_; }
-    size_t getQueueSize() const { return queue_size_; }
     bool isDebugMode() const { return debug_mode_; }
     int getMaxFramesPerVideo() const { return max_frames_per_video_; }
     bool isRoiCroppingEnabled() const { return roi_cropping_enabled_; }
@@ -109,7 +108,6 @@ private:
     int num_readers_;
     int num_preprocessors_;
     std::string output_dir_;
-    size_t queue_size_ = 500;  // Default queue size for frame queues
     double time_padding_seconds_ = 0.0;
     bool debug_mode_ = false;
     int max_frames_per_video_ = 0;  // 0 means no limit

@@ -57,8 +57,7 @@ ThreadPool::ThreadPool(int num_readers,
                        const std::vector<EngineConfig>& engine_configs,
                        const std::string& output_dir,
                        bool debug_mode,
-                       int max_frames_per_video,
-                       size_t queue_size)
+                       int max_frames_per_video)
     : num_readers_(num_readers),
       num_preprocessors_(num_preprocessors > 0 ? num_preprocessors : num_readers),
       video_clips_(video_clips),
@@ -87,7 +86,7 @@ ThreadPool::ThreadPool(int num_readers,
     
     // Create output directory if it doesn't exist
     std::filesystem::create_directories(output_dir);
-    raw_frame_queue_ = std::make_unique<FrameQueue>(queue_size);
+    raw_frame_queue_ = std::make_unique<FrameQueue>(500);
     
     // Initialize video processed flags
     {
@@ -151,8 +150,7 @@ ThreadPool::ThreadPool(int num_readers,
                        const std::string& input_queue_name,
                        const std::string& output_queue_name,
                        bool debug_mode,
-                       int max_frames_per_video,
-                       size_t queue_size)
+                       int max_frames_per_video)
     : num_readers_(num_readers),
       num_preprocessors_(num_preprocessors > 0 ? num_preprocessors : num_readers),
       output_dir_(output_dir),
@@ -183,7 +181,7 @@ ThreadPool::ThreadPool(int num_readers,
     
     // Create output directory if it doesn't exist
     std::filesystem::create_directories(output_dir);
-    raw_frame_queue_ = std::make_unique<FrameQueue>(queue_size);
+    raw_frame_queue_ = std::make_unique<FrameQueue>(500);
     
     max_active_redis_readers_ = num_readers_;
     
@@ -1367,18 +1365,6 @@ std::string ThreadPool::generateOutputPath(const std::string& serial,
                                            const std::string& record_date,
                                            const std::string& engine_name,
                                            int video_index) {
-    // OPTIMIZATION: Cache output paths per (serial, record_id, record_date, engine_name, video_index)
-    // This avoids regenerating the same path for every frame
-    std::string cache_key = serial + "|" + record_id + "|" + record_date + "|" + engine_name + "|" + std::to_string(video_index);
-    
-    {
-        std::lock_guard<std::mutex> lock(output_path_cache_mutex_);
-        auto it = output_path_cache_.find(cache_key);
-        if (it != output_path_cache_.end()) {
-            return it->second;
-        }
-    }
-    
     // Generate path in format: /detector_name/dd-mm-yy/serial_recordid_videoindex.bin
     
     auto sanitize_component = [](const std::string& value, const std::string& fallback) {
@@ -1407,15 +1393,7 @@ std::string ThreadPool::generateOutputPath(const std::string& serial,
     }
     oss << ".bin";
     
-    std::string output_path = oss.str();
-    
-    // Cache the generated path
-    {
-        std::lock_guard<std::mutex> lock(output_path_cache_mutex_);
-        output_path_cache_[cache_key] = output_path;
-    }
-    
-    return output_path;
+    return oss.str();
 }
 
 std::string ThreadPool::buildMessageKey(const std::string& serial, const std::string& record_id) const {
