@@ -94,8 +94,12 @@ int VideoReader::getActualFramePosition() const {
         return -1;
     }
     // Get the actual current frame position in the video file
+    // CAP_PROP_POS_FRAMES returns the NEXT frame to be read, so we subtract 1
+    // to get the frame that was just read
     double pos = cap_.get(cv::CAP_PROP_POS_FRAMES);
-    return static_cast<int>(pos);
+    int frame_pos = static_cast<int>(pos);
+    // Subtract 1 because cap.read() advances the position, so pos is the next frame
+    return (frame_pos > 0) ? (frame_pos - 1) : 0;
 }
 
 void VideoReader::initializeMetadata() {
