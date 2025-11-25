@@ -788,8 +788,15 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
             // Store ROI offset for scaling detections back to true original frame
             frame_data.roi_offset_x = clip.has_roi ? clip.roi_offset_x : 0;
             frame_data.roi_offset_y = clip.has_roi ? clip.roi_offset_y : 0;
+            // CRITICAL: Use timeout push to prevent indefinite blocking
+            // If queue is full, wait briefly (100ms) then use blocking push as fallback
+            // This prevents readers from blocking indefinitely while still ensuring frames aren't lost
             if (raw_frame_queue_) {
-                raw_frame_queue_->push(frame_data);
+                if (!raw_frame_queue_->push(frame_data, 100)) {
+                    // Queue still full after timeout - use blocking push to ensure frame is not lost
+                    // This indicates preprocessors are very slow, but we must process all frames
+                    raw_frame_queue_->push(frame_data);
+                }
             }
             
             // Removed per-frame timing - too expensive, use batch timing instead
@@ -832,19 +839,14 @@ void ThreadPool::preprocessorWorker(int worker_id) {
         int true_original_width = raw_frame.true_original_width > 0 ? raw_frame.true_original_width : raw_frame.original_width;
         int true_original_height = raw_frame.true_original_height > 0 ? raw_frame.true_original_height : raw_frame.original_height;
         
-        // CRITICAL OPTIMIZATION: Process all engines in parallel using std::async
-        // This allows preprocessing for different engines to run concurrently
-        // Previously sequential processing caused 3x overhead (one frame processed 3 times sequentially)
+        // OPTIMIZATION: Process all engines sequentially
+        // NOTE: Parallel preprocessing with std::async caused severe mutex contention
+        // With 60 preprocessor threads * 3 engines = 180 concurrent acquireBuffer() calls
+        // This created massive contention on buffer_pool_mutex, making things slower
+        // Sequential processing is actually faster due to better cache locality and less contention
         auto preprocess_start = std::chrono::steady_clock::now();
         
-        std::vector<std::future<void>> futures;
-        futures.reserve(engine_groups_.size());
-        
         for (auto& engine_group : engine_groups_) {
-            // Launch async preprocessing for each engine
-            // Capture raw pointer to avoid copying unique_ptr
-            EngineGroup* engine = engine_group.get();
-            futures.push_back(std::async(std::launch::async, [this, raw_frame, engine, true_original_width, true_original_height]() {
             cv::Mat frame_to_process = raw_frame.frame;
             // Store dimensions for this engine
             int cropped_width = raw_frame.original_width;
@@ -853,7 +855,7 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             int roi_offset_y = raw_frame.roi_offset_y;
             
             // Apply ROI cropping if enabled for this engine and ROI is available
-            if (engine->roi_cropping) {
+            if (engine_group->roi_cropping) {
                 if (raw_frame.has_roi && !frame_to_process.empty() &&
                     true_original_width > 0 && true_original_height > 0) {
                     float norm_x1 = std::clamp(raw_frame.roi_norm_x1, 0.0f, 1.0f);
@@ -888,8 +890,8 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             }
             
             // OPTIMIZATION: Acquire buffer before preprocessing to minimize mutex hold time
-            auto buffer = engine->acquireBuffer();
-            engine->preprocessor->preprocessToFloat(frame_to_process, *buffer);
+            auto buffer = engine_group->acquireBuffer();
+            engine_group->preprocessor->preprocessToFloat(frame_to_process, *buffer);
             
             // OPTIMIZATION: Construct FrameData efficiently - use member initialization where possible
             // String copies are necessary but we minimize repeated access
@@ -923,27 +925,21 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             // to continue processing while this one waits briefly.
             // With batch_size=16, detectors need time to accumulate batches, so queues can fill up.
             // A short timeout (50ms) prevents deadlock while still allowing normal operation.
-            if (!engine->frame_queue->push(processed, 50)) {
+            if (!engine_group->frame_queue->push(processed, 50)) {
                 // Queue is still full after timeout - this indicates detectors are very slow
                 // Retry once more with longer timeout to ensure frame is not lost
-                if (!engine->frame_queue->push(processed, 200)) {
+                if (!engine_group->frame_queue->push(processed, 200)) {
                     // Still full - this is a serious bottleneck, but we must push the frame
                     // Use blocking push as last resort to ensure no frames are lost
-                    engine->frame_queue->push(processed);
+                    engine_group->frame_queue->push(processed);
                 }
             }
             
-                // OPTIMIZATION: Only register pending if Redis is enabled and message_key is valid
-                // Skip if message_key is empty to avoid unnecessary mutex contention
-                if (!processed.message_key.empty()) {
-                registerPendingFrame(processed.message_key, engine->engine_name);
-                }
-        }));
-        }
-        
-        // Wait for all engines to finish preprocessing this frame
-        for (auto& future : futures) {
-            future.wait();
+            // OPTIMIZATION: Only register pending if Redis is enabled and message_key is valid
+            // Skip if message_key is empty to avoid unnecessary mutex contention
+            if (!processed.message_key.empty()) {
+                registerPendingFrame(processed.message_key, engine_group->engine_name);
+            }
         }
         
         // OPTIMIZATION: Batch timing update - only update stats once per frame
