@@ -36,6 +36,20 @@ endif()
 # OpenCV
 find_package(OpenCV REQUIRED)
 
+# FFmpeg (for NVDEC video decoding)
+find_path(FFMPEG_INCLUDE_DIR
+    NAMES libavformat/avformat.h
+    PATHS /usr/include /usr/local/include /opt/homebrew/include
+)
+find_library(AVCODEC_LIBRARY avcodec PATHS /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu /opt/homebrew/lib)
+find_library(AVFORMAT_LIBRARY avformat PATHS /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu /opt/homebrew/lib)
+find_library(AVUTIL_LIBRARY avutil PATHS /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu /opt/homebrew/lib)
+find_library(SWSCALE_LIBRARY swscale PATHS /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu /opt/homebrew/lib)
+
+if(NOT FFMPEG_INCLUDE_DIR OR NOT AVCODEC_LIBRARY OR NOT AVFORMAT_LIBRARY OR NOT AVUTIL_LIBRARY OR NOT SWSCALE_LIBRARY)
+    message(FATAL_ERROR "FFmpeg libraries (avcodec, avformat, avutil, swscale) are required for NVDEC decoding.")
+endif()
+
 # TensorRT
 find_path(TensorRT_INCLUDE_DIR NvInfer.h
     PATHS
@@ -138,6 +152,7 @@ endif()
 include_directories(
     ${CUDA_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
+    ${FFMPEG_INCLUDE_DIR}
     ${TensorRT_INCLUDE_DIR}
     ${yaml-cpp_INCLUDE_DIRS}
     ${CPP_REDIS_INCLUDE_DIR}
@@ -173,6 +188,10 @@ set(HEADERS
 set(ALL_LIBS
     ${CUDA_LIBRARIES}
     ${OpenCV_LIBS}
+    ${AVCODEC_LIBRARY}
+    ${AVFORMAT_LIBRARY}
+    ${AVUTIL_LIBRARY}
+    ${SWSCALE_LIBRARY}
     ${TensorRT_LIBRARY}
     yaml-cpp
     nvinfer
