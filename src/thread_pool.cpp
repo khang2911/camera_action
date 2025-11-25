@@ -873,16 +873,38 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             continue;
         }
         
-        // Dispatch a copy of the frame to each engine-specific preprocess queue
-        for (auto& engine_group : engine_groups_) {
-            FrameData frame_copy = raw_frame;  // cv::Mat uses reference counting
-            if (!engine_group->preprocess_queue) {
+        // Dispatch copies of the frame to each engine-specific preprocess queue without blocking
+        struct PendingFrame {
+            EngineGroup* engine;
+            FrameData frame;
+        };
+        std::vector<PendingFrame> pending;
+        pending.reserve(engine_groups_.size());
+        
+        for (auto& engine_group_ptr : engine_groups_) {
+            if (!engine_group_ptr->preprocess_queue) {
                 continue;
             }
+            PendingFrame pf;
+            pf.engine = engine_group_ptr.get();
+            pf.frame = raw_frame;  // cv::Mat uses reference counting
             
-            if (!engine_group->preprocess_queue->push(frame_copy, 50)) {
-                // Queue still full after timeout - fallback to blocking push to avoid frame loss
-                engine_group->preprocess_queue->push(frame_copy);
+            if (!pf.engine->preprocess_queue->push(pf.frame, 5)) {
+                pending.push_back(std::move(pf));
+            }
+        }
+        
+        while (!pending.empty() && !stop_flag_) {
+            for (auto it = pending.begin(); it != pending.end(); ) {
+                if (it->engine->preprocess_queue->push(it->frame, 5)) {
+                    it = pending.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            
+            if (!pending.empty()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
             }
         }
     }
