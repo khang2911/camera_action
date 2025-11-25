@@ -1080,12 +1080,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         task.engine_id = engine_id;
                         task.batch_size = static_cast<int>(batch_tensors.size());
                         
-                        // Register pending frames BEFORE pushing to post-processing queue
-                        for (const auto& msg_key : batch_message_keys) {
-                            if (!msg_key.empty()) {
-                                registerPendingFrame(msg_key, engine_group->engine_name);
-                            }
-                        }
+                        // Note: registerPendingFrame is already called in preprocessorWorker (line 907)
+                        // No need to call it again here to avoid double-counting
                         
                         // Push to post-processing queue (non-blocking)
                         if (!postprocess_queue_ || !postprocess_queue_->push(task)) {
@@ -1236,10 +1232,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     task.engine_id = engine_id;
                     task.batch_size = 1;
                     
-                    // Register pending frame
-                    if (!frame_data.message_key.empty()) {
-                        registerPendingFrame(frame_data.message_key, engine_group->engine_name);
-                    }
+                    // Note: registerPendingFrame is already called in preprocessorWorker (line 907)
+                    // No need to call it again here to avoid double-counting
                     
                     // Push to post-processing queue (non-blocking)
                     if (!postprocess_queue_ || !postprocess_queue_->push(task)) {
@@ -1414,14 +1408,17 @@ void ThreadPool::postprocessWorker(int worker_id) {
             }
             
             // Write to file
-            if (!task.detector->writeDetectionsToFile(detections, task.output_paths[b], task.frame_numbers[b])) {
+            bool write_success = task.detector->writeDetectionsToFile(detections, task.output_paths[b], task.frame_numbers[b]);
+            if (!write_success) {
                 LOG_ERROR("PostProcess", "Failed to write detections for frame " + std::to_string(task.frame_numbers[b]));
                 all_success = false;
-            } else {
-                // Mark frame as processed (for Redis message tracking)
-                if (use_redis_queue_ && b < task.message_keys.size() && b < task.video_indices.size()) {
-                    markFrameProcessed(task.message_keys[b], task.engine_name, task.output_paths[b], task.video_indices[b]);
-                }
+            }
+            
+            // Mark frame as processed (for Redis message tracking) - always call this to decrement pending count
+            // Even if write fails, we need to decrement pending count to avoid blocking message push
+            if (use_redis_queue_ && b < task.message_keys.size() && b < task.video_indices.size()) {
+                std::string output_path = write_success ? task.output_paths[b] : "";
+                markFrameProcessed(task.message_keys[b], task.engine_name, output_path, task.video_indices[b]);
             }
         }
         
@@ -1690,14 +1687,30 @@ void ThreadPool::markFrameProcessed(const std::string& message_key, const std::s
     std::string message_to_push;
     {
         std::lock_guard<std::mutex> lock(video_output_mutex_);
-        auto& status = video_output_status_[message_key];
+        auto it = video_output_status_.find(message_key);
+        if (it == video_output_status_.end()) {
+            LOG_WARNING("RedisOutput", "markFrameProcessed: message_key '" + message_key + 
+                       "' not found in video_output_status_ (may have been pushed already)");
+            return;
+        }
+        
+        auto& status = it->second;
         if (!output_path.empty()) {
             status.detector_outputs[engine_name][video_index] = output_path;
         }
+        
+        // Decrement pending count (should never go negative, but handle it gracefully)
         int& pending = status.pending_counts[engine_name];
         if (pending > 0) {
             pending--;
+        } else if (pending < 0) {
+            // This shouldn't happen, but log it for debugging
+            LOG_WARNING("RedisOutput", "markFrameProcessed: pending count for '" + message_key + 
+                       "' engine '" + engine_name + "' is negative (" + std::to_string(pending) + 
+                       "), resetting to 0");
+            pending = 0;
         }
+        
         message_to_push = tryPushOutputLocked(message_key, status);
     }
     
@@ -1736,14 +1749,32 @@ void ThreadPool::markVideoReadingComplete(const std::string& message_key) {
 }
 
 bool ThreadPool::canPushOutputLocked(const VideoOutputStatus& status) const {
-    if (!status.reading_completed || status.message_pushed) {
+    if (!status.reading_completed) {
         return false;
     }
+    if (status.message_pushed) {
+        return false;
+    }
+    
+    // Check if all pending counts are zero
     for (const auto& kv : status.pending_counts) {
         if (kv.second > 0) {
             return false;
         }
     }
+    
+    // Additional check: ensure we have outputs from at least one detector
+    bool has_outputs = false;
+    for (const auto& kv : status.detector_outputs) {
+        if (!kv.second.empty()) {
+            has_outputs = true;
+            break;
+        }
+    }
+    if (!has_outputs) {
+        return false;
+    }
+    
     return true;
 }
 
@@ -1805,21 +1836,34 @@ std::string ThreadPool::augmentMessageWithDetectors(const std::string& message,
 
 std::string ThreadPool::tryPushOutputLocked(const std::string& message_key, VideoOutputStatus& status) {
     if (!canPushOutputLocked(status)) {
+        // Log why we can't push (for debugging)
+        if (!status.reading_completed) {
+            LOG_DEBUG("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
+                     "' reading not completed yet");
+        } else if (status.message_pushed) {
+            LOG_DEBUG("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
+                     "' already pushed");
+        } else {
+            // Check pending counts
+            std::ostringstream pending_oss;
+            bool has_pending = false;
+            for (const auto& kv : status.pending_counts) {
+                if (kv.second > 0) {
+                    if (has_pending) pending_oss << ", ";
+                    pending_oss << kv.first << "=" << kv.second;
+                    has_pending = true;
+                }
+            }
+            if (has_pending) {
+                LOG_DEBUG("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
+                         "' still has pending frames: " + pending_oss.str());
+            }
+        }
         return "";
     }
     if (status.original_message.empty()) {
-        return "";
-    }
-    bool has_outputs = false;
-    for (const auto& kv : status.detector_outputs) {
-        if (!kv.second.empty()) {
-            has_outputs = true;
-            break;
-        }
-    }
-    if (!has_outputs) {
-        LOG_WARNING("RedisOutput", "tryPushOutputLocked: message '" + message_key +
-                                   "' has no detector outputs yet, delaying push");
+        LOG_WARNING("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
+                   "' has empty original_message");
         return "";
     }
     
