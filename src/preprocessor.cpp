@@ -65,10 +65,6 @@ cv::Mat Preprocessor::preprocess(const cv::Mat& frame) {
 }
 
 namespace {
-#if defined(__AVX2__)
-#include <immintrin.h>
-#endif
-
 struct ScratchBuffers {
     cv::Mat rgb;
     cv::Mat resized;
@@ -76,80 +72,6 @@ struct ScratchBuffers {
     cv::Mat normalized;
     std::vector<cv::Mat> channels;
 };
-
-inline bool hasAVX2() {
-#if defined(__AVX2__)
-    return true;
-#else
-    return false;
-#endif
-}
-
-void convertToCHWScalar(const cv::Mat& normalized, std::vector<float>& output) {
-    const size_t total = static_cast<size_t>(normalized.rows) * normalized.cols;
-    output.resize(total * 3);
-    float* dst_r = output.data();
-    float* dst_g = dst_r + total;
-    float* dst_b = dst_g + total;
-    
-    for (size_t i = 0; i < total; ++i) {
-        const float* src = normalized.ptr<float>() + i * 3;
-        dst_b[i] = src[0];
-        dst_g[i] = src[1];
-        dst_r[i] = src[2];
-    }
-}
-
-#if defined(__AVX2__)
-void convertToCHWAVX(const cv::Mat& normalized, std::vector<float>& output) {
-    const size_t total = static_cast<size_t>(normalized.rows) * normalized.cols;
-    output.resize(total * 3);
-    float* dst_r = output.data();
-    float* dst_g = dst_r + total;
-    float* dst_b = dst_g + total;
-    
-    const float* src = normalized.ptr<float>();
-    const __m256i offsets = _mm256_setr_epi32(0, 3, 6, 9, 12, 15, 18, 21);
-    const __m256i stride = _mm256_set1_epi32(24);
-    __m256i base = _mm256_setzero_si256();
-    const __m256i one = _mm256_set1_epi32(1);
-    const __m256i two = _mm256_set1_epi32(2);
-    
-    size_t i = 0;
-    for (; i + 8 <= total; i += 8) {
-        __m256i idx_b = _mm256_add_epi32(base, offsets);
-        __m256i idx_g = _mm256_add_epi32(idx_b, one);
-        __m256i idx_r = _mm256_add_epi32(idx_b, two);
-        
-        __m256 b = _mm256_i32gather_ps(src, idx_b, 4);
-        __m256 g = _mm256_i32gather_ps(src, idx_g, 4);
-        __m256 r = _mm256_i32gather_ps(src, idx_r, 4);
-        
-        _mm256_storeu_ps(dst_b + i, b);
-        _mm256_storeu_ps(dst_g + i, g);
-        _mm256_storeu_ps(dst_r + i, r);
-        
-        base = _mm256_add_epi32(base, stride);
-    }
-    
-    for (; i < total; ++i) {
-        const float* src_ptr = src + i * 3;
-        dst_b[i] = src_ptr[0];
-        dst_g[i] = src_ptr[1];
-        dst_r[i] = src_ptr[2];
-    }
-}
-#endif
-
-void convertToCHW(const cv::Mat& normalized, std::vector<float>& output) {
-#if defined(__AVX2__)
-    if (hasAVX2()) {
-        convertToCHWAVX(normalized, output);
-        return;
-    }
-#endif
-    convertToCHWScalar(normalized, output);
-}
 }  // namespace
 
 void Preprocessor::preprocessToFloat(const cv::Mat& frame, std::vector<float>& output) {
@@ -179,8 +101,16 @@ void Preprocessor::preprocessToFloat(const cv::Mat& frame, std::vector<float>& o
     scratch.normalized.create(target_height_, target_width_, CV_32FC3);
     scratch.padded.convertTo(scratch.normalized, CV_32F, 1.0f / 255.0f);
     
-    // Step 5: Convert to CHW using SIMD if available
-    convertToCHW(scratch.normalized, output);
+    // Step 5: Convert to CHW
+    scratch.channels.resize(3);
+    cv::split(scratch.normalized, scratch.channels);
+    
+    const size_t csize = static_cast<size_t>(target_width_) * target_height_;
+    output.resize(csize * 3);
+    for (int c = 0; c < 3; ++c) {
+        const float* data = scratch.channels[c].ptr<float>();
+        std::memcpy(output.data() + static_cast<size_t>(c) * csize, data, csize * sizeof(float));
+    }
 }
 
 std::vector<float> Preprocessor::preprocessToFloat(const cv::Mat& frame) {
