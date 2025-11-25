@@ -519,10 +519,8 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
         // Reset counter when we get a message
         consecutive_empty_polls = 0;
         
-        // Get queue length to show how many messages are remaining
-        int queue_length = input_queue_->getQueueLength(input_queue_name_);
-        std::string queue_status = (queue_length >= 0) ? 
-            " (messages remaining in queue: " + std::to_string(queue_length) + ")" : "";
+        // Removed getQueueLength call - it's a Redis operation that blocks and slows down reader
+        // Queue status can be monitored by the monitor thread instead
         
         try {
             auto clips = parseJsonToVideoClips(message);
@@ -535,7 +533,7 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
             
             if (valid_clips.empty()) {
                 LOG_WARNING("Reader", "Reader " + std::to_string(reader_id) + 
-                         " parsed Redis message but found no playable videos" + queue_status);
+                         " parsed Redis message but found no playable videos");
                 releaseReaderSlot();
                 continue;
             }
@@ -548,18 +546,7 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
             
             for (size_t idx = 0; idx < valid_clips.size(); ++idx) {
                 auto& clip = valid_clips[idx];
-                // Generate video_key for logging (unique identifier per video)
-                std::string video_key = buildVideoKey(clip.message_key.empty() ? 
-                    buildMessageKey(clip.serial, clip.record_id) : clip.message_key, 
-                    clip.video_index);
-                // Reduced logging frequency - only log first video or every 10th video
-                static std::atomic<int> video_log_counter{0};
-                bool should_log = (++video_log_counter % 10 == 0 || idx == 0);
-                if (should_log) {
-                    LOG_DEBUG("Reader", "Reader thread " + std::to_string(reader_id) + 
-                             " processing video from Redis: " + clip.path + 
-                             " (video_key='" + video_key + "')" + queue_status);
-                }
+                // Removed video_key generation and logging - too expensive for hot path
                 
                 bool register_message = false;  // already registered before loop
                 bool finalize_message = (idx == valid_clips.size() - 1);
@@ -760,15 +747,17 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
             }
             
             
-            auto frame_start = std::chrono::steady_clock::now();
-            
             stats_.frames_read++;
             
             // Get the actual frame position in the video file (accounts for time-based filtering)
+            // Note: getActualFramePosition() is fast (just returns cached value from readFrame)
             int actual_frame_position = reader.getActualFramePosition();
+            
             // Use actual_frame_position (actual frame number in video) for bin file output
             // This ensures frame numbers match the video file, even when we skip frames at the beginning
-            FrameData frame_data(frame.clone(), video_id, actual_frame_position, clip.path, 
+            // OPTIMIZATION: cv::Mat uses reference counting, so copying is cheap (no deep copy needed)
+            // Only clone if frame will be modified, but preprocessors don't modify the original frame
+            FrameData frame_data(frame, video_id, actual_frame_position, clip.path, 
                                 clip.record_id, clip.record_date, clip.serial,
                                 message_key, video_key, clip.video_index,
                                 clip.has_roi, clip.roi_x1, clip.roi_y1, clip.roi_x2, clip.roi_y2);
@@ -789,9 +778,8 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
                 raw_frame_queue_->push(frame_data);
             }
             
-            auto frame_end = std::chrono::steady_clock::now();
-            auto frame_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(frame_end - frame_start).count();
-            stats_.reader_total_time_ms += frame_time_ms;
+            // Removed per-frame timing - too expensive, use batch timing instead
+            // Timing is now tracked at batch level in statistics
             
             frame_count++;
             global_frame_number++;
@@ -811,9 +799,9 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
             }
         }
         
-        LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
-                 " finished video (video_key='" + video_key + "')" + 
-                 " (" + std::to_string(frame_count) + " frames)");
+        // Reduced logging - only log completion for debugging
+        LOG_DEBUG("Reader", "Reader " + std::to_string(reader_id) + 
+                 " finished video (" + std::to_string(frame_count) + " frames)");
     
     // Always mark reading complete when video processing finishes (even if not finalize_message)
     // This ensures reading_completed is set as soon as possible, not waiting for all videos
