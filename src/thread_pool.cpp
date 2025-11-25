@@ -925,81 +925,99 @@ void ThreadPool::enginePreprocessWorker(int engine_id, int worker_id) {
     LOG_INFO("Preprocessor", "Engine " + engine_group->engine_name + " preprocess thread " + 
              std::to_string(worker_id) + " started");
     
+    const int kBatchSize = 4;
+    
     while (!stop_flag_) {
-        FrameData frame_data;
-        if (!engine_group->preprocess_queue || !engine_group->preprocess_queue->pop(frame_data, 100)) {
+        std::vector<FrameData> batch;
+        batch.reserve(kBatchSize);
+        
+        for (int i = 0; i < kBatchSize; ++i) {
+            FrameData frame_data;
+            int timeout = batch.empty() ? 100 : 10;
+            if (!engine_group->preprocess_queue || !engine_group->preprocess_queue->pop(frame_data, timeout)) {
+                if (stop_flag_) break;
+                if (batch.empty()) {
+                    continue;
+                }
+                break;
+            }
+            batch.push_back(std::move(frame_data));
+        }
+        
+        if (batch.empty()) {
             if (stop_flag_) break;
             continue;
         }
         
-        int true_original_width = frame_data.true_original_width > 0 ? frame_data.true_original_width : frame_data.original_width;
-        int true_original_height = frame_data.true_original_height > 0 ? frame_data.true_original_height : frame_data.original_height;
+        auto batch_start = std::chrono::steady_clock::now();
         
-        auto preprocess_start = std::chrono::steady_clock::now();
-        
-        cv::Mat frame_to_process = frame_data.frame;
-        int cropped_width = frame_data.original_width;
-        int cropped_height = frame_data.original_height;
-        int roi_offset_x = frame_data.roi_offset_x;
-        int roi_offset_y = frame_data.roi_offset_y;
-        
-        if (engine_group->roi_cropping) {
-            if (frame_data.has_roi && !frame_to_process.empty() &&
-                true_original_width > 0 && true_original_height > 0) {
-                float norm_x1 = std::clamp(frame_data.roi_norm_x1, 0.0f, 1.0f);
-                float norm_y1 = std::clamp(frame_data.roi_norm_y1, 0.0f, 1.0f);
-                float norm_x2 = std::clamp(frame_data.roi_norm_x2, 0.0f, 1.0f);
-                float norm_y2 = std::clamp(frame_data.roi_norm_y2, 0.0f, 1.0f);
-                if (norm_x2 <= norm_x1) norm_x2 = std::min(1.0f, norm_x1 + 0.001f);
-                if (norm_y2 <= norm_y1) norm_y2 = std::min(1.0f, norm_y1 + 0.001f);
-                
-                int x1 = static_cast<int>(norm_x1 * true_original_width);
-                int y1 = static_cast<int>(norm_y1 * true_original_height);
-                int x2 = static_cast<int>(norm_x2 * true_original_width);
-                int y2 = static_cast<int>(norm_y2 * true_original_height);
-                
-                x1 = std::max(0, std::min(x1, true_original_width - 1));
-                y1 = std::max(0, std::min(y1, true_original_height - 1));
-                x2 = std::max(x1 + 1, std::min(x2, true_original_width));
-                y2 = std::max(y1 + 1, std::min(y2, true_original_height));
-                
-                cv::Rect roi_rect(x1, y1, x2 - x1, y2 - y1);
-                frame_to_process = frame_to_process(roi_rect).clone();
-                cropped_width = x2 - x1;
-                cropped_height = y2 - y1;
-                roi_offset_x = x1;
-                roi_offset_y = y1;
+        for (auto& frame_data : batch) {
+            int true_original_width = frame_data.true_original_width > 0 ? frame_data.true_original_width : frame_data.original_width;
+            int true_original_height = frame_data.true_original_height > 0 ? frame_data.true_original_height : frame_data.original_height;
+            
+            cv::Mat frame_to_process = frame_data.frame;
+            int cropped_width = frame_data.original_width;
+            int cropped_height = frame_data.original_height;
+            int roi_offset_x = frame_data.roi_offset_x;
+            int roi_offset_y = frame_data.roi_offset_y;
+            
+            if (engine_group->roi_cropping) {
+                if (frame_data.has_roi && !frame_to_process.empty() &&
+                    true_original_width > 0 && true_original_height > 0) {
+                    float norm_x1 = std::clamp(frame_data.roi_norm_x1, 0.0f, 1.0f);
+                    float norm_y1 = std::clamp(frame_data.roi_norm_y1, 0.0f, 1.0f);
+                    float norm_x2 = std::clamp(frame_data.roi_norm_x2, 0.0f, 1.0f);
+                    float norm_y2 = std::clamp(frame_data.roi_norm_y2, 0.0f, 1.0f);
+                    if (norm_x2 <= norm_x1) norm_x2 = std::min(1.0f, norm_x1 + 0.001f);
+                    if (norm_y2 <= norm_y1) norm_y2 = std::min(1.0f, norm_y1 + 0.001f);
+                    
+                    int x1 = static_cast<int>(norm_x1 * true_original_width);
+                    int y1 = static_cast<int>(norm_y1 * true_original_height);
+                    int x2 = static_cast<int>(norm_x2 * true_original_width);
+                    int y2 = static_cast<int>(norm_y2 * true_original_height);
+                    
+                    x1 = std::max(0, std::min(x1, true_original_width - 1));
+                    y1 = std::max(0, std::min(y1, true_original_height - 1));
+                    x2 = std::max(x1 + 1, std::min(x2, true_original_width));
+                    y2 = std::max(y1 + 1, std::min(y2, true_original_height));
+                    
+                    cv::Rect roi_rect(x1, y1, x2 - x1, y2 - y1);
+                    frame_to_process = frame_to_process(roi_rect).clone();
+                    cropped_width = x2 - x1;
+                    cropped_height = y2 - y1;
+                    roi_offset_x = x1;
+                    roi_offset_y = y1;
+                }
             }
-        }
-        
-        auto buffer = engine_group->acquireBuffer();
-        engine_group->preprocessor->preprocessToFloat(frame_to_process, *buffer);
-        
-        FrameData processed = frame_data;
-        processed.preprocessed_data = buffer;
-        processed.frame = frame_to_process;
-        processed.original_width = cropped_width;
-        processed.original_height = cropped_height;
-        processed.true_original_width = true_original_width;
-        processed.true_original_height = true_original_height;
-        processed.roi_offset_x = roi_offset_x;
-        processed.roi_offset_y = roi_offset_y;
-        
-        if (!engine_group->frame_queue->push(processed, 50)) {
-            if (!engine_group->frame_queue->push(processed, 200)) {
-                engine_group->frame_queue->push(processed);
+            
+            auto buffer = engine_group->acquireBuffer();
+            engine_group->preprocessor->preprocessToFloat(frame_to_process, *buffer);
+            
+            FrameData processed = frame_data;
+            processed.preprocessed_data = buffer;
+            processed.frame = frame_to_process;
+            processed.original_width = cropped_width;
+            processed.original_height = cropped_height;
+            processed.true_original_width = true_original_width;
+            processed.true_original_height = true_original_height;
+            processed.roi_offset_x = roi_offset_x;
+            processed.roi_offset_y = roi_offset_y;
+            
+            if (!engine_group->frame_queue->push(processed, 50)) {
+                if (!engine_group->frame_queue->push(processed, 200)) {
+                    engine_group->frame_queue->push(processed);
+                }
             }
+            
+            if (!processed.message_key.empty()) {
+                registerPendingFrame(processed.message_key, engine_group->engine_name);
+            }
+            
+            stats_.frames_preprocessed++;
         }
         
-        if (!processed.message_key.empty()) {
-            registerPendingFrame(processed.message_key, engine_group->engine_name);
-        }
-        
-        auto preprocess_end = std::chrono::steady_clock::now();
-        auto preprocess_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-            preprocess_end - preprocess_start).count();
-        
-        stats_.frames_preprocessed++;
+        auto batch_end = std::chrono::steady_clock::now();
+        auto preprocess_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(batch_end - batch_start).count();
         stats_.preprocessor_total_time_ms += preprocess_time_ms;
     }
     
