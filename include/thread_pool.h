@@ -32,6 +32,8 @@ struct EngineGroup {
     std::vector<std::thread> detector_threads;
     std::unique_ptr<FrameQueue> frame_queue;
     std::unique_ptr<Preprocessor> preprocessor;
+    std::unique_ptr<FrameQueue> preprocess_queue;
+    std::vector<std::thread> preprocess_threads;
     
     std::vector<std::vector<float>*> buffer_pool;
     std::mutex buffer_pool_mutex;
@@ -45,6 +47,7 @@ struct EngineGroup {
         // With batch_size=16, we need at least 16 * num_detectors * 2 (for pipelining) = 32 * num_detectors
         // Using 500 as default to ensure smooth operation even with multiple detectors
         frame_queue = std::make_unique<FrameQueue>(queue_size);
+        preprocess_queue = std::make_unique<FrameQueue>(queue_size);
         preprocessor = std::make_unique<Preprocessor>(input_width, input_height);
     }
     
@@ -186,6 +189,8 @@ private:
 
     int num_readers_;
     int num_preprocessors_;
+    int preprocess_dispatcher_count_ = 0;
+    int per_engine_preprocessors_ = 1;
     std::vector<VideoClip> video_clips_;
     std::vector<std::unique_ptr<EngineGroup>> engine_groups_;
     std::string output_dir_;
@@ -225,6 +230,7 @@ private:
     void readerWorker(int reader_id);
     void readerWorkerRedis(int reader_id);
     void preprocessorWorker(int worker_id);
+    void enginePreprocessWorker(int engine_id, int worker_id);
     void detectorWorker(int engine_id, int detector_id);
     void postprocessWorker(int worker_id);  // Post-processing worker thread
     void redisOutputWorker();  // Async Redis message sending worker

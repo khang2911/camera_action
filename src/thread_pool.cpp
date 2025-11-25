@@ -150,8 +150,14 @@ ThreadPool::ThreadPool(int num_readers,
         engine_groups_.push_back(std::move(engine_group));
     }
     
+    // Configure dispatcher and per-engine preprocessor counts
+    size_t engine_count = std::max<size_t>(1, engine_groups_.size());
+    preprocess_dispatcher_count_ = std::max(1, std::min(num_preprocessors_, 4));
+    per_engine_preprocessors_ = std::max(1, num_preprocessors_ / static_cast<int>(engine_count));
+    
     LOG_INFO("ThreadPool", "ThreadPool initialized with " + std::to_string(num_readers) + 
-             " reader threads, " + std::to_string(num_preprocessors_) + " preprocessor threads, and " +
+             " reader threads, " + std::to_string(preprocess_dispatcher_count_) + " dispatcher threads, " +
+             std::to_string(per_engine_preprocessors_) + " preprocessor threads per engine, and " +
              std::to_string(engine_configs.size()) + " engines");
 }
 
@@ -245,8 +251,13 @@ ThreadPool::ThreadPool(int num_readers,
         engine_groups_.push_back(std::move(engine_group));
     }
     
+    size_t engine_count = std::max<size_t>(1, engine_groups_.size());
+    preprocess_dispatcher_count_ = std::max(1, std::min(num_preprocessors_, 4));
+    per_engine_preprocessors_ = std::max(1, num_preprocessors_ / static_cast<int>(engine_count));
+    
     LOG_INFO("ThreadPool", "ThreadPool initialized (Redis mode) with " + std::to_string(num_readers) + 
-             " reader threads, " + std::to_string(num_preprocessors_) + " preprocessor threads, and " +
+             " reader threads, " + std::to_string(preprocess_dispatcher_count_) + " dispatcher threads, " +
+             std::to_string(per_engine_preprocessors_) + " preprocessor threads per engine, and " +
              std::to_string(engine_configs.size()) + " engines");
 }
 
@@ -290,10 +301,24 @@ void ThreadPool::start() {
         LOG_DEBUG("ThreadPool", "Started reader thread " + std::to_string(i));
     }
     
-    // Start preprocessor threads
-    for (int i = 0; i < num_preprocessors_; ++i) {
+    // Start dispatcher threads (feed engine preprocess queues)
+    for (int i = 0; i < preprocess_dispatcher_count_; ++i) {
         preprocessor_threads_.emplace_back(&ThreadPool::preprocessorWorker, this, i);
-        LOG_DEBUG("ThreadPool", "Started preprocessor thread " + std::to_string(i));
+        LOG_DEBUG("ThreadPool", "Started preprocess dispatcher thread " + std::to_string(i));
+    }
+    
+    // Start engine-specific preprocess threads
+    for (size_t engine_id = 0; engine_id < engine_groups_.size(); ++engine_id) {
+        auto& engine_group = engine_groups_[engine_id];
+        if (engine_group->preprocess_queue) {
+            engine_group->preprocess_queue->clear();
+        }
+        for (int worker = 0; worker < per_engine_preprocessors_; ++worker) {
+            engine_group->preprocess_threads.emplace_back(
+                &ThreadPool::enginePreprocessWorker, this, static_cast<int>(engine_id), worker);
+            LOG_DEBUG("ThreadPool", "Started preprocess thread " + std::to_string(worker) +
+                     " for engine " + engine_group->engine_name);
+        }
     }
     
     // Start detector threads for each engine
@@ -350,6 +375,19 @@ void ThreadPool::stop() {
         }
     }
     preprocessor_threads_.clear();
+    
+    // Wait for engine-specific preprocessor threads
+    for (auto& engine_group : engine_groups_) {
+        for (auto& thread : engine_group->preprocess_threads) {
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
+        engine_group->preprocess_threads.clear();
+        if (engine_group->preprocess_queue) {
+            engine_group->preprocess_queue->clear();
+        }
+    }
     
     // Stop post-processing queue
     if (postprocess_queue_) {
@@ -826,7 +864,7 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
 }
 
 void ThreadPool::preprocessorWorker(int worker_id) {
-    LOG_INFO("Preprocessor", "Preprocessor thread " + std::to_string(worker_id) + " started");
+    LOG_INFO("Preprocessor", "Preprocess dispatcher thread " + std::to_string(worker_id) + " started");
     
     while (!stop_flag_) {
         FrameData raw_frame;
@@ -835,114 +873,106 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             continue;
         }
         
-        // OPTIMIZATION: Pre-compute dimensions once to avoid repeated access
-        int true_original_width = raw_frame.true_original_width > 0 ? raw_frame.true_original_width : raw_frame.original_width;
-        int true_original_height = raw_frame.true_original_height > 0 ? raw_frame.true_original_height : raw_frame.original_height;
+        // Dispatch a copy of the frame to each engine-specific preprocess queue
+        for (auto& engine_group : engine_groups_) {
+            FrameData frame_copy = raw_frame;  // cv::Mat uses reference counting
+            if (!engine_group->preprocess_queue) {
+                continue;
+            }
+            
+            if (!engine_group->preprocess_queue->push(frame_copy, 50)) {
+                // Queue still full after timeout - fallback to blocking push to avoid frame loss
+                engine_group->preprocess_queue->push(frame_copy);
+            }
+        }
+    }
+    
+    LOG_INFO("Preprocessor", "Preprocess dispatcher thread " + std::to_string(worker_id) + " finished");
+}
+
+void ThreadPool::enginePreprocessWorker(int engine_id, int worker_id) {
+    if (engine_id < 0 || static_cast<size_t>(engine_id) >= engine_groups_.size()) {
+        return;
+    }
+    auto& engine_group_ptr = engine_groups_[engine_id];
+    auto engine_group = engine_group_ptr.get();
+    if (!engine_group) {
+        return;
+    }
+    
+    LOG_INFO("Preprocessor", "Engine " + engine_group->engine_name + " preprocess thread " + 
+             std::to_string(worker_id) + " started");
+    
+    while (!stop_flag_) {
+        FrameData frame_data;
+        if (!engine_group->preprocess_queue || !engine_group->preprocess_queue->pop(frame_data, 100)) {
+            if (stop_flag_) break;
+            continue;
+        }
         
-        // OPTIMIZATION: Process all engines sequentially
-        // NOTE: Parallel preprocessing with std::async caused severe mutex contention
-        // With 60 preprocessor threads * 3 engines = 180 concurrent acquireBuffer() calls
-        // This created massive contention on buffer_pool_mutex, making things slower
-        // Sequential processing is actually faster due to better cache locality and less contention
+        int true_original_width = frame_data.true_original_width > 0 ? frame_data.true_original_width : frame_data.original_width;
+        int true_original_height = frame_data.true_original_height > 0 ? frame_data.true_original_height : frame_data.original_height;
+        
         auto preprocess_start = std::chrono::steady_clock::now();
         
-        for (auto& engine_group : engine_groups_) {
-            cv::Mat frame_to_process = raw_frame.frame;
-            // Store dimensions for this engine
-            int cropped_width = raw_frame.original_width;
-            int cropped_height = raw_frame.original_height;
-            int roi_offset_x = raw_frame.roi_offset_x;
-            int roi_offset_y = raw_frame.roi_offset_y;
-            
-            // Apply ROI cropping if enabled for this engine and ROI is available
-            if (engine_group->roi_cropping) {
-                if (raw_frame.has_roi && !frame_to_process.empty() &&
-                    true_original_width > 0 && true_original_height > 0) {
-                    float norm_x1 = std::clamp(raw_frame.roi_norm_x1, 0.0f, 1.0f);
-                    float norm_y1 = std::clamp(raw_frame.roi_norm_y1, 0.0f, 1.0f);
-                    float norm_x2 = std::clamp(raw_frame.roi_norm_x2, 0.0f, 1.0f);
-                    float norm_y2 = std::clamp(raw_frame.roi_norm_y2, 0.0f, 1.0f);
-                    if (norm_x2 <= norm_x1) norm_x2 = std::min(1.0f, norm_x1 + 0.001f);
-                    if (norm_y2 <= norm_y1) norm_y2 = std::min(1.0f, norm_y1 + 0.001f);
-                    
-                    int x1 = static_cast<int>(norm_x1 * true_original_width);
-                    int y1 = static_cast<int>(norm_y1 * true_original_height);
-                    int x2 = static_cast<int>(norm_x2 * true_original_width);
-                    int y2 = static_cast<int>(norm_y2 * true_original_height);
-                    
-                    // Clamp to frame bounds
-                    x1 = std::max(0, std::min(x1, true_original_width - 1));
-                    y1 = std::max(0, std::min(y1, true_original_height - 1));
-                    x2 = std::max(x1 + 1, std::min(x2, true_original_width));
-                    y2 = std::max(y1 + 1, std::min(y2, true_original_height));
-                    
-                    cv::Rect roi_rect(x1, y1, x2 - x1, y2 - y1);
-                    // OPTIMIZATION: Use ROI operator (creates view) then clone only when needed
-                    // The ROI operator is cheap (just creates a view), clone is expensive but necessary
-                    frame_to_process = frame_to_process(roi_rect).clone();
-                    cropped_width = x2 - x1;  // Pre-compute instead of accessing frame_to_process.cols
-                    cropped_height = y2 - y1;
-                    roi_offset_x = x1;
-                    roi_offset_y = y1;
-                    
-                    // Removed logging - too expensive in hot path
-                }
-            }
-            
-            // OPTIMIZATION: Acquire buffer before preprocessing to minimize mutex hold time
-            auto buffer = engine_group->acquireBuffer();
-            engine_group->preprocessor->preprocessToFloat(frame_to_process, *buffer);
-            
-            // OPTIMIZATION: Construct FrameData efficiently - use member initialization where possible
-            // String copies are necessary but we minimize repeated access
-            FrameData processed;
-            processed.preprocessed_data = buffer;
-            processed.video_id = raw_frame.video_id;
-            processed.frame_number = raw_frame.frame_number;
-            processed.video_path = raw_frame.video_path;  // String copy (necessary)
-            processed.record_id = raw_frame.record_id;  // String copy (necessary for output path)
-            processed.record_date = raw_frame.record_date;  // String copy (necessary for output path)
-            processed.serial = raw_frame.serial;  // String copy (necessary)
-            processed.message_key = raw_frame.message_key;  // String copy (necessary)
-            processed.video_key = raw_frame.video_key;  // String copy (necessary)
-            processed.video_index = raw_frame.video_index;
-            processed.has_roi = raw_frame.has_roi;
-            processed.roi_norm_x1 = raw_frame.roi_norm_x1;
-            processed.roi_norm_y1 = raw_frame.roi_norm_y1;
-            processed.roi_norm_x2 = raw_frame.roi_norm_x2;
-            processed.roi_norm_y2 = raw_frame.roi_norm_y2;
-            processed.frame = frame_to_process;  // cv::Mat uses reference counting (cheap)
-            processed.original_width = cropped_width;
-            processed.original_height = cropped_height;
-            processed.true_original_width = true_original_width;
-            processed.true_original_height = true_original_height;
-            processed.roi_offset_x = roi_offset_x;
-            processed.roi_offset_y = roi_offset_y;
-            
-            // CRITICAL OPTIMIZATION: Push to queue with short timeout to prevent indefinite blocking
-            // If queue is full, we still need to push the frame, but we use a timeout to prevent
-            // one slow engine from blocking all preprocessors. The timeout allows other engines
-            // to continue processing while this one waits briefly.
-            // With batch_size=16, detectors need time to accumulate batches, so queues can fill up.
-            // A short timeout (50ms) prevents deadlock while still allowing normal operation.
-            if (!engine_group->frame_queue->push(processed, 50)) {
-                // Queue is still full after timeout - this indicates detectors are very slow
-                // Retry once more with longer timeout to ensure frame is not lost
-                if (!engine_group->frame_queue->push(processed, 200)) {
-                    // Still full - this is a serious bottleneck, but we must push the frame
-                    // Use blocking push as last resort to ensure no frames are lost
-                    engine_group->frame_queue->push(processed);
-                }
-            }
-            
-            // OPTIMIZATION: Only register pending if Redis is enabled and message_key is valid
-            // Skip if message_key is empty to avoid unnecessary mutex contention
-            if (!processed.message_key.empty()) {
-                registerPendingFrame(processed.message_key, engine_group->engine_name);
+        cv::Mat frame_to_process = frame_data.frame;
+        int cropped_width = frame_data.original_width;
+        int cropped_height = frame_data.original_height;
+        int roi_offset_x = frame_data.roi_offset_x;
+        int roi_offset_y = frame_data.roi_offset_y;
+        
+        if (engine_group->roi_cropping) {
+            if (frame_data.has_roi && !frame_to_process.empty() &&
+                true_original_width > 0 && true_original_height > 0) {
+                float norm_x1 = std::clamp(frame_data.roi_norm_x1, 0.0f, 1.0f);
+                float norm_y1 = std::clamp(frame_data.roi_norm_y1, 0.0f, 1.0f);
+                float norm_x2 = std::clamp(frame_data.roi_norm_x2, 0.0f, 1.0f);
+                float norm_y2 = std::clamp(frame_data.roi_norm_y2, 0.0f, 1.0f);
+                if (norm_x2 <= norm_x1) norm_x2 = std::min(1.0f, norm_x1 + 0.001f);
+                if (norm_y2 <= norm_y1) norm_y2 = std::min(1.0f, norm_y1 + 0.001f);
+                
+                int x1 = static_cast<int>(norm_x1 * true_original_width);
+                int y1 = static_cast<int>(norm_y1 * true_original_height);
+                int x2 = static_cast<int>(norm_x2 * true_original_width);
+                int y2 = static_cast<int>(norm_y2 * true_original_height);
+                
+                x1 = std::max(0, std::min(x1, true_original_width - 1));
+                y1 = std::max(0, std::min(y1, true_original_height - 1));
+                x2 = std::max(x1 + 1, std::min(x2, true_original_width));
+                y2 = std::max(y1 + 1, std::min(y2, true_original_height));
+                
+                cv::Rect roi_rect(x1, y1, x2 - x1, y2 - y1);
+                frame_to_process = frame_to_process(roi_rect).clone();
+                cropped_width = x2 - x1;
+                cropped_height = y2 - y1;
+                roi_offset_x = x1;
+                roi_offset_y = y1;
             }
         }
         
-        // OPTIMIZATION: Batch timing update - only update stats once per frame
+        auto buffer = engine_group->acquireBuffer();
+        engine_group->preprocessor->preprocessToFloat(frame_to_process, *buffer);
+        
+        FrameData processed = frame_data;
+        processed.preprocessed_data = buffer;
+        processed.frame = frame_to_process;
+        processed.original_width = cropped_width;
+        processed.original_height = cropped_height;
+        processed.true_original_width = true_original_width;
+        processed.true_original_height = true_original_height;
+        processed.roi_offset_x = roi_offset_x;
+        processed.roi_offset_y = roi_offset_y;
+        
+        if (!engine_group->frame_queue->push(processed, 50)) {
+            if (!engine_group->frame_queue->push(processed, 200)) {
+                engine_group->frame_queue->push(processed);
+            }
+        }
+        
+        if (!processed.message_key.empty()) {
+            registerPendingFrame(processed.message_key, engine_group->engine_name);
+        }
+        
         auto preprocess_end = std::chrono::steady_clock::now();
         auto preprocess_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             preprocess_end - preprocess_start).count();
@@ -951,7 +981,8 @@ void ThreadPool::preprocessorWorker(int worker_id) {
         stats_.preprocessor_total_time_ms += preprocess_time_ms;
     }
     
-    LOG_INFO("Preprocessor", "Preprocessor thread " + std::to_string(worker_id) + " finished");
+    LOG_INFO("Preprocessor", "Engine " + engine_group->engine_name + " preprocess thread " + 
+             std::to_string(worker_id) + " finished");
 }
 
 void ThreadPool::detectorWorker(int engine_id, int detector_id) {
