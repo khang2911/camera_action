@@ -828,16 +828,22 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             continue;
         }
         
-        // Process all engines sequentially (std::async overhead was too high)
-        // The multiple preprocessor threads already provide parallelism
         // OPTIMIZATION: Pre-compute dimensions once to avoid repeated access
         int true_original_width = raw_frame.true_original_width > 0 ? raw_frame.true_original_width : raw_frame.original_width;
         int true_original_height = raw_frame.true_original_height > 0 ? raw_frame.true_original_height : raw_frame.original_height;
         
-        // OPTIMIZATION: Batch timing - only measure once per frame across all engines
+        // CRITICAL OPTIMIZATION: Process all engines in parallel using std::async
+        // This allows preprocessing for different engines to run concurrently
+        // Previously sequential processing caused 3x overhead (one frame processed 3 times sequentially)
         auto preprocess_start = std::chrono::steady_clock::now();
         
+        std::vector<std::future<void>> futures;
+        futures.reserve(engine_groups_.size());
+        
         for (auto& engine_group : engine_groups_) {
+            // Launch async preprocessing for each engine
+            // Capture by value to avoid race conditions with raw_frame
+            futures.push_back(std::async(std::launch::async, [this, raw_frame, engine_group, true_original_width, true_original_height]() {
             cv::Mat frame_to_process = raw_frame.frame;
             // Store dimensions for this engine
             int cropped_width = raw_frame.original_width;
@@ -926,11 +932,17 @@ void ThreadPool::preprocessorWorker(int worker_id) {
                 }
             }
             
-            // OPTIMIZATION: Only register pending if Redis is enabled and message_key is valid
-            // Skip if message_key is empty to avoid unnecessary mutex contention
-            if (!processed.message_key.empty()) {
-                registerPendingFrame(processed.message_key, engine_group->engine_name);
-            }
+                // OPTIMIZATION: Only register pending if Redis is enabled and message_key is valid
+                // Skip if message_key is empty to avoid unnecessary mutex contention
+                if (!processed.message_key.empty()) {
+                    registerPendingFrame(processed.message_key, engine_group->engine_name);
+                }
+            }));
+        }
+        
+        // Wait for all engines to finish preprocessing this frame
+        for (auto& future : futures) {
+            future.wait();
         }
         
         // OPTIMIZATION: Batch timing update - only update stats once per frame
@@ -1057,12 +1069,20 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             
             // Process batch if we have enough frames OR if queue is getting full (partial batch)
             // This prevents GPU idle time when queues are full but we don't have a full batch yet
+            // CRITICAL: More aggressive partial batch processing for better GPU utilization
             bool should_process = false;
+            size_t current_queue_size = engine_group->frame_queue->size();
+            
             if (static_cast<int>(batch_tensors.size()) == batch_size) {
                 should_process = true;
-            } else if (static_cast<int>(batch_tensors.size()) >= batch_size / 2 && 
-                       engine_group->frame_queue->size() > engine_group->queue_size * 0.8) {
-                // Process partial batch if queue is >80% full to prevent blocking
+            } else if (static_cast<int>(batch_tensors.size()) >= batch_size / 4 && 
+                       current_queue_size > engine_group->queue_size * 0.5) {
+                // Process partial batch if queue is >50% full and we have at least batch_size/4 frames
+                // This is more aggressive than before (was 80% and batch_size/2) to keep GPU busy
+                should_process = true;
+            } else if (static_cast<int>(batch_tensors.size()) >= batch_size / 2) {
+                // Process if we have at least half batch, regardless of queue size
+                // This prevents waiting too long when queue is not full
                 should_process = true;
             }
             

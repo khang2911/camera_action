@@ -65,10 +65,10 @@ cv::Mat Preprocessor::preprocess(const cv::Mat& frame) {
 }
 
 void Preprocessor::preprocessToFloat(const cv::Mat& frame, std::vector<float>& output) {
-    // Fast preprocessing: merge BGR->RGB, resize, pad, normalize, and CHW conversion
+    // OPTIMIZED preprocessing: combine operations to reduce memory allocations and copies
     // Use OpenCV's optimized operations where possible, then direct memory copy
     
-    // Step 1: Convert BGR to RGB and resize
+    // Step 1: Convert BGR to RGB (in-place if possible, but cvtColor requires output)
     cv::Mat rgb;
     cv::cvtColor(frame, rgb, cv::COLOR_BGR2RGB);
     
@@ -81,18 +81,21 @@ void Preprocessor::preprocessToFloat(const cv::Mat& frame, std::vector<float>& o
     int pad_w = (target_width_ - new_w) / 2;
     int pad_h = (target_height_ - new_h) / 2;
     
+    // Step 2: Resize directly to target size with padding using copyMakeBorder
+    // This combines resize + padding in fewer operations
     cv::Mat resized;
     cv::resize(rgb, resized, cv::Size(new_w, new_h), 0, 0, cv::INTER_LINEAR);
     
-    // Step 2: Add padding and normalize in one step
-    cv::Mat padded = cv::Mat::zeros(target_height_, target_width_, resized.type());
-    resized.copyTo(padded(cv::Rect(pad_w, pad_h, new_w, new_h)));
+    // Step 3: Add padding using copyMakeBorder (more efficient than Mat::zeros + copyTo)
+    cv::Mat padded;
+    cv::copyMakeBorder(resized, padded, pad_h, target_height_ - new_h - pad_h,
+                       pad_w, target_width_ - new_w - pad_w, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
     
-    // Step 3: Normalize
+    // Step 4: Normalize and convert to float in one step
     cv::Mat normalized;
     padded.convertTo(normalized, CV_32F, 1.0f / 255.0f);
     
-    // Step 4: Convert to CHW format efficiently
+    // Step 5: Convert to CHW format efficiently
     // Split channels and copy directly to output vector
     std::vector<cv::Mat> channels;
     cv::split(normalized, channels);
