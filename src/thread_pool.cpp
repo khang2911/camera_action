@@ -842,8 +842,9 @@ void ThreadPool::preprocessorWorker(int worker_id) {
         
         for (auto& engine_group : engine_groups_) {
             // Launch async preprocessing for each engine
-            // Capture by value to avoid race conditions with raw_frame
-            futures.push_back(std::async(std::launch::async, [this, raw_frame, engine_group, true_original_width, true_original_height]() {
+            // Capture raw pointer to avoid copying unique_ptr
+            EngineGroup* engine = engine_group.get();
+            futures.push_back(std::async(std::launch::async, [this, raw_frame, engine, true_original_width, true_original_height]() {
             cv::Mat frame_to_process = raw_frame.frame;
             // Store dimensions for this engine
             int cropped_width = raw_frame.original_width;
@@ -852,7 +853,7 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             int roi_offset_y = raw_frame.roi_offset_y;
             
             // Apply ROI cropping if enabled for this engine and ROI is available
-            if (engine_group->roi_cropping) {
+            if (engine->roi_cropping) {
                 if (raw_frame.has_roi && !frame_to_process.empty() &&
                     true_original_width > 0 && true_original_height > 0) {
                     float norm_x1 = std::clamp(raw_frame.roi_norm_x1, 0.0f, 1.0f);
@@ -887,8 +888,8 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             }
             
             // OPTIMIZATION: Acquire buffer before preprocessing to minimize mutex hold time
-            auto buffer = engine_group->acquireBuffer();
-            engine_group->preprocessor->preprocessToFloat(frame_to_process, *buffer);
+            auto buffer = engine->acquireBuffer();
+            engine->preprocessor->preprocessToFloat(frame_to_process, *buffer);
             
             // OPTIMIZATION: Construct FrameData efficiently - use member initialization where possible
             // String copies are necessary but we minimize repeated access
@@ -922,22 +923,22 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             // to continue processing while this one waits briefly.
             // With batch_size=16, detectors need time to accumulate batches, so queues can fill up.
             // A short timeout (50ms) prevents deadlock while still allowing normal operation.
-            if (!engine_group->frame_queue->push(processed, 50)) {
+            if (!engine->frame_queue->push(processed, 50)) {
                 // Queue is still full after timeout - this indicates detectors are very slow
                 // Retry once more with longer timeout to ensure frame is not lost
-                if (!engine_group->frame_queue->push(processed, 200)) {
+                if (!engine->frame_queue->push(processed, 200)) {
                     // Still full - this is a serious bottleneck, but we must push the frame
                     // Use blocking push as last resort to ensure no frames are lost
-                    engine_group->frame_queue->push(processed);
+                    engine->frame_queue->push(processed);
                 }
             }
             
                 // OPTIMIZATION: Only register pending if Redis is enabled and message_key is valid
                 // Skip if message_key is empty to avoid unnecessary mutex contention
                 if (!processed.message_key.empty()) {
-                    registerPendingFrame(processed.message_key, engine_group->engine_name);
+                registerPendingFrame(processed.message_key, engine->engine_name);
                 }
-            }));
+        }));
         }
         
         // Wait for all engines to finish preprocessing this frame
