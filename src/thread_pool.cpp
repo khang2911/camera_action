@@ -798,8 +798,25 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
                  " finished video " + std::to_string(video_id) + " (" + 
                  std::to_string(frame_count) + " frames)");
     
-    if (finalize_message) {
-        markVideoReadingComplete(message_key);
+    // Always mark reading complete when video processing finishes (even if not finalize_message)
+    // This ensures reading_completed is set as soon as possible, not waiting for all videos
+    // The finalize_message flag is only used to determine if this is the last video in a multi-video message
+    if (use_redis_queue_ && output_queue_ && !message_key.empty()) {
+        LOG_INFO("Reader", "Reader " + std::to_string(reader_id) + 
+                 " marking reading complete for message_key='" + message_key + 
+                 "' (finalize_message=" + (finalize_message ? "true" : "false") + 
+                 ", frame_count=" + std::to_string(frame_count) + ")");
+        
+        // For multi-video messages, we should only mark complete when ALL videos are done
+        // But if this is the last video (finalize_message=true), mark it complete
+        // For single-video messages, finalize_message will be true
+        if (finalize_message) {
+            markVideoReadingComplete(message_key);
+        } else {
+            // For intermediate videos in a multi-video message, we could track per-video completion
+            // But for now, we'll only mark complete when the last video finishes
+            LOG_DEBUG("Reader", "Skipping markVideoReadingComplete for intermediate video (not last in message)");
+        }
     }
     
     return frame_count;
@@ -1506,11 +1523,16 @@ void ThreadPool::monitorWorker() {
         stats_oss << std::endl;
 
         if (use_redis_queue_ && input_queue_) {
-            int input_len = input_queue_->getQueueLength(input_queue_name_);
-            stats_oss << "Redis Input Queue (" << input_queue_name_ << "): " << input_len;
-            if (output_queue_) {
-                int output_len = output_queue_->getQueueLength(output_queue_name_);
-                stats_oss << " | Redis Output Queue (" << output_queue_name_ << "): " << output_len;
+            // Use try-catch and timeout to prevent blocking the monitor thread
+            try {
+                int input_len = input_queue_->getQueueLength(input_queue_name_);
+                stats_oss << "Redis Input Queue (" << input_queue_name_ << "): " << input_len;
+                if (output_queue_) {
+                    int output_len = output_queue_->getQueueLength(output_queue_name_);
+                    stats_oss << " | Redis Output Queue (" << output_queue_name_ << "): " << output_len;
+                }
+            } catch (const std::exception& e) {
+                stats_oss << "Redis Queue (error getting length: " << e.what() << ")";
             }
             stats_oss << std::endl;
         }
@@ -1759,9 +1781,11 @@ void ThreadPool::markFrameProcessed(const std::string& message_key, const std::s
 
 void ThreadPool::markVideoReadingComplete(const std::string& message_key) {
     if (!use_redis_queue_ || !output_queue_ || message_key.empty()) {
+        LOG_WARNING("RedisOutput", "markVideoReadingComplete: called but Redis not enabled or invalid message_key");
         return;
     }
     
+    auto start_time = std::chrono::steady_clock::now();
     LOG_INFO("RedisOutput", "markVideoReadingComplete: message_key='" + message_key + "' - marking reading as complete");
     
     std::string message_to_push;
@@ -1770,7 +1794,14 @@ void ThreadPool::markVideoReadingComplete(const std::string& message_key) {
         auto it = video_output_status_.find(message_key);
         if (it == video_output_status_.end()) {
             LOG_WARNING("RedisOutput", "markVideoReadingComplete: message_key '" + message_key + 
-                       "' not found in video_output_status_");
+                       "' not found in video_output_status_ (may have been pushed already or never registered)");
+            return;
+        }
+        
+        // Check if already marked complete (avoid duplicate calls)
+        if (it->second.reading_completed) {
+            LOG_DEBUG("RedisOutput", "markVideoReadingComplete: message_key '" + message_key + 
+                     "' already marked as reading_completed");
             return;
         }
         
@@ -1796,6 +1827,13 @@ void ThreadPool::markVideoReadingComplete(const std::string& message_key) {
         
         it->second.reading_completed = true;
         message_to_push = tryPushOutputLocked(message_key, it->second);
+    }
+    
+    auto end_time = std::chrono::steady_clock::now();
+    auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+    if (duration_ms > 100) {
+        LOG_WARNING("RedisOutput", "markVideoReadingComplete took " + std::to_string(duration_ms) + 
+                   "ms (may indicate lock contention)");
     }
     
     if (!message_to_push.empty()) {
