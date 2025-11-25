@@ -92,6 +92,11 @@ void Preprocessor::preprocessToFloat(const cv::Mat& frame, std::vector<float>& o
     const float norm_factor = 1.0f / 255.0f;
     
     // Copy resized image to padded position with normalization and CHW conversion
+    // Parallelize row processing using OpenMP (if available) or std::thread
+    // This is beneficial for larger images (640x640 = 640 rows)
+    #ifdef _OPENMP
+    #pragma omp parallel for
+    #endif
     for (int y = 0; y < new_h; ++y) {
         const cv::Vec3b* src_row = resized.ptr<cv::Vec3b>(y);
         int dst_y = pad_h + y;

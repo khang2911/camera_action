@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <chrono>
 #include <thread>
+#include <future>
 #include <fstream>
 #include <yaml-cpp/yaml.h>
 
@@ -816,7 +817,17 @@ void ThreadPool::preprocessorWorker(int worker_id) {
         
         auto preprocess_start = std::chrono::steady_clock::now();
         
+        // OPTIMIZATION: Process all engines in parallel for this frame
+        // This significantly improves performance when multiple engines are configured
+        // Use std::async for parallel execution across engines
+        std::vector<std::future<void>> engine_futures;
+        engine_futures.reserve(engine_groups_.size());
+        
         for (auto& engine_group : engine_groups_) {
+            // Launch async task for each engine
+            // Capture engine_group pointer by value to avoid reference issues
+            EngineGroup* eg_ptr = engine_group.get();
+            engine_futures.push_back(std::async(std::launch::async, [this, &raw_frame, eg_ptr, worker_id]() {
             cv::Mat frame_to_process = raw_frame.frame;
             // Store TRUE original frame dimensions (before any cropping)
             int true_original_width = raw_frame.true_original_width > 0 ? raw_frame.true_original_width : raw_frame.original_width;
@@ -827,7 +838,7 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             int roi_offset_y = raw_frame.roi_offset_y;
             
             // Apply ROI cropping if enabled for this engine and ROI is available
-            if (engine_group->roi_cropping) {
+            if (eg_ptr->roi_cropping) {
                 if (raw_frame.has_roi && !frame_to_process.empty() &&
                     true_original_width > 0 && true_original_height > 0) {
                     float norm_x1 = std::clamp(raw_frame.roi_norm_x1, 0.0f, 1.0f);
@@ -857,7 +868,7 @@ void ThreadPool::preprocessorWorker(int worker_id) {
                     
                     static bool logged_roi_crop = false;
                     if (!logged_roi_crop && worker_id == 0) {
-                        LOG_INFO("Preprocessor", "ROI cropping applied for engine " + engine_group->engine_name +
+                        LOG_INFO("Preprocessor", "ROI cropping applied for engine " + eg_ptr->engine_name +
                                  ": original=" + std::to_string(true_original_width) + "x" + std::to_string(true_original_height) +
                                  ", cropped=" + std::to_string(cropped_width) + "x" + std::to_string(cropped_height) +
                                  ", ROI=[" + std::to_string(x1) + "," + std::to_string(y1) + "," + 
@@ -867,15 +878,15 @@ void ThreadPool::preprocessorWorker(int worker_id) {
                 } else if (worker_id == 0) {
                     static bool logged_roi_missing = false;
                     if (!logged_roi_missing) {
-                        LOG_WARNING("Preprocessor", "ROI cropping enabled for engine " + engine_group->engine_name +
+                        LOG_WARNING("Preprocessor", "ROI cropping enabled for engine " + eg_ptr->engine_name +
                                  " but no ROI metadata available for video " + std::to_string(raw_frame.video_id));
                         logged_roi_missing = true;
                     }
                 }
             }
             
-            auto buffer = engine_group->acquireBuffer();
-            engine_group->preprocessor->preprocessToFloat(frame_to_process, *buffer);
+            auto buffer = eg_ptr->acquireBuffer();
+            eg_ptr->preprocessor->preprocessToFloat(frame_to_process, *buffer);
             
             FrameData processed;
             processed.preprocessed_data = buffer;
@@ -901,8 +912,14 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             processed.roi_offset_x = roi_offset_x;  // ROI offset X in true original frame
             processed.roi_offset_y = roi_offset_y;  // ROI offset Y in true original frame
             
-            registerPendingFrame(processed.message_key, engine_group->engine_name);
-            engine_group->frame_queue->push(processed);
+            registerPendingFrame(processed.message_key, eg_ptr->engine_name);
+            eg_ptr->frame_queue->push(processed);
+            }));
+        }
+        
+        // Wait for all engines to finish preprocessing this frame
+        for (auto& future : engine_futures) {
+            future.wait();
         }
         
         auto preprocess_end = std::chrono::steady_clock::now();
