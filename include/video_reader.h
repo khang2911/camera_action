@@ -4,6 +4,7 @@
 #include <opencv2/opencv.hpp>
 #include <string>
 #include <vector>
+#include <cuda_runtime_api.h>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -43,6 +44,9 @@ private:
     bool sendNextPacket();
     bool receiveFrame(cv::Mat& frame);
     bool convertFrameToMat(AVFrame* frame, cv::Mat& out);
+    bool convertFrameToMatGPU(AVFrame* frame, cv::Mat& out);
+    bool convertFrameToMatCPU(AVFrame* frame, cv::Mat& out);
+    bool ensureCudaBuffer(int width, int height);
     void cleanup();
     static void ensureFFmpegInitialized();
     
@@ -57,6 +61,12 @@ private:
     AVPixelFormat hw_pix_fmt_;
     bool use_hw_decode_;
     bool end_of_stream_;
+    uint8_t* gpu_bgr_buffer_ = nullptr;
+    size_t gpu_bgr_pitch_ = 0;
+    int gpu_buffer_width_ = 0;
+    int gpu_buffer_height_ = 0;
+    cudaStream_t cuda_stream_ = nullptr;
+    bool cuda_stream_created_ = false;
 
     std::string video_path_;
     int video_id_;

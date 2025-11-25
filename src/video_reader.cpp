@@ -7,11 +7,48 @@
 
 #include "logger.h"
 
+#include <cuda_runtime.h>
+
 namespace {
 void log_ffmpeg_error(const std::string& prefix, int err) {
     char buf[256];
     av_strerror(err, buf, sizeof(buf));
     LOG_ERROR("VideoReader", prefix + ": " + std::string(buf));
+}
+
+inline uint8_t clampToUInt8(int v) {
+    return static_cast<uint8_t>(std::min(std::max(v, 0), 255));
+}
+
+__global__ void nv12ToBgrKernel(const uint8_t* y_plane,
+                                const uint8_t* uv_plane,
+                                uint8_t* bgr,
+                                int width,
+                                int height,
+                                int y_pitch,
+                                int uv_pitch,
+                                size_t bgr_pitch) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= width || y >= height) {
+        return;
+    }
+    
+    int Y = static_cast<int>(y_plane[y * y_pitch + x]) - 16;
+    int uv_row = y / 2;
+    int uv_col = (x / 2) * 2;
+    int U = static_cast<int>(uv_plane[uv_row * uv_pitch + uv_col]) - 128;
+    int V = static_cast<int>(uv_plane[uv_row * uv_pitch + uv_col + 1]) - 128;
+    
+    int C = (Y < 0 ? 0 : Y);
+    int R = (298 * C + 409 * V + 128) >> 8;
+    int G = (298 * C - 100 * U - 208 * V + 128) >> 8;
+    int B = (298 * C + 516 * U + 128) >> 8;
+    
+    uint8_t* dst_row = bgr + y * bgr_pitch;
+    dst_row[x * 3 + 2] = clampToUInt8(R);
+    dst_row[x * 3 + 1] = clampToUInt8(G);
+    dst_row[x * 3 + 0] = clampToUInt8(B);
 }
 }  // namespace
 
@@ -27,6 +64,12 @@ VideoReader::VideoReader(const std::string& video_path, int video_id)
       hw_pix_fmt_(AV_PIX_FMT_NONE),
       use_hw_decode_(false),
       end_of_stream_(false),
+      gpu_bgr_buffer_(nullptr),
+      gpu_bgr_pitch_(0),
+      gpu_buffer_width_(0),
+      gpu_buffer_height_(0),
+      cuda_stream_(nullptr),
+      cuda_stream_created_(false),
       video_path_(video_path),
       video_id_(video_id),
       frame_number_(0),
@@ -51,6 +94,12 @@ VideoReader::VideoReader(const VideoClip& clip, int video_id)
       hw_pix_fmt_(AV_PIX_FMT_NONE),
       use_hw_decode_(false),
       end_of_stream_(false),
+      gpu_bgr_buffer_(nullptr),
+      gpu_bgr_pitch_(0),
+      gpu_buffer_width_(0),
+      gpu_buffer_height_(0),
+      cuda_stream_(nullptr),
+      cuda_stream_created_(false),
       video_path_(clip.path),
       video_id_(video_id),
       frame_number_(0),
@@ -85,6 +134,8 @@ bool VideoReader::initialize(const VideoClip* clip) {
         return false;
     }
     initializeMetadata();
+    LOG_INFO("VideoReader", std::string("Initialized reader for ") + video_path_ +
+                 (use_hw_decode_ ? " [NVDEC]" : " [CPU]"));
     return true;
 }
 
@@ -276,22 +327,116 @@ bool VideoReader::receiveFrame(cv::Mat& out) {
             return false;
         }
         
-        AVFrame* src = frame_;
-        if (use_hw_decode_ && frame_->format == hw_pix_fmt_) {
-            if (av_hwframe_transfer_data(sw_frame_, frame_, 0) < 0) {
-                LOG_ERROR("VideoReader", "av_hwframe_transfer_data failed");
-                continue;
-            }
-            src = sw_frame_;
-        }
-        
-        if (convertFrameToMat(src, out)) {
+        if (convertFrameToMat(frame_, out)) {
             return true;
         }
     }
 }
 
 bool VideoReader::convertFrameToMat(AVFrame* src, cv::Mat& out) {
+    if (use_hw_decode_ && src->format == hw_pix_fmt_) {
+        if (convertFrameToMatGPU(src, out)) {
+            return true;
+        }
+        LOG_WARN("VideoReader", "GPU conversion failed, falling back to CPU path");
+    }
+    
+    AVFrame* cpu_frame = src;
+    if (use_hw_decode_ && src->format == hw_pix_fmt_) {
+        if (av_hwframe_transfer_data(sw_frame_, src, 0) < 0) {
+            LOG_ERROR("VideoReader", "av_hwframe_transfer_data failed");
+            return false;
+        }
+        cpu_frame = sw_frame_;
+    }
+    return convertFrameToMatCPU(cpu_frame, out);
+}
+
+bool VideoReader::ensureCudaBuffer(int width, int height) {
+    if (gpu_bgr_buffer_ && width <= gpu_buffer_width_ && height <= gpu_buffer_height_) {
+        return true;
+    }
+    if (gpu_bgr_buffer_) {
+        cudaFree(gpu_bgr_buffer_);
+        gpu_bgr_buffer_ = nullptr;
+        gpu_bgr_pitch_ = 0;
+        gpu_buffer_width_ = 0;
+        gpu_buffer_height_ = 0;
+    }
+    if (!cuda_stream_created_) {
+        if (cudaStreamCreate(&cuda_stream_) != cudaSuccess) {
+            LOG_ERROR("VideoReader", "Failed to create CUDA stream");
+            return false;
+        }
+        cuda_stream_created_ = true;
+    }
+    size_t pitch = 0;
+    cudaError_t err = cudaMallocPitch(reinterpret_cast<void**>(&gpu_bgr_buffer_),
+                                      &pitch,
+                                      static_cast<size_t>(width) * 3,
+                                      height);
+    if (err != cudaSuccess) {
+        LOG_ERROR("VideoReader", std::string("cudaMallocPitch failed: ") + cudaGetErrorString(err));
+        gpu_bgr_buffer_ = nullptr;
+        return false;
+    }
+    gpu_bgr_pitch_ = pitch;
+    gpu_buffer_width_ = width;
+    gpu_buffer_height_ = height;
+    return true;
+}
+
+bool VideoReader::convertFrameToMatGPU(AVFrame* src, cv::Mat& out) {
+    if (!ensureCudaBuffer(src->width, src->height)) {
+        return false;
+    }
+    
+    const uint8_t* y_plane = src->data[0];
+    const uint8_t* uv_plane = src->data[1];
+    int y_pitch = src->linesize[0];
+    int uv_pitch = src->linesize[1];
+    
+    dim3 block(32, 8);
+    dim3 grid((src->width + block.x - 1) / block.x,
+              (src->height + block.y - 1) / block.y);
+    
+    nv12ToBgrKernel<<<grid, block, 0, cuda_stream_>>>(
+        y_plane,
+        uv_plane,
+        gpu_bgr_buffer_,
+        src->width,
+        src->height,
+        y_pitch,
+        uv_pitch,
+        gpu_bgr_pitch_);
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        LOG_ERROR("VideoReader", std::string("nv12ToBgrKernel launch failed: ") + cudaGetErrorString(err));
+        return false;
+    }
+    
+    out.create(src->height, src->width, CV_8UC3);
+    err = cudaMemcpy2DAsync(out.data,
+                            out.step,
+                            gpu_bgr_buffer_,
+                            gpu_bgr_pitch_,
+                            static_cast<size_t>(src->width) * 3,
+                            src->height,
+                            cudaMemcpyDeviceToHost,
+                            cuda_stream_);
+    if (err != cudaSuccess) {
+        LOG_ERROR("VideoReader", std::string("cudaMemcpy2DAsync failed: ") + cudaGetErrorString(err));
+        return false;
+    }
+    err = cudaStreamSynchronize(cuda_stream_);
+    if (err != cudaSuccess) {
+        LOG_ERROR("VideoReader", std::string("cudaStreamSynchronize failed: ") + cudaGetErrorString(err));
+        return false;
+    }
+    return true;
+}
+
+bool VideoReader::convertFrameToMatCPU(AVFrame* src, cv::Mat& out) {
     AVPixelFormat src_fmt = static_cast<AVPixelFormat>(src->format);
     sws_ctx_ = sws_getCachedContext(
         sws_ctx_,
@@ -384,6 +529,18 @@ void VideoReader::cleanup() {
     if (hw_device_ctx_) {
         av_buffer_unref(&hw_device_ctx_);
         hw_device_ctx_ = nullptr;
+    }
+    if (gpu_bgr_buffer_) {
+        cudaFree(gpu_bgr_buffer_);
+        gpu_bgr_buffer_ = nullptr;
+        gpu_bgr_pitch_ = 0;
+        gpu_buffer_width_ = 0;
+        gpu_buffer_height_ = 0;
+    }
+    if (cuda_stream_created_) {
+        cudaStreamDestroy(cuda_stream_);
+        cuda_stream_ = nullptr;
+        cuda_stream_created_ = false;
     }
 }
 
