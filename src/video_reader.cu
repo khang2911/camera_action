@@ -338,7 +338,7 @@ bool VideoReader::convertFrameToMat(AVFrame* src, cv::Mat& out) {
         if (convertFrameToMatGPU(src, out)) {
             return true;
         }
-        LOG_WARN("VideoReader", "GPU conversion failed, falling back to CPU path");
+        LOG_ERROR("VideoReader", "GPU conversion failed, falling back to CPU path");
     }
     
     AVFrame* cpu_frame = src;
