@@ -72,6 +72,7 @@ public:
     FrameQueue(size_t max_size = 100);
     
     void push(const FrameData& frame);
+    bool push(const FrameData& frame, int timeout_ms);  // Push with timeout
     bool pop(FrameData& frame, int timeout_ms = -1);
     bool empty() const;
     size_t size() const;
