@@ -1426,6 +1426,10 @@ void ThreadPool::postprocessWorker(int worker_id) {
         auto postprocess_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             postprocess_end - postprocess_start).count();
         
+        // Update postprocessing statistics
+        stats_.frames_postprocessed += static_cast<int>(task.raw_outputs.size());
+        stats_.postprocessor_total_time_ms += postprocess_time_ms;
+        
         if (all_success) {
             {
                 std::lock_guard<std::mutex> lock(stats_.stats_mutex);
@@ -1562,6 +1566,19 @@ void ThreadPool::monitorWorker() {
         }
         stats_oss << std::endl;
         
+        long long postproc_time_ms = stats_.postprocessor_total_time_ms.load();
+        long long postproc_frames = stats_.frames_postprocessed.load();
+        stats_oss << "Postprocessor: Frames=" << postproc_frames;
+        if (elapsed > 0) {
+            stats_oss << " | FPS=" << (postproc_frames / elapsed);
+        }
+        if (postproc_frames > 0) {
+            double avg_postproc_time_ms = static_cast<double>(postproc_time_ms) / postproc_frames;
+            stats_oss << " | AvgTime=" << std::fixed << std::setprecision(2) << avg_postproc_time_ms << "ms/frame";
+            stats_oss << " | TotalTime=" << (postproc_time_ms / 1000.0) << "s";
+        }
+        stats_oss << std::endl;
+        
         LOG_STATS("Monitor", stats_oss.str());
     }
     
@@ -1689,12 +1706,21 @@ void ThreadPool::markFrameProcessed(const std::string& message_key, const std::s
         std::lock_guard<std::mutex> lock(video_output_mutex_);
         auto it = video_output_status_.find(message_key);
         if (it == video_output_status_.end()) {
-            LOG_WARNING("RedisOutput", "markFrameProcessed: message_key '" + message_key + 
-                       "' not found in video_output_status_ (may have been pushed already)");
+            // Entry might have been erased or never created - this is OK if message was already pushed
+            // Don't log as warning since this can happen legitimately after message is pushed
+            LOG_DEBUG("RedisOutput", "markFrameProcessed: message_key '" + message_key + 
+                     "' not found in video_output_status_ (message may have been pushed already)");
             return;
         }
         
         auto& status = it->second;
+        
+        // If message was already pushed, don't process further updates
+        if (status.message_pushed) {
+            LOG_DEBUG("RedisOutput", "markFrameProcessed: message_key '" + message_key + 
+                     "' already pushed, skipping update");
+            return;
+        }
         if (!output_path.empty()) {
             status.detector_outputs[engine_name][video_index] = output_path;
         }
@@ -1889,7 +1915,12 @@ std::string ThreadPool::tryPushOutputLocked(const std::string& message_key, Vide
     }
     
     LOG_INFO("RedisOutput", "Ready to push message for key '" + message_key + "': " + final_message);
-    video_output_status_.erase(message_key);
+    
+    // DON'T erase the entry immediately - it might still be accessed by concurrent markFrameProcessed calls
+    // The entry will be cleaned up later or can remain (it's marked as pushed, so won't be pushed again)
+    // If we erase it now, subsequent markFrameProcessed calls will fail with "message_key not found"
+    // video_output_status_.erase(message_key);  // REMOVED: causes race condition with concurrent markFrameProcessed calls
+    
     return final_message;
 }
 

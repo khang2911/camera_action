@@ -83,6 +83,7 @@ public:
     struct Statistics {
         std::atomic<long long> frames_read{0};
         std::atomic<long long> frames_preprocessed{0};
+        std::atomic<long long> frames_postprocessed{0};  // Total frames post-processed
         // Use regular long long with mutex for per-engine stats (atomic vectors are not resizable)
         mutable std::mutex stats_mutex;
         std::vector<long long> frames_detected;  // per engine
@@ -92,6 +93,7 @@ public:
         std::vector<long long> engine_total_time_ms;     // Total time per engine (detection)
         std::vector<long long> engine_frame_count;      // Frame count per engine (for average calculation)
         std::atomic<long long> preprocessor_total_time_ms{0};  // Total time for preprocessors
+        std::atomic<long long> postprocessor_total_time_ms{0};  // Total time for post-processors
         std::chrono::steady_clock::time_point start_time;
     };
     
