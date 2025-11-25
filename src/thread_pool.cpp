@@ -88,7 +88,9 @@ ThreadPool::ThreadPool(int num_readers,
     
     // Create output directory if it doesn't exist
     std::filesystem::create_directories(output_dir);
-    raw_frame_queue_ = std::make_unique<FrameQueue>(500);
+    // Increased queue size to reduce blocking - readers can push more frames before waiting
+    // With multiple readers, we need larger buffer to prevent blocking when preprocessors are slower
+    raw_frame_queue_ = std::make_unique<FrameQueue>(2000);
     postprocess_queue_ = std::make_unique<PostProcessQueue>();
     
     // Initialize video processed flags
@@ -184,7 +186,8 @@ ThreadPool::ThreadPool(int num_readers,
     
     // Create output directory if it doesn't exist
     std::filesystem::create_directories(output_dir);
-    raw_frame_queue_ = std::make_unique<FrameQueue>(500);
+    // Increased queue size to reduce blocking - readers can push more frames before waiting
+    raw_frame_queue_ = std::make_unique<FrameQueue>(2000);
     postprocess_queue_ = std::make_unique<PostProcessQueue>();
     
     max_active_redis_readers_ = num_readers_;
@@ -754,26 +757,22 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
             int actual_frame_position = reader.getActualFramePosition();
             
             // Use actual_frame_position (actual frame number in video) for bin file output
-            // This ensures frame numbers match the video file, even when we skip frames at the beginning
-            // OPTIMIZATION: cv::Mat uses reference counting, so copying is cheap (no deep copy needed)
-            // Only clone if frame will be modified, but preprocessors don't modify the original frame
+            // OPTIMIZATION: Construct FrameData efficiently - cv::Mat uses reference counting
+            // Pre-compute dimensions to avoid repeated frame.cols/rows access
+            int frame_width = frame.cols;
+            int frame_height = frame.rows;
             FrameData frame_data(frame, video_id, actual_frame_position, clip.path, 
                                 clip.record_id, clip.record_date, clip.serial,
                                 message_key, video_key, clip.video_index,
                                 clip.has_roi, clip.roi_x1, clip.roi_y1, clip.roi_x2, clip.roi_y2);
-            // Store original frame dimensions (before any ROI cropping)
-            frame_data.original_width = frame.cols;
-            frame_data.original_height = frame.rows;
-            frame_data.true_original_width = frame.cols;  // True original dimensions (same as original when no cropping)
-            frame_data.true_original_height = frame.rows;
+            // Store original frame dimensions (before any ROI cropping) - use pre-computed values
+            frame_data.original_width = frame_width;
+            frame_data.original_height = frame_height;
+            frame_data.true_original_width = frame_width;  // True original dimensions
+            frame_data.true_original_height = frame_height;
             // Store ROI offset for scaling detections back to true original frame
-            if (clip.has_roi) {
-                frame_data.roi_offset_x = clip.roi_offset_x;
-                frame_data.roi_offset_y = clip.roi_offset_y;
-            } else {
-                frame_data.roi_offset_x = 0;
-                frame_data.roi_offset_y = 0;
-            }
+            frame_data.roi_offset_x = clip.has_roi ? clip.roi_offset_x : 0;
+            frame_data.roi_offset_y = clip.has_roi ? clip.roi_offset_y : 0;
             if (raw_frame_queue_) {
                 raw_frame_queue_->push(frame_data);
             }

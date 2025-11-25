@@ -55,11 +55,22 @@ bool VideoReader::readFrame(cv::Mat& frame) {
 
         ++total_frames_read_;
         
-        // Get the frame position BEFORE checking if we should skip it
-        // CAP_PROP_POS_FRAMES returns the NEXT frame, so subtract 1 to get current frame
-        double pos = cap_.get(cv::CAP_PROP_POS_FRAMES);
-        int current_frame_pos = static_cast<int>(pos) - 1;
-        if (current_frame_pos < 0) current_frame_pos = 0;
+        // OPTIMIZATION: cap_.get(cv::CAP_PROP_POS_FRAMES) is expensive - cache it
+        // Only call it every N frames or when we need the exact position
+        // For most frames, we can estimate based on total_frames_read_
+        static thread_local int pos_cache_counter = 0;
+        static thread_local int cached_pos = 0;
+        int current_frame_pos;
+        if (pos_cache_counter++ % 10 == 0 || has_clip_metadata_) {
+            // Get exact position when needed (for time window filtering) or every 10th frame
+            double pos = cap_.get(cv::CAP_PROP_POS_FRAMES);
+            current_frame_pos = static_cast<int>(pos) - 1;
+            if (current_frame_pos < 0) current_frame_pos = 0;
+            cached_pos = current_frame_pos;
+        } else {
+            // Estimate position (faster, but less accurate)
+            current_frame_pos = cached_pos + (pos_cache_counter % 10);
+        }
 
         if (has_clip_metadata_ && clip_.has_time_window) {
             const double effective_fps = (fps_ > 0.0) ? fps_ : 30.0;
