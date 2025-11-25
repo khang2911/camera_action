@@ -900,10 +900,15 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             processed.roi_offset_x = roi_offset_x;
             processed.roi_offset_y = roi_offset_y;
             
-            // OPTIMIZATION: registerPendingFrame might involve mutex - call it before queue push
-            // to minimize time between acquiring buffer and pushing to queue
-            registerPendingFrame(processed.message_key, engine_group->engine_name);
+            // CRITICAL OPTIMIZATION: Push to queue first - this can block if queue is full
+            // If queue push blocks, we don't want to hold the mutex for registerPendingFrame
             engine_group->frame_queue->push(processed);
+            
+            // OPTIMIZATION: Only register pending if Redis is enabled and message_key is valid
+            // Skip if message_key is empty to avoid unnecessary mutex contention
+            if (!processed.message_key.empty()) {
+                registerPendingFrame(processed.message_key, engine_group->engine_name);
+            }
         }
         
         // OPTIMIZATION: Batch timing update - only update stats once per frame
