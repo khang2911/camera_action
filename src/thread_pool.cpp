@@ -1741,10 +1741,18 @@ void ThreadPool::markFrameProcessed(const std::string& message_key, const std::s
     }
     
     if (!message_to_push.empty()) {
-        if (output_queue_->pushMessage(output_queue_name_, message_to_push)) {
-            LOG_INFO("RedisOutput", "Pushed processed message to output queue: " + output_queue_name_);
+        auto push_start = std::chrono::steady_clock::now();
+        bool push_success = output_queue_->pushMessage(output_queue_name_, message_to_push);
+        auto push_end = std::chrono::steady_clock::now();
+        auto push_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            push_end - push_start).count();
+        
+        if (push_success) {
+            LOG_INFO("RedisOutput", "Pushed processed message to output queue: " + output_queue_name_ + 
+                     " (push_time=" + std::to_string(push_time_ms) + "ms, message_key='" + message_key + "')");
         } else {
-            LOG_ERROR("RedisOutput", "Failed to push message to output queue: " + output_queue_name_);
+            LOG_ERROR("RedisOutput", "Failed to push message to output queue: " + output_queue_name_ + 
+                     " (push_time=" + std::to_string(push_time_ms) + "ms, message_key='" + message_key + "')");
         }
     }
 }
@@ -1754,22 +1762,55 @@ void ThreadPool::markVideoReadingComplete(const std::string& message_key) {
         return;
     }
     
+    LOG_INFO("RedisOutput", "markVideoReadingComplete: message_key='" + message_key + "' - marking reading as complete");
+    
     std::string message_to_push;
     {
         std::lock_guard<std::mutex> lock(video_output_mutex_);
         auto it = video_output_status_.find(message_key);
         if (it == video_output_status_.end()) {
+            LOG_WARNING("RedisOutput", "markVideoReadingComplete: message_key '" + message_key + 
+                       "' not found in video_output_status_");
             return;
         }
+        
+        // Log current status before marking complete
+        std::ostringstream status_oss;
+        status_oss << "pending_counts: ";
+        bool first = true;
+        for (const auto& kv : it->second.pending_counts) {
+            if (!first) status_oss << ", ";
+            status_oss << kv.first << "=" << kv.second;
+            first = false;
+        }
+        status_oss << " | has_outputs: ";
+        bool has_outputs = false;
+        for (const auto& kv : it->second.detector_outputs) {
+            if (!kv.second.empty()) {
+                has_outputs = true;
+                break;
+            }
+        }
+        status_oss << (has_outputs ? "yes" : "no");
+        LOG_INFO("RedisOutput", "markVideoReadingComplete: message_key='" + message_key + "' status: " + status_oss.str());
+        
         it->second.reading_completed = true;
         message_to_push = tryPushOutputLocked(message_key, it->second);
     }
     
     if (!message_to_push.empty()) {
-        if (output_queue_->pushMessage(output_queue_name_, message_to_push)) {
-            LOG_INFO("RedisOutput", "Pushed processed message to output queue: " + output_queue_name_);
+        auto push_start = std::chrono::steady_clock::now();
+        bool push_success = output_queue_->pushMessage(output_queue_name_, message_to_push);
+        auto push_end = std::chrono::steady_clock::now();
+        auto push_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            push_end - push_start).count();
+        
+        if (push_success) {
+            LOG_INFO("RedisOutput", "Pushed processed message to output queue: " + output_queue_name_ + 
+                     " (push_time=" + std::to_string(push_time_ms) + "ms, message_key='" + message_key + "')");
         } else {
-            LOG_ERROR("RedisOutput", "Failed to push message to output queue: " + output_queue_name_);
+            LOG_ERROR("RedisOutput", "Failed to push message to output queue: " + output_queue_name_ + 
+                     " (push_time=" + std::to_string(push_time_ms) + "ms, message_key='" + message_key + "')");
         }
     }
 }
@@ -1862,28 +1903,48 @@ std::string ThreadPool::augmentMessageWithDetectors(const std::string& message,
 
 std::string ThreadPool::tryPushOutputLocked(const std::string& message_key, VideoOutputStatus& status) {
     if (!canPushOutputLocked(status)) {
-        // Log why we can't push (for debugging)
-        if (!status.reading_completed) {
-            LOG_DEBUG("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
-                     "' reading not completed yet");
-        } else if (status.message_pushed) {
-            LOG_DEBUG("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
-                     "' already pushed");
-        } else {
-            // Check pending counts
-            std::ostringstream pending_oss;
-            bool has_pending = false;
-            for (const auto& kv : status.pending_counts) {
-                if (kv.second > 0) {
-                    if (has_pending) pending_oss << ", ";
-                    pending_oss << kv.first << "=" << kv.second;
-                    has_pending = true;
+        // Log why we can't push (for debugging) - use INFO level for visibility
+        static std::unordered_map<std::string, std::chrono::steady_clock::time_point> last_log_time;
+        auto now = std::chrono::steady_clock::now();
+        auto& last_time = last_log_time[message_key];
+        bool should_log = (last_time == std::chrono::steady_clock::time_point{} || 
+                          std::chrono::duration_cast<std::chrono::seconds>(now - last_time).count() >= 5);
+        
+        if (should_log) {
+            if (!status.reading_completed) {
+                LOG_INFO("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
+                         "' reading not completed yet");
+            } else if (status.message_pushed) {
+                LOG_INFO("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
+                         "' already pushed");
+            } else {
+                // Check pending counts
+                std::ostringstream pending_oss;
+                bool has_pending = false;
+                bool has_outputs = false;
+                for (const auto& kv : status.pending_counts) {
+                    if (kv.second > 0) {
+                        if (has_pending) pending_oss << ", ";
+                        pending_oss << kv.first << "=" << kv.second;
+                        has_pending = true;
+                    }
+                }
+                for (const auto& kv : status.detector_outputs) {
+                    if (!kv.second.empty()) {
+                        has_outputs = true;
+                        break;
+                    }
+                }
+                if (has_pending) {
+                    LOG_INFO("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
+                             "' still has pending frames: " + pending_oss.str() + 
+                             " | has_outputs=" + (has_outputs ? "yes" : "no"));
+                } else if (!has_outputs) {
+                    LOG_INFO("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
+                             "' has no detector outputs yet");
                 }
             }
-            if (has_pending) {
-                LOG_DEBUG("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
-                         "' still has pending frames: " + pending_oss.str());
-            }
+            last_time = now;
         }
         return "";
     }
