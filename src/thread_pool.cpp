@@ -87,6 +87,7 @@ ThreadPool::ThreadPool(int num_readers,
     // Create output directory if it doesn't exist
     std::filesystem::create_directories(output_dir);
     raw_frame_queue_ = std::make_unique<FrameQueue>(500);
+    postprocess_queue_ = std::make_unique<PostProcessQueue>();
     
     // Initialize video processed flags
     {
@@ -182,6 +183,7 @@ ThreadPool::ThreadPool(int num_readers,
     // Create output directory if it doesn't exist
     std::filesystem::create_directories(output_dir);
     raw_frame_queue_ = std::make_unique<FrameQueue>(500);
+    postprocess_queue_ = std::make_unique<PostProcessQueue>();
     
     max_active_redis_readers_ = num_readers_;
     
@@ -286,6 +288,19 @@ void ThreadPool::start() {
         }
     }
     
+    // Start post-processing threads (2 threads per engine for parallel post-processing)
+    int num_postprocess_threads = std::max(2, static_cast<int>(engine_groups_.size()) * 2);
+    for (int i = 0; i < num_postprocess_threads; ++i) {
+        postprocess_threads_.emplace_back(&ThreadPool::postprocessWorker, this, i);
+        LOG_DEBUG("ThreadPool", "Started post-processing thread " + std::to_string(i));
+    }
+    
+    // Start async Redis output thread (if using Redis)
+    if (use_redis_queue_) {
+        redis_output_thread_ = std::thread(&ThreadPool::redisOutputWorker, this);
+        LOG_DEBUG("ThreadPool", "Started async Redis output thread");
+    }
+    
     // Start monitoring thread
     monitor_thread_ = std::thread(&ThreadPool::monitorWorker, this);
     LOG_INFO("ThreadPool", "Monitoring thread started");
@@ -315,6 +330,24 @@ void ThreadPool::stop() {
         }
     }
     preprocessor_threads_.clear();
+    
+    // Stop post-processing queue
+    if (postprocess_queue_) {
+        postprocess_queue_->stop();
+    }
+    
+    // Wait for all post-processing threads
+    for (auto& thread : postprocess_threads_) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+    postprocess_threads_.clear();
+    
+    // Wait for async Redis output thread
+    if (redis_output_thread_.joinable()) {
+        redis_output_thread_.join();
+    }
     
     // Wait for all detector threads in all engine groups
     for (auto& engine_group : engine_groups_) {
@@ -1019,12 +1052,44 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         batch_true_original_widths, batch_true_original_heights
                     );
                 } else {
-                    success = engine_group->detectors[detector_id]->runWithPreprocessedBatch(
-                        batch_tensors, batch_output_paths, batch_frame_numbers,
-                        batch_original_widths, batch_original_heights,
-                        batch_roi_offset_x, batch_roi_offset_y,
-                        batch_true_original_widths, batch_true_original_heights
+                    // Get raw inference output and push to post-processing queue
+                    std::vector<std::vector<float>> raw_outputs;
+                    success = engine_group->detectors[detector_id]->getRawInferenceOutput(
+                        batch_tensors, raw_outputs
                     );
+                    
+                    if (success && !raw_outputs.empty()) {
+                        // Create post-processing task
+                        PostProcessTask task;
+                        task.detector = engine_group->detectors[detector_id].get();
+                        task.raw_outputs = std::move(raw_outputs);
+                        task.output_paths = batch_output_paths;
+                        task.frame_numbers = batch_frame_numbers;
+                        task.original_widths = batch_original_widths;
+                        task.original_heights = batch_original_heights;
+                        task.roi_offset_x = batch_roi_offset_x;
+                        task.roi_offset_y = batch_roi_offset_y;
+                        task.true_original_widths = batch_true_original_widths;
+                        task.true_original_heights = batch_true_original_heights;
+                        task.message_keys = batch_message_keys;
+                        task.video_indices = batch_video_indices;
+                        task.engine_name = engine_group->engine_name;
+                        task.engine_id = engine_id;
+                        task.batch_size = static_cast<int>(batch_tensors.size());
+                        
+                        // Register pending frames BEFORE pushing to post-processing queue
+                        for (const auto& msg_key : batch_message_keys) {
+                            if (!msg_key.empty()) {
+                                registerPendingFrame(msg_key, engine_group->engine_name);
+                            }
+                        }
+                        
+                        // Push to post-processing queue (non-blocking)
+                        if (!postprocess_queue_ || !postprocess_queue_->push(task)) {
+                            LOG_ERROR("Detector", "Failed to push batch to post-processing queue");
+                            success = false;
+                        }
+                    }
                 }
                 
                 auto batch_end = std::chrono::steady_clock::now();
@@ -1083,10 +1148,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     LOG_ERROR("Detector", "Batch detection failed for " + std::to_string(batch_size) + " frames");
                 }
 
-                for (size_t b = 0; b < batch_message_keys.size(); ++b) {
-                    markFrameProcessed(batch_message_keys[b], engine_group->engine_name,
-                                       batch_output_paths[b], batch_video_indices[b]);
-                }
+                // Note: markFrameProcessed is now called in postprocessWorker after file writing
             }
         } else {
             // batch_size = 1: process frames one at a time (original behavior)
@@ -1145,12 +1207,43 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     detections = all_detections[0];
                 }
             } else {
-                success = engine_group->detectors[detector_id]->runWithPreprocessedData(
-                    tensor, output_path, frame_data.frame_number,
-                    frame_data.original_width, frame_data.original_height,
-                    frame_data.roi_offset_x, frame_data.roi_offset_y,
-                    frame_data.true_original_width, frame_data.true_original_height
+                // Get raw inference output and push to post-processing queue
+                std::vector<std::shared_ptr<std::vector<float>>> single_input = {tensor};
+                std::vector<std::vector<float>> raw_outputs;
+                success = engine_group->detectors[detector_id]->getRawInferenceOutput(
+                    single_input, raw_outputs
                 );
+                
+                if (success && !raw_outputs.empty()) {
+                    // Create post-processing task
+                    PostProcessTask task;
+                    task.detector = engine_group->detectors[detector_id].get();
+                    task.raw_outputs = std::move(raw_outputs);
+                    task.output_paths = {output_path};
+                    task.frame_numbers = {frame_data.frame_number};
+                    task.original_widths = {frame_data.original_width};
+                    task.original_heights = {frame_data.original_height};
+                    task.roi_offset_x = {frame_data.roi_offset_x};
+                    task.roi_offset_y = {frame_data.roi_offset_y};
+                    task.true_original_widths = {frame_data.true_original_width};
+                    task.true_original_heights = {frame_data.true_original_height};
+                    task.message_keys = {frame_data.message_key};
+                    task.video_indices = {frame_data.video_index};
+                    task.engine_name = engine_group->engine_name;
+                    task.engine_id = engine_id;
+                    task.batch_size = 1;
+                    
+                    // Register pending frame
+                    if (!frame_data.message_key.empty()) {
+                        registerPendingFrame(frame_data.message_key, engine_group->engine_name);
+                    }
+                    
+                    // Push to post-processing queue (non-blocking)
+                    if (!postprocess_queue_ || !postprocess_queue_->push(task)) {
+                        LOG_ERROR("Detector", "Failed to push frame to post-processing queue");
+                        success = false;
+                    }
+                }
             }
             
             auto detect_end = std::chrono::steady_clock::now();
@@ -1213,7 +1306,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 LOG_ERROR("Detector", "Detection failed: " + output_path);
             }
 
-            markFrameProcessed(frame_data.message_key, engine_group->engine_name, output_path, frame_data.video_index);
+            // Note: markFrameProcessed is now called in postprocessWorker after file writing
             
             // Also log every 50 frames with summary
             if (processed_count % 50 == 0) {
@@ -1227,6 +1320,149 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
     LOG_INFO("Detector", "Detector thread " + std::to_string(detector_id) + 
              " for engine " + engine_group->engine_name + " finished (" + 
              std::to_string(processed_count) + " frames processed)");
+}
+
+void ThreadPool::postprocessWorker(int worker_id) {
+    LOG_INFO("PostProcess", "Post-processing thread " + std::to_string(worker_id) + " started");
+    
+    PostProcessTask task;
+    int processed_count = 0;
+    
+    while (!stop_flag_) {
+        if (!postprocess_queue_ || !postprocess_queue_->pop(task, 100)) {
+            if (stop_flag_) break;
+            continue;
+        }
+        
+        if (!task.detector || task.raw_outputs.empty() || task.output_paths.empty()) {
+            LOG_ERROR("PostProcess", "Invalid post-processing task");
+            continue;
+        }
+        
+        auto postprocess_start = std::chrono::steady_clock::now();
+        
+        // Process each frame in the batch
+        int num_anchors = task.detector->getNumAnchors();
+        int output_channels = task.detector->getOutputChannels();
+        size_t output_per_frame = static_cast<size_t>(num_anchors) * output_channels;
+        
+        bool all_success = true;
+        
+        for (size_t b = 0; b < task.raw_outputs.size(); ++b) {
+            if (b >= task.output_paths.size() || b >= task.frame_numbers.size()) {
+                LOG_ERROR("PostProcess", "Batch index out of bounds: " + std::to_string(b));
+                all_success = false;
+                continue;
+            }
+            
+            // Validate output size
+            if (task.raw_outputs[b].size() != output_per_frame) {
+                LOG_ERROR("PostProcess", "Output size mismatch for frame " + std::to_string(b) + 
+                         ": expected " + std::to_string(output_per_frame) + 
+                         ", got " + std::to_string(task.raw_outputs[b].size()));
+                all_success = false;
+                continue;
+            }
+            
+            // Transpose from [channels, num_anchors] to [num_anchors, channels]
+            std::vector<float> frame_output(output_per_frame);
+            for (int anchor = 0; anchor < num_anchors; ++anchor) {
+                for (int channel = 0; channel < output_channels; ++channel) {
+                    int src_idx = channel * num_anchors + anchor;  // [channels, num_anchors]
+                    int dst_idx = anchor * output_channels + channel;  // [num_anchors, channels]
+                    if (src_idx < static_cast<int>(task.raw_outputs[b].size()) && 
+                        dst_idx < static_cast<int>(frame_output.size())) {
+                        frame_output[dst_idx] = task.raw_outputs[b][src_idx];
+                    }
+                }
+            }
+            
+            // Parse raw output
+            std::vector<Detection> detections;
+            if (task.detector->getModelType() == ModelType::POSE) {
+                detections = task.detector->parseRawPoseOutput(frame_output);
+            } else {
+                detections = task.detector->parseRawDetectionOutput(frame_output);
+            }
+            
+            // Apply NMS
+            detections = task.detector->applyNMS(detections);
+            
+            // Limit detections (max_detections is per-frame, not per-batch)
+            // We'll use a reasonable limit of 1000 detections per frame
+            if (static_cast<int>(detections.size()) > 1000) {
+                detections.resize(1000);
+            }
+            
+            // Scale to original frame coordinates
+            if (b < task.original_widths.size() && b < task.original_heights.size()) {
+                int orig_w = task.original_widths[b];
+                int orig_h = task.original_heights[b];
+                int roi_x = (b < task.roi_offset_x.size()) ? task.roi_offset_x[b] : 0;
+                int roi_y = (b < task.roi_offset_y.size()) ? task.roi_offset_y[b] : 0;
+                int true_orig_w = (b < task.true_original_widths.size()) ? task.true_original_widths[b] : 0;
+                int true_orig_h = (b < task.true_original_heights.size()) ? task.true_original_heights[b] : 0;
+                
+                if (orig_w > 0 && orig_h > 0) {
+                    for (auto& det : detections) {
+                        task.detector->scaleDetectionToOriginal(det, orig_w, orig_h, roi_x, roi_y, true_orig_w, true_orig_h);
+                    }
+                }
+            }
+            
+            // Write to file
+            if (!task.detector->writeDetectionsToFile(detections, task.output_paths[b], task.frame_numbers[b])) {
+                LOG_ERROR("PostProcess", "Failed to write detections for frame " + std::to_string(task.frame_numbers[b]));
+                all_success = false;
+            } else {
+                // Mark frame as processed (for Redis message tracking)
+                if (use_redis_queue_ && b < task.message_keys.size() && b < task.video_indices.size()) {
+                    markFrameProcessed(task.message_keys[b], task.engine_name, task.output_paths[b], task.video_indices[b]);
+                }
+            }
+        }
+        
+        auto postprocess_end = std::chrono::steady_clock::now();
+        auto postprocess_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            postprocess_end - postprocess_start).count();
+        
+        if (all_success) {
+            {
+                std::lock_guard<std::mutex> lock(stats_.stats_mutex);
+                if (task.engine_id >= 0 && task.engine_id < static_cast<int>(stats_.frames_detected.size())) {
+                    stats_.frames_detected[task.engine_id] += static_cast<int>(task.raw_outputs.size());
+                    stats_.engine_total_time_ms[task.engine_id] += postprocess_time_ms;
+                    stats_.engine_frame_count[task.engine_id] += static_cast<int>(task.raw_outputs.size());
+                }
+            }
+            processed_count += static_cast<int>(task.raw_outputs.size());
+        } else {
+            {
+                std::lock_guard<std::mutex> lock(stats_.stats_mutex);
+                if (task.engine_id >= 0 && task.engine_id < static_cast<int>(stats_.frames_failed.size())) {
+                    stats_.frames_failed[task.engine_id] += static_cast<int>(task.raw_outputs.size());
+                }
+            }
+        }
+    }
+    
+    LOG_INFO("PostProcess", "Post-processing thread " + std::to_string(worker_id) + 
+             " finished (" + std::to_string(processed_count) + " frames processed)");
+}
+
+void ThreadPool::redisOutputWorker() {
+    LOG_INFO("RedisOutput", "Async Redis output worker started");
+    
+    // This worker will handle async Redis message sending
+    // For now, markFrameProcessed handles Redis directly, but we can add a queue here if needed
+    // The current implementation already calls markFrameProcessed from postprocessWorker
+    // which is non-blocking for the detector threads
+    
+    while (!stop_flag_) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    
+    LOG_INFO("RedisOutput", "Async Redis output worker finished");
 }
 
 void ThreadPool::monitorWorker() {

@@ -113,6 +113,70 @@ private:
         bool reading_completed = false;
         bool message_pushed = false;
     };
+    
+    // Post-processing task structure
+    struct PostProcessTask {
+        YOLODetector* detector;  // Detector instance (for accessing post-processing functions)
+        std::vector<std::vector<float>> raw_outputs;  // Raw inference outputs per frame [batch][channels*anchors]
+        std::vector<std::string> output_paths;
+        std::vector<int> frame_numbers;
+        std::vector<int> original_widths;
+        std::vector<int> original_heights;
+        std::vector<int> roi_offset_x;
+        std::vector<int> roi_offset_y;
+        std::vector<int> true_original_widths;
+        std::vector<int> true_original_heights;
+        std::vector<std::string> message_keys;  // For Redis message tracking
+        std::vector<int> video_indices;  // For Redis message tracking
+        std::string engine_name;  // For Redis message tracking
+        int engine_id;  // For statistics
+        int batch_size;
+    };
+    
+    // Thread-safe queue for post-processing tasks
+    class PostProcessQueue {
+    public:
+        bool push(const PostProcessTask& task) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (stop_flag_) return false;
+            queue_.push(task);
+            cv_.notify_one();
+            return true;
+        }
+        
+        bool pop(PostProcessTask& task, int timeout_ms = 100) {
+            std::unique_lock<std::mutex> lock(mutex_);
+            if (stop_flag_ && queue_.empty()) return false;
+            if (queue_.empty()) {
+                if (timeout_ms > 0) {
+                    cv_.wait_for(lock, std::chrono::milliseconds(timeout_ms));
+                } else {
+                    cv_.wait(lock);
+                }
+            }
+            if (queue_.empty() || stop_flag_) return false;
+            task = queue_.front();
+            queue_.pop();
+            return true;
+        }
+        
+        size_t size() const {
+            std::lock_guard<std::mutex> lock(mutex_);
+            return queue_.size();
+        }
+        
+        void stop() {
+            std::lock_guard<std::mutex> lock(mutex_);
+            stop_flag_ = true;
+            cv_.notify_all();
+        }
+        
+    private:
+        std::queue<PostProcessTask> queue_;
+        mutable std::mutex mutex_;
+        std::condition_variable cv_;
+        std::atomic<bool> stop_flag_{false};
+    };
 
     int num_readers_;
     int num_preprocessors_;
@@ -131,8 +195,11 @@ private:
     
     std::vector<std::thread> reader_threads_;
     std::vector<std::thread> preprocessor_threads_;
+    std::vector<std::thread> postprocess_threads_;  // Post-processing threads
     std::thread monitor_thread_;
+    std::thread redis_output_thread_;  // Async Redis message sending thread
     std::unique_ptr<FrameQueue> raw_frame_queue_;
+    std::unique_ptr<PostProcessQueue> postprocess_queue_;  // Queue for post-processing tasks
     
     
     std::atomic<bool> stop_flag_;
@@ -153,6 +220,8 @@ private:
     void readerWorkerRedis(int reader_id);
     void preprocessorWorker(int worker_id);
     void detectorWorker(int engine_id, int detector_id);
+    void postprocessWorker(int worker_id);  // Post-processing worker thread
+    void redisOutputWorker();  // Async Redis message sending worker
     void monitorWorker();
     int getNextVideo();
     

@@ -80,6 +80,24 @@ public:
     // Draw detections on frame (for debug visualization)
     void drawDetections(cv::Mat& frame, const std::vector<Detection>& detections);
     
+    // Post-processing functions (made public for parallel post-processing)
+    std::vector<Detection> parseRawDetectionOutput(const std::vector<float>& output_data);
+    std::vector<Detection> parseRawPoseOutput(const std::vector<float>& output_data);
+    std::vector<Detection> applyNMS(const std::vector<Detection>& detections);
+    void scaleDetectionToOriginal(Detection& det, int original_width, int original_height, 
+                                   int roi_offset_x = 0, int roi_offset_y = 0,
+                                   int true_original_width = 0, int true_original_height = 0);
+    bool writeDetectionsToFile(const std::vector<Detection>& detections, const std::string& output_path, int frame_number);
+    
+    // Get raw inference output (for parallel post-processing)
+    // Returns raw output data in [channels, num_anchors] format per frame
+    bool getRawInferenceOutput(const std::vector<std::shared_ptr<std::vector<float>>>& inputs,
+                                std::vector<std::vector<float>>& raw_outputs);
+    
+    // Getter for output dimensions (needed for post-processing)
+    int getNumAnchors() const { return num_anchors_; }
+    int getOutputChannels() const { return output_channels_; }
+    
 private:
     std::string engine_path_;
     ModelType model_type_;
@@ -117,23 +135,13 @@ private:
     void allocateBuffers();
     void freeBuffers();
     
-    // Parse raw YOLO output (without NMS)
-    std::vector<Detection> parseRawDetectionOutput(const std::vector<float>& output_data);
-    std::vector<Detection> parseRawPoseOutput(const std::vector<float>& output_data);
-    
     // Parse transposed output format (matching Python: output[0].T)
     // Input is [channels, num_anchors] format after transpose
     std::vector<Detection> parseRawDetectionOutputTransposed(const std::vector<float>& output_data);
     std::vector<Detection> parseRawPoseOutputTransposed(const std::vector<float>& output_data);
     
-    // Apply NMS to detections
-    std::vector<Detection> applyNMS(const std::vector<Detection>& detections);
-    
     // Calculate IoU between two boxes
     float calculateIoU(const float* box1, const float* box2);
-    
-    // Write results to binary file
-    bool writeDetectionsToFile(const std::vector<Detection>& detections, const std::string& output_path, int frame_number);
     
     bool runInference(const std::vector<std::string>& output_paths,
                       const std::vector<int>& frame_numbers,
@@ -146,11 +154,6 @@ private:
                       const std::vector<int>& true_original_heights = {});
     
     bool copyInputsToDevice(const std::vector<std::shared_ptr<std::vector<float>>>& inputs);
-    
-    // Scale detection coordinates from preprocessed image to original frame
-    void scaleDetectionToOriginal(Detection& det, int original_width, int original_height, 
-                                   int roi_offset_x = 0, int roi_offset_y = 0,
-                                   int true_original_width = 0, int true_original_height = 0);
 
 };
 

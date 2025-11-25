@@ -307,6 +307,58 @@ bool YOLODetector::runWithPreprocessedBatch(
     return ok;
 }
 
+bool YOLODetector::getRawInferenceOutput(const std::vector<std::shared_ptr<std::vector<float>>>& inputs,
+                                          std::vector<std::vector<float>>& raw_outputs) {
+    if (static_cast<int>(inputs.size()) != batch_size_) {
+        std::cerr << "Error: getRawInferenceOutput expected " << batch_size_
+                  << " inputs, received " << inputs.size() << std::endl;
+        return false;
+    }
+    
+    // Set CUDA device
+    cudaSetDevice(gpu_id_);
+    
+    // Copy inputs to device
+    if (!copyInputsToDevice(inputs)) {
+        return false;
+    }
+    
+    // Run inference
+    void* bindings[] = {input_buffer_, output_buffer_};
+    bool success = context_->enqueueV2(bindings, stream_, nullptr);
+    if (!success) {
+        std::cerr << "Error: Inference execution failed" << std::endl;
+        return false;
+    }
+    
+    // Copy output from GPU to CPU
+    std::vector<float> output_data(output_size_ / sizeof(float));
+    cudaMemcpyAsync(output_data.data(), output_buffer_, output_size_, cudaMemcpyDeviceToHost, stream_);
+    cudaStreamSynchronize(stream_);
+    
+    // Extract per-frame outputs
+    size_t output_per_frame = static_cast<size_t>(num_anchors_) * output_channels_;
+    size_t expected_total_output = static_cast<size_t>(batch_size_) * output_per_frame;
+    if (output_data.size() != expected_total_output) {
+        std::cerr << "Error: Output size mismatch. Expected " << expected_total_output
+                  << " elements, got " << output_data.size() << std::endl;
+        return false;
+    }
+    
+    raw_outputs.clear();
+    raw_outputs.resize(batch_size_);
+    
+    for (int b = 0; b < batch_size_; ++b) {
+        size_t batch_offset = static_cast<size_t>(b) * output_per_frame;
+        raw_outputs[b].resize(output_per_frame);
+        std::copy(output_data.begin() + batch_offset,
+                  output_data.begin() + batch_offset + output_per_frame,
+                  raw_outputs[b].begin());
+    }
+    
+    return true;
+}
+
 bool YOLODetector::copyInputsToDevice(const std::vector<std::shared_ptr<std::vector<float>>>& inputs) {
     if (static_cast<int>(inputs.size()) != batch_size_) {
         std::cerr << "Error: copyInputsToDevice expected " << batch_size_

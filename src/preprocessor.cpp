@@ -65,24 +65,47 @@ cv::Mat Preprocessor::preprocess(const cv::Mat& frame) {
 }
 
 void Preprocessor::preprocessToFloat(const cv::Mat& frame, std::vector<float>& output) {
-    // Preprocess: BGR->RGB, resize, pad with zeros, normalize
-    // This already returns normalized RGB image
-    cv::Mat processed = preprocess(frame);
+    // Optimized preprocessing: merge BGR->RGB, resize, pad, normalize, and CHW conversion
+    int h = frame.rows;
+    int w = frame.cols;
     
-    // Flatten to CHW format for TensorRT: [C, H, W]
-    // Split into channels and copy to output vector
-    std::vector<cv::Mat> channels;
-    cv::split(processed, channels);
+    // Calculate scale and new dimensions
+    float scale = std::min(static_cast<float>(target_width_) / w,
+                          static_cast<float>(target_height_) / h);
+    int new_w = static_cast<int>(w * scale);
+    int new_h = static_cast<int>(h * scale);
+    int pad_w = (target_width_ - new_w) / 2;
+    int pad_h = (target_height_ - new_h) / 2;
     
-    // TensorRT expects CHW format: [C, H, W]
+    // Resize with BGR->RGB conversion in one step (using cv::resize with color conversion)
+    cv::Mat resized;
+    cv::resize(frame, resized, cv::Size(new_w, new_h), 0, 0, cv::INTER_LINEAR);
+    
+    // Allocate output vector (CHW format: [C, H, W])
     const size_t total_size = static_cast<size_t>(target_width_) * target_height_ * 3;
     output.resize(total_size);
+    std::fill(output.begin(), output.end(), 0.0f);  // Initialize with zeros (padding)
     
-    // Copy channels to output in CHW format (matching working C++ script)
+    // Direct copy with normalization and CHW conversion in one pass
+    // This avoids intermediate Mat allocations and channel splitting
     size_t csize = static_cast<size_t>(target_height_) * target_width_;
-    for (int c = 0; c < 3; ++c) {
-        const float* data = channels[c].ptr<float>();
-        std::memcpy(output.data() + c * csize, data, csize * sizeof(float));
+    const float norm_factor = 1.0f / 255.0f;
+    
+    // Copy resized image to padded position with normalization and CHW conversion
+    for (int y = 0; y < new_h; ++y) {
+        const cv::Vec3b* src_row = resized.ptr<cv::Vec3b>(y);
+        int dst_y = pad_h + y;
+        
+        for (int x = 0; x < new_w; ++x) {
+            int dst_x = pad_w + x;
+            size_t base_idx = dst_y * target_width_ + dst_x;
+            
+            // BGR->RGB conversion, normalization, and CHW layout in one step
+            // OpenCV uses BGR, TensorRT expects RGB
+            output[0 * csize + base_idx] = static_cast<float>(src_row[x][2]) * norm_factor;  // R
+            output[1 * csize + base_idx] = static_cast<float>(src_row[x][1]) * norm_factor;  // G
+            output[2 * csize + base_idx] = static_cast<float>(src_row[x][0]) * norm_factor;  // B
+        }
     }
 }
 
