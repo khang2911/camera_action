@@ -547,8 +547,13 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
             
             for (size_t idx = 0; idx < valid_clips.size(); ++idx) {
                 auto& clip = valid_clips[idx];
+                // Generate video_key for logging (unique identifier per video)
+                std::string video_key = buildVideoKey(clip.message_key.empty() ? 
+                    buildMessageKey(clip.serial, clip.record_id) : clip.message_key, 
+                    clip.video_index);
                 LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
-                         " processing video from Redis: " + clip.path + queue_status);
+                         " processing video from Redis: " + clip.path + 
+                         " (video_key='" + video_key + "')" + queue_status);
                 
                 bool register_message = false;  // already registered before loop
                 bool finalize_message = (idx == valid_clips.size() - 1);
@@ -707,13 +712,14 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
                              bool register_message,
                              bool finalize_message,
                              int frame_start_offset) {
-    LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
-             " processing video " + std::to_string(video_id) + ": " + clip.path);
-    
     const std::string message_key = !clip.message_key.empty()
         ? clip.message_key
         : buildMessageKey(clip.serial, clip.record_id);
     const std::string video_key = buildVideoKey(message_key, clip.video_index);
+    
+    LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
+             " processing video: " + clip.path + 
+             " (video_key='" + video_key + "', message_key='" + message_key + "')");
     
     if (register_message && use_redis_queue_ && output_queue_ && !redis_message.empty()) {
         registerVideoMessage(message_key, redis_message);
@@ -722,7 +728,7 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
     VideoReader reader(clip, video_id);
     
     if (!reader.isOpened()) {
-        LOG_ERROR("Reader", "Cannot open video " + std::to_string(video_id) + ": " + clip.path);
+        LOG_ERROR("Reader", "Cannot open video (video_key='" + video_key + "'): " + clip.path);
         if (finalize_message) {
             markVideoReadingComplete(message_key);
         }
@@ -782,21 +788,21 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
             // Print progress every 20 frames to show continuous operation
             if (frame_count % 20 == 0) {
                 LOG_INFO("Reader", "[RUNNING] Reader " + std::to_string(reader_id) + 
-                         " processing video " + std::to_string(video_id) + 
+                         " processing video (video_key='" + video_key + "')" + 
                          " - Frame " + std::to_string(frame_count) + " read and queued");
             }
             
             // Also log every 100 frames with more detail
             if (frame_count % 100 == 0) {
                 LOG_DEBUG("Reader", "Reader " + std::to_string(reader_id) + 
-                         " processed " + std::to_string(frame_count) + " frames from video " + 
-                         std::to_string(video_id));
+                         " processed " + std::to_string(frame_count) + " frames from video (video_key='" + 
+                         video_key + "')");
             }
         }
         
         LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
-                 " finished video " + std::to_string(video_id) + " (" + 
-                 std::to_string(frame_count) + " frames)");
+                 " finished video (video_key='" + video_key + "')" + 
+                 " (" + std::to_string(frame_count) + " frames)");
     
     // Always mark reading complete when video processing finishes (even if not finalize_message)
     // This ensures reading_completed is set as soon as possible, not waiting for all videos
@@ -804,7 +810,8 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
     if (use_redis_queue_ && output_queue_ && !message_key.empty()) {
         LOG_INFO("Reader", "Reader " + std::to_string(reader_id) + 
                  " marking reading complete for message_key='" + message_key + 
-                 "' (finalize_message=" + (finalize_message ? "true" : "false") + 
+                 "' (video_key='" + video_key + "', finalize_message=" + 
+                 (finalize_message ? "true" : "false") + 
                  ", frame_count=" + std::to_string(frame_count) + ")");
         
         // For multi-video messages, we should only mark complete when ALL videos are done
