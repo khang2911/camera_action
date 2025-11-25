@@ -14,6 +14,7 @@
 #include <thread>
 #include <future>
 #include <fstream>
+#include <atomic>
 #include <yaml-cpp/yaml.h>
 
 EngineGroup::~EngineGroup() {
@@ -551,9 +552,14 @@ void ThreadPool::readerWorkerRedis(int reader_id) {
                 std::string video_key = buildVideoKey(clip.message_key.empty() ? 
                     buildMessageKey(clip.serial, clip.record_id) : clip.message_key, 
                     clip.video_index);
-                LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
-                         " processing video from Redis: " + clip.path + 
-                         " (video_key='" + video_key + "')" + queue_status);
+                // Reduced logging frequency - only log first video or every 10th video
+                static std::atomic<int> video_log_counter{0};
+                bool should_log = (++video_log_counter % 10 == 0 || idx == 0);
+                if (should_log) {
+                    LOG_DEBUG("Reader", "Reader thread " + std::to_string(reader_id) + 
+                             " processing video from Redis: " + clip.path + 
+                             " (video_key='" + video_key + "')" + queue_status);
+                }
                 
                 bool register_message = false;  // already registered before loop
                 bool finalize_message = (idx == valid_clips.size() - 1);
@@ -717,9 +723,14 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
         : buildMessageKey(clip.serial, clip.record_id);
     const std::string video_key = buildVideoKey(message_key, clip.video_index);
     
-    LOG_INFO("Reader", "Reader thread " + std::to_string(reader_id) + 
-             " processing video: " + clip.path + 
-             " (video_key='" + video_key + "', message_key='" + message_key + "')");
+    // Reduced logging - only log occasionally
+    static std::atomic<int> process_log_counter{0};
+    bool should_log = (++process_log_counter % 20 == 0);
+    if (should_log) {
+        LOG_DEBUG("Reader", "Reader thread " + std::to_string(reader_id) + 
+                 " processing video: " + clip.path + 
+                 " (video_key='" + video_key + "')");
+    }
     
     if (register_message && use_redis_queue_ && output_queue_ && !redis_message.empty()) {
         registerVideoMessage(message_key, redis_message);
@@ -808,21 +819,11 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
     // This ensures reading_completed is set as soon as possible, not waiting for all videos
     // The finalize_message flag is only used to determine if this is the last video in a multi-video message
     if (use_redis_queue_ && output_queue_ && !message_key.empty()) {
-        LOG_INFO("Reader", "Reader " + std::to_string(reader_id) + 
-                 " marking reading complete for message_key='" + message_key + 
-                 "' (video_key='" + video_key + "', finalize_message=" + 
-                 (finalize_message ? "true" : "false") + 
-                 ", frame_count=" + std::to_string(frame_count) + ")");
-        
         // For multi-video messages, we should only mark complete when ALL videos are done
         // But if this is the last video (finalize_message=true), mark it complete
         // For single-video messages, finalize_message will be true
         if (finalize_message) {
             markVideoReadingComplete(message_key);
-        } else {
-            // For intermediate videos in a multi-video message, we could track per-video completion
-            // But for now, we'll only mark complete when the last video finishes
-            LOG_DEBUG("Reader", "Skipping markVideoReadingComplete for intermediate video (not last in message)");
         }
     }
     
@@ -1792,9 +1793,6 @@ void ThreadPool::markVideoReadingComplete(const std::string& message_key) {
         return;
     }
     
-    auto start_time = std::chrono::steady_clock::now();
-    LOG_INFO("RedisOutput", "markVideoReadingComplete: message_key='" + message_key + "' - marking reading as complete");
-    
     std::string message_to_push;
     {
         std::lock_guard<std::mutex> lock(video_output_mutex_);
@@ -1807,40 +1805,36 @@ void ThreadPool::markVideoReadingComplete(const std::string& message_key) {
         
         // Check if already marked complete (avoid duplicate calls)
         if (it->second.reading_completed) {
-            LOG_DEBUG("RedisOutput", "markVideoReadingComplete: message_key '" + message_key + 
-                     "' already marked as reading_completed");
-            return;
+            return;  // Already marked, skip
         }
         
-        // Log current status before marking complete
-        std::ostringstream status_oss;
-        status_oss << "pending_counts: ";
-        bool first = true;
-        for (const auto& kv : it->second.pending_counts) {
-            if (!first) status_oss << ", ";
-            status_oss << kv.first << "=" << kv.second;
-            first = false;
-        }
-        status_oss << " | has_outputs: ";
-        bool has_outputs = false;
-        for (const auto& kv : it->second.detector_outputs) {
-            if (!kv.second.empty()) {
-                has_outputs = true;
-                break;
+        // Only log status occasionally (every 10th call) to reduce overhead
+        static std::atomic<int> log_counter{0};
+        bool should_log_status = (++log_counter % 10 == 0);
+        
+        if (should_log_status) {
+            std::ostringstream status_oss;
+            status_oss << "pending_counts: ";
+            bool first = true;
+            for (const auto& kv : it->second.pending_counts) {
+                if (!first) status_oss << ", ";
+                status_oss << kv.first << "=" << kv.second;
+                first = false;
             }
+            status_oss << " | has_outputs: ";
+            bool has_outputs = false;
+            for (const auto& kv : it->second.detector_outputs) {
+                if (!kv.second.empty()) {
+                    has_outputs = true;
+                    break;
+                }
+            }
+            status_oss << (has_outputs ? "yes" : "no");
+            LOG_DEBUG("RedisOutput", "markVideoReadingComplete: message_key='" + message_key + "' status: " + status_oss.str());
         }
-        status_oss << (has_outputs ? "yes" : "no");
-        LOG_INFO("RedisOutput", "markVideoReadingComplete: message_key='" + message_key + "' status: " + status_oss.str());
         
         it->second.reading_completed = true;
         message_to_push = tryPushOutputLocked(message_key, it->second);
-    }
-    
-    auto end_time = std::chrono::steady_clock::now();
-    auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-    if (duration_ms > 100) {
-        LOG_WARNING("RedisOutput", "markVideoReadingComplete took " + std::to_string(duration_ms) + 
-                   "ms (may indicate lock contention)");
     }
     
     if (!message_to_push.empty()) {
@@ -1948,48 +1942,28 @@ std::string ThreadPool::augmentMessageWithDetectors(const std::string& message,
 
 std::string ThreadPool::tryPushOutputLocked(const std::string& message_key, VideoOutputStatus& status) {
     if (!canPushOutputLocked(status)) {
-        // Log why we can't push (for debugging) - use INFO level for visibility
-        static std::unordered_map<std::string, std::chrono::steady_clock::time_point> last_log_time;
-        auto now = std::chrono::steady_clock::now();
-        auto& last_time = last_log_time[message_key];
-        bool should_log = (last_time == std::chrono::steady_clock::time_point{} || 
-                          std::chrono::duration_cast<std::chrono::seconds>(now - last_time).count() >= 5);
+        // Reduced logging - only log occasionally to avoid performance impact
+        static std::atomic<int> log_counter{0};
+        bool should_log = (++log_counter % 50 == 0);  // Log every 50th call
         
         if (should_log) {
             if (!status.reading_completed) {
-                LOG_INFO("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
+                LOG_DEBUG("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
                          "' reading not completed yet");
             } else if (status.message_pushed) {
-                LOG_INFO("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
+                LOG_DEBUG("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
                          "' already pushed");
             } else {
-                // Check pending counts
-                std::ostringstream pending_oss;
-                bool has_pending = false;
-                bool has_outputs = false;
+                // Check pending counts (simplified logging)
+                int total_pending = 0;
                 for (const auto& kv : status.pending_counts) {
-                    if (kv.second > 0) {
-                        if (has_pending) pending_oss << ", ";
-                        pending_oss << kv.first << "=" << kv.second;
-                        has_pending = true;
-                    }
+                    total_pending += kv.second;
                 }
-                for (const auto& kv : status.detector_outputs) {
-                    if (!kv.second.empty()) {
-                        has_outputs = true;
-                        break;
-                    }
-                }
-                if (has_pending) {
-                    LOG_INFO("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
-                             "' still has pending frames: " + pending_oss.str() + 
-                             " | has_outputs=" + (has_outputs ? "yes" : "no"));
-                } else if (!has_outputs) {
-                    LOG_INFO("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
-                             "' has no detector outputs yet");
+                if (total_pending > 0) {
+                    LOG_DEBUG("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
+                             "' still has " + std::to_string(total_pending) + " pending frames");
                 }
             }
-            last_time = now;
         }
         return "";
     }
