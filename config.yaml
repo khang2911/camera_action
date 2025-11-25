@@ -3,33 +3,33 @@
 # YOLO Model Configuration
 # Multiple engines can be configured, each frame will go through all engines
 models:
-  - path: "/workspace/khangtd6/longchau_vaccine/action_c/weights/alcohol/2025-11-18_batch_16_640x640_fp16.engine"   # Path to TensorRT engine file
-    num_detectors: 1                      # Number of detector threads for this engine
+  - path: "/age_gender/detection/weights/alcohol/2025-11-24_batch_64_640x640_fp16.engine"   # Path to TensorRT engine file
+    num_detectors: 2                      # Number of detector threads for this engine
     name: "alcohol"                        # Optional: name identifier for output files
     type: "detection"                     # Model type: "detection" or "pose"
-    batch_size: 16                         # Batch size for inference (must match engine batch size)
+    batch_size: 64                         # Batch size for inference (must match engine batch size)
     input_width: 640                      # Input image width
     input_height: 640                     # Input image height
     conf_threshold: 0.2                  # Confidence threshold (0.0-1.0)
     nms_threshold: 0.55                  # NMS IoU threshold (0.0-1.0)
     gpu_id: 0                             # GPU device ID (0, 1, 2, etc.)
     roi_cropping: true                   # Enable ROI cropping for this engine (uses config.box from video_list.jsonl)
-  - path: "/workspace/khangtd6/longchau_vaccine/action_c/weights/hand/2025-11-18_batch_16_864x864_fp16.engine"   # Path to TensorRT engine file
-    num_detectors: 1                      # Number of detector threads for this engine
+  - path: "/age_gender/detection/weights/hand/2025-11-06_batch_64_864x864_fp16.engine"   # Path to TensorRT engine file
+    num_detectors: 2                      # Number of detector threads for this engine
     name: "hand"                        # Optional: name identifier for output files
     type: "detection"                     # Model type: "detection" or "pose"
-    batch_size: 16                         # Batch size for inference (must match engine batch size)
+    batch_size: 64                         # Batch size for inference (must match engine batch size)
     input_width: 864                      # Input image width
     input_height: 864                     # Input image height
     conf_threshold: 0.2                  # Confidence threshold (0.0-1.0)
     nms_threshold: 0.6                  # NMS IoU threshold (0.0-1.0)
     gpu_id: 0                             # GPU device ID (0, 1, 2, etc.)
     roi_cropping: false                   # Enable ROI cropping for this engine (uses config.box from video_list.jsonl)
-  - path: "/workspace/khangtd6/longchau_vaccine/action_c/weights/pose/2025-11-18_batch_16_640x640_fp16.engine"   # Path to TensorRT engine file
-    num_detectors: 1                      # Number of detector threads for this engine
+  - path: "/age_gender/detection/weights/pose/2025-11-06_batch_64_640x640_fp16.engine"   # Path to TensorRT engine file
+    num_detectors: 2                      # Number of detector threads for this engine
     name: "pose"                        # Optional: name identifier for output files
     type: "pose"                     # Model type: "detection" or "pose"
-    batch_size: 16                         # Batch size for inference (must match engine batch size)
+    batch_size: 64                         # Batch size for inference (must match engine batch size)
     input_width: 640                      # Input image width
     input_height: 640                     # Input image height
     conf_threshold: 0.4                  # Confidence threshold (0.0-1.0)
@@ -41,12 +41,12 @@ models:
 # Option 1: Use Redis queue (recommended for production)
 redis_queue:
   enabled: true                    # Set to true to use Redis queue mode
-  host: "localhost"                # Redis server host
+  host: "172.24.178.105"                # Redis server host
   port: 6379                        # Redis server port
   password: ""                      # Redis password (leave empty if no password)
   db: 0                             # Redis logical database index (0-15, default 0)
-  input_queue: "ml#vaccine_monitor_test"        # Redis queue name for input messages
-  output_queue: "ml#vaccine_detection_test"      # Redis queue name for output messages
+  input_queue: "det#vaccine_monitor_prod_in"        # Redis queue name for input messages
+  output_queue: "det#vaccine_monitor_prod_out"      # Redis queue name for output messages
 
 # Option 2: Use file-based video list (alternative to Redis)
 videos:
@@ -56,12 +56,12 @@ videos:
 
 # Thread Configuration
 threads:
-  num_readers: 3      # Number of reader/preprocessor threads (CPU)
-  num_preprocessors: 10  # Number of preprocessing workers (CPU)
+  num_readers: 15      # Number of reader/preprocessor threads (CPU)
+  num_preprocessors: 30  # Number of preprocessing workers (CPU)
 
 # Output Configuration
 output:
-  dir: "/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins/"      # Output directory for binary result files
+  dir: "/age_gender/detection/camera_action/storage/prod"      # Output directory for binary result files
 
 # Debug Configuration
 debug:

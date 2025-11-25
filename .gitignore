@@ -12,6 +12,7 @@ AICameraSolution
 
 # IDE files
 .vscode/
+*__pycache__/
 .idea/
 *.swp
 *.swo
@@ -35,4 +36,7 @@ Makefile
 # OS files
 .DS_Store
 Thumbs.db
+
+storage/*
+logs/*
 

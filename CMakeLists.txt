@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(AICameraSolution VERSION 1.0.0 LANGUAGES CXX CUDA)
+project(VaccineMonitoring VERSION 1.0.0 LANGUAGES CXX CUDA)
 
 # CUDA Configuration
 set(CMAKE_CUDA_ARCHITECTURES 60 61 62 70 72 75 86)
@@ -191,12 +191,12 @@ if(TACOPIE_LIBRARY)
 endif()
 
 # Create executable
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+add_executable(detection ${SOURCES} ${HEADERS})
 
 # Compiler flags
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_options(${PROJECT_NAME} PRIVATE -g)
+    target_compile_options(detection PRIVATE -g)
 endif()
 
 # Link libraries
-target_link_libraries(${PROJECT_NAME} PRIVATE ${ALL_LIBS})
+target_link_libraries(detection PRIVATE ${ALL_LIBS})

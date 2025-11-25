@@ -1,5 +1,6 @@
 #include "thread_pool.h"
 #include "video_reader.h"
+#include "nlohmann/json.hpp"
 #include "logger.h"
 #include "yolo_detector.h"
 #include "redis_queue.h"
@@ -573,8 +574,8 @@ std::vector<VideoClip> ThreadPool::parseJsonToVideoClips(const std::string& json
             }
         }
         
-        double start_ts = ConfigParser::parseTimestamp(getString(raw_alarm, "video_start_time"));
-        double end_ts = ConfigParser::parseTimestamp(getString(raw_alarm, "video_end_time"));
+        double start_ts = ConfigParser::parseTimestamp(getString(raw_alarm, "video_start_time")) - 30;
+        double end_ts = ConfigParser::parseTimestamp(getString(raw_alarm, "video_end_time")) + 5;
         
         std::string message_key = !tracking_key.empty() ? tracking_key : buildMessageKey(serial, record_id);
 
@@ -1587,22 +1588,52 @@ std::string ThreadPool::tryPushOutputLocked(const std::string& message_key, Vide
     status.message_pushed = true;
     std::string final_message = augmentMessageWithDetectors(status.original_message, status.detector_outputs);
     
-    // Persist the final message to JSON file for auditing/debugging
+    // Persist the final message to JSONL file for auditing/debugging
     try {
-        std::filesystem::path output_dir = std::filesystem::path(output_dir_) / "redis_messages";
+        std::filesystem::path output_dir = 
+            std::filesystem::path(output_dir_) / "redis_messages";
         std::filesystem::create_directories(output_dir);
-        std::string safe_key = message_key.empty() ? "unknown" : message_key;
-        std::filesystem::path file_path = output_dir / (safe_key + ".json");
-        std::ofstream outfile(file_path);
-        if (outfile.is_open()) {
-            outfile << final_message;
-            outfile.close();
-            LOG_INFO("RedisOutput", "Saved output message to " + file_path.string());
-        } else {
-            LOG_ERROR("RedisOutput", "Failed to open file for saving message: " + file_path.string());
+
+        // Parse final_message to get send_at
+        nlohmann::json j = nlohmann::json::parse(final_message);
+
+        std::string send_at;
+        try {
+            send_at = j["alarm"]["raw_alarm"]["send_at"].get<std::string>();
+        } catch (...) {
+            send_at = "unknown";
         }
-    } catch (const std::exception& e) {
-        LOG_ERROR("RedisOutput", "Failed to save Redis output message: " + std::string(e.what()));
+
+        // Convert send_at -> dd-mm-yy
+        auto convertSendAt = [](const std::string& s) -> std::string {
+            if (s.size() < 8) return "unknown";
+            std::string dd = s.substr(6, 2);
+            std::string mm = s.substr(4, 2);
+            std::string yy = s.substr(2, 2);
+            return dd + "-" + mm + "-" + yy;  // dd-mm-yy
+        };
+
+        std::string day_str = convertSendAt(send_at);
+
+        // File theo ngày: dd-mm-yy.jsonl
+        std::filesystem::path file_path = 
+            output_dir / (day_str + ".jsonl");
+
+        // Append mode
+        std::ofstream outfile(file_path, std::ios::app);
+        if (outfile.is_open()) {
+            outfile << final_message << "\n";
+            outfile.close();
+            LOG_INFO("RedisOutput", 
+                    "Appended output message to " + file_path.string());
+        } else {
+            LOG_ERROR("RedisOutput", 
+                    "Failed to open file for saving message: " + file_path.string());
+        }
+    }
+    catch (const std::exception& e) {
+        LOG_ERROR("RedisOutput", 
+                "Failed to save Redis output message: " + std::string(e.what()));
     }
     
     LOG_INFO("RedisOutput", "Ready to push message for key '" + message_key + "': " + final_message);
