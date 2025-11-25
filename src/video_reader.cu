@@ -16,8 +16,8 @@ void log_ffmpeg_error(const std::string& prefix, int err) {
     LOG_ERROR("VideoReader", prefix + ": " + std::string(buf));
 }
 
-inline uint8_t clampToUInt8(int v) {
-    return static_cast<uint8_t>(std::min(std::max(v, 0), 255));
+__device__ inline uint8_t clampToUInt8(int v) {
+    return static_cast<uint8_t>(min(max(v, 0), 255));
 }
 
 __global__ void nv12ToBgrKernel(const uint8_t* y_plane,
