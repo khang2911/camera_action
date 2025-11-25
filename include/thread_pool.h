@@ -27,6 +27,7 @@ struct EngineGroup {
     int input_height;
     bool roi_cropping;  // Enable ROI cropping for this engine
     size_t tensor_elements;
+    size_t queue_size;  // Store queue size for partial batch logic
     std::vector<std::unique_ptr<YOLODetector>> detectors;
     std::vector<std::thread> detector_threads;
     std::unique_ptr<FrameQueue> frame_queue;
@@ -36,11 +37,14 @@ struct EngineGroup {
     std::mutex buffer_pool_mutex;
     
     EngineGroup(int id, const std::string& path, const std::string& name, int num_det,
-                int in_w, int in_h, bool roi = false)
+                int in_w, int in_h, bool roi = false, size_t queue_size = 500)
         : engine_id(id), engine_path(path), engine_name(name), num_detectors(num_det),
-          input_width(in_w), input_height(in_h), roi_cropping(roi) {
+          input_width(in_w), input_height(in_h), roi_cropping(roi), queue_size(queue_size) {
         tensor_elements = static_cast<size_t>(input_width) * input_height * 3;
-        frame_queue = std::make_unique<FrameQueue>(100);
+        // CRITICAL: Queue size must be large enough to buffer frames while detectors accumulate batches
+        // With batch_size=16, we need at least 16 * num_detectors * 2 (for pipelining) = 32 * num_detectors
+        // Using 500 as default to ensure smooth operation even with multiple detectors
+        frame_queue = std::make_unique<FrameQueue>(queue_size);
         preprocessor = std::make_unique<Preprocessor>(input_width, input_height);
     }
     

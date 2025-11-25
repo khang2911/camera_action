@@ -110,13 +110,18 @@ ThreadPool::ThreadPool(int num_readers,
     // Initialize engine groups (one per engine)
     for (size_t i = 0; i < engine_configs.size(); ++i) {
         const auto& config = engine_configs[i];
+        // CRITICAL: Calculate optimal queue size based on batch_size and num_detectors
+        // Need enough buffer for: batch_size * num_detectors * 2 (for pipelining) + safety margin
+        // With batch_size=16 and num_detectors=2, we need at least 64 frames, use 500 for safety
+        size_t optimal_queue_size = std::max(500UL, static_cast<size_t>(config.batch_size * config.num_detectors * 4));
         auto engine_group = std::make_unique<EngineGroup>(
             static_cast<int>(i), config.path, config.name, config.num_detectors,
-            config.input_width, config.input_height, config.roi_cropping
+            config.input_width, config.input_height, config.roi_cropping, optimal_queue_size
         );
         
         LOG_INFO("ThreadPool", "Initializing engine " + config.name + " with " + 
-                 std::to_string(config.num_detectors) + " detector threads");
+                 std::to_string(config.num_detectors) + " detector threads (queue_size=" + 
+                 std::to_string(optimal_queue_size) + ")");
         
         // Initialize detectors for this engine
         for (int j = 0; j < config.num_detectors; ++j) {
@@ -200,13 +205,18 @@ ThreadPool::ThreadPool(int num_readers,
     // Initialize engine groups (one per engine)
     for (size_t i = 0; i < engine_configs.size(); ++i) {
         const auto& config = engine_configs[i];
+        // CRITICAL: Calculate optimal queue size based on batch_size and num_detectors
+        // Need enough buffer for: batch_size * num_detectors * 2 (for pipelining) + safety margin
+        // With batch_size=16 and num_detectors=2, we need at least 64 frames, use 500 for safety
+        size_t optimal_queue_size = std::max(500UL, static_cast<size_t>(config.batch_size * config.num_detectors * 4));
         auto engine_group = std::make_unique<EngineGroup>(
             static_cast<int>(i), config.path, config.name, config.num_detectors,
-            config.input_width, config.input_height, config.roi_cropping
+            config.input_width, config.input_height, config.roi_cropping, optimal_queue_size
         );
         
         LOG_INFO("ThreadPool", "Initializing engine " + config.name + " with " + 
-                 std::to_string(config.num_detectors) + " detector threads");
+                 std::to_string(config.num_detectors) + " detector threads (queue_size=" + 
+                 std::to_string(optimal_queue_size) + ")");
         
         // Initialize detectors for this engine
         for (int j = 0; j < config.num_detectors; ++j) {
@@ -1045,8 +1055,18 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 batch_record_dates.push_back(frame_data.record_date);
             }
             
-            // Process batch if we have enough frames
+            // Process batch if we have enough frames OR if queue is getting full (partial batch)
+            // This prevents GPU idle time when queues are full but we don't have a full batch yet
+            bool should_process = false;
             if (static_cast<int>(batch_tensors.size()) == batch_size) {
+                should_process = true;
+            } else if (static_cast<int>(batch_tensors.size()) >= batch_size / 2 && 
+                       engine_group->frame_queue->size() > engine_group->queue_size * 0.8) {
+                // Process partial batch if queue is >80% full to prevent blocking
+                should_process = true;
+            }
+            
+            if (should_process && !batch_tensors.empty()) {
                 auto batch_start = std::chrono::steady_clock::now();
                 bool success = false;
                 std::vector<std::vector<Detection>> batch_detections;
@@ -1131,13 +1151,14 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 }
                 
                 if (success) {
+                    int actual_batch_size = static_cast<int>(batch_tensors.size());
                     {
                         std::lock_guard<std::mutex> lock(stats_.stats_mutex);
-                        stats_.frames_detected[engine_id] += batch_size;
+                        stats_.frames_detected[engine_id] += actual_batch_size;
                         stats_.engine_total_time_ms[engine_id] += batch_time_ms;
-                        stats_.engine_frame_count[engine_id] += batch_size;
+                        stats_.engine_frame_count[engine_id] += actual_batch_size;
                     }
-                    processed_count += batch_size;
+                    processed_count += actual_batch_size;
                     
                     // Removed frequent logging - too expensive in hot path
                 } else {
