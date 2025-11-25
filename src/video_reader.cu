@@ -184,6 +184,9 @@ bool VideoReader::setupDecoder() {
     if (initHardwareDecoder(decoder)) {
         codec_ctx_->opaque = this;
         codec_ctx_->get_format = &VideoReader::getHWFormat;
+        LOG_INFO("VideoReader", "Hardware decoder initialized successfully");
+    } else {
+        LOG_INFO("VideoReader", "Hardware decoder not available, using CPU decoding");
     }
     
     ret = avcodec_open2(codec_ctx_, decoder, nullptr);
@@ -335,10 +338,14 @@ bool VideoReader::receiveFrame(cv::Mat& out) {
 
 bool VideoReader::convertFrameToMat(AVFrame* src, cv::Mat& out) {
     if (use_hw_decode_ && src->format == hw_pix_fmt_) {
+        LOG_DEBUG("VideoReader", std::string("Using GPU conversion path for format: ") + std::to_string(src->format));
         if (convertFrameToMatGPU(src, out)) {
             return true;
         }
         LOG_ERROR("VideoReader", "GPU conversion failed, falling back to CPU path");
+    } else {
+        LOG_DEBUG("VideoReader", std::string("Using CPU conversion path, hw_decode: ") + std::to_string(use_hw_decode_) +
+                   ", format: " + std::to_string(src->format) + ", expected: " + std::to_string(hw_pix_fmt_));
     }
     
     AVFrame* cpu_frame = src;
@@ -387,19 +394,24 @@ bool VideoReader::ensureCudaBuffer(int width, int height) {
 }
 
 bool VideoReader::convertFrameToMatGPU(AVFrame* src, cv::Mat& out) {
+    auto start = std::chrono::high_resolution_clock::now();
+
     if (!ensureCudaBuffer(src->width, src->height)) {
         return false;
     }
-    
+
     const uint8_t* y_plane = src->data[0];
     const uint8_t* uv_plane = src->data[1];
     int y_pitch = src->linesize[0];
     int uv_pitch = src->linesize[1];
-    
+
     dim3 block(32, 8);
     dim3 grid((src->width + block.x - 1) / block.x,
               (src->height + block.y - 1) / block.y);
-    
+
+    LOG_DEBUG("VideoReader", std::string("GPU conversion: ") + std::to_string(src->width) + "x" +
+               std::to_string(src->height) + ", grid: " + std::to_string(grid.x) + "x" + std::to_string(grid.y));
+
     nv12ToBgrKernel<<<grid, block, 0, cuda_stream_>>>(
         y_plane,
         uv_plane,
@@ -414,7 +426,7 @@ bool VideoReader::convertFrameToMatGPU(AVFrame* src, cv::Mat& out) {
         LOG_ERROR("VideoReader", std::string("nv12ToBgrKernel launch failed: ") + cudaGetErrorString(err));
         return false;
     }
-    
+
     out.create(src->height, src->width, CV_8UC3);
     err = cudaMemcpy2DAsync(out.data,
                             out.step,
@@ -433,6 +445,11 @@ bool VideoReader::convertFrameToMatGPU(AVFrame* src, cv::Mat& out) {
         LOG_ERROR("VideoReader", std::string("cudaStreamSynchronize failed: ") + cudaGetErrorString(err));
         return false;
     }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    LOG_DEBUG("VideoReader", std::string("GPU conversion took: ") + std::to_string(duration.count()) + " us");
+
     return true;
 }
 
