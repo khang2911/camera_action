@@ -64,50 +64,52 @@ cv::Mat Preprocessor::preprocess(const cv::Mat& frame) {
     return normalized;
 }
 
-void Preprocessor::preprocessToFloat(const cv::Mat& frame, std::vector<float>& output) {
-    // OPTIMIZED preprocessing: combine operations to reduce memory allocations and copies
-    // Use OpenCV's optimized operations where possible, then direct memory copy
-    
-    // Step 1: Convert BGR to RGB (in-place if possible, but cvtColor requires output)
+namespace {
+struct ScratchBuffers {
     cv::Mat rgb;
-    cv::cvtColor(frame, rgb, cv::COLOR_BGR2RGB);
+    cv::Mat resized;
+    cv::Mat padded;
+    cv::Mat normalized;
+    std::vector<cv::Mat> channels;
+};
+}  // namespace
+
+void Preprocessor::preprocessToFloat(const cv::Mat& frame, std::vector<float>& output) {
+    static thread_local ScratchBuffers scratch;
     
-    int h = rgb.rows;
-    int w = rgb.cols;
+    // Step 1: Convert BGR to RGB
+    cv::cvtColor(frame, scratch.rgb, cv::COLOR_BGR2RGB);
+    
+    int h = scratch.rgb.rows;
+    int w = scratch.rgb.cols;
     float scale = std::min(static_cast<float>(target_width_) / w,
                           static_cast<float>(target_height_) / h);
-    int new_w = static_cast<int>(w * scale);
-    int new_h = static_cast<int>(h * scale);
+    int new_w = std::max(1, static_cast<int>(std::round(w * scale)));
+    int new_h = std::max(1, static_cast<int>(std::round(h * scale)));
     int pad_w = (target_width_ - new_w) / 2;
     int pad_h = (target_height_ - new_h) / 2;
     
-    // Step 2: Resize directly to target size with padding using copyMakeBorder
-    // This combines resize + padding in fewer operations
-    cv::Mat resized;
-    cv::resize(rgb, resized, cv::Size(new_w, new_h), 0, 0, cv::INTER_LINEAR);
+    // Step 2: Resize
+    cv::resize(scratch.rgb, scratch.resized, cv::Size(new_w, new_h), 0, 0, cv::INTER_LINEAR);
     
-    // Step 3: Add padding using copyMakeBorder (more efficient than Mat::zeros + copyTo)
-    cv::Mat padded;
-    cv::copyMakeBorder(resized, padded, pad_h, target_height_ - new_h - pad_h,
-                       pad_w, target_width_ - new_w - pad_w, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
+    // Step 3: Add padding (reuse buffer)
+    scratch.padded.create(target_height_, target_width_, CV_8UC3);
+    scratch.padded.setTo(cv::Scalar(0, 0, 0));
+    scratch.resized.copyTo(scratch.padded(cv::Rect(pad_w, pad_h, new_w, new_h)));
     
-    // Step 4: Normalize and convert to float in one step
-    cv::Mat normalized;
-    padded.convertTo(normalized, CV_32F, 1.0f / 255.0f);
+    // Step 4: Normalize to float
+    scratch.normalized.create(target_height_, target_width_, CV_32FC3);
+    scratch.padded.convertTo(scratch.normalized, CV_32F, 1.0f / 255.0f);
     
-    // Step 5: Convert to CHW format efficiently
-    // Split channels and copy directly to output vector
-    std::vector<cv::Mat> channels;
-    cv::split(normalized, channels);
+    // Step 5: Convert to CHW
+    scratch.channels.resize(3);
+    cv::split(scratch.normalized, scratch.channels);
     
-    const size_t total_size = static_cast<size_t>(target_width_) * target_height_ * 3;
-    output.resize(total_size);
-    
-    // Copy channels to output in CHW format (much faster than pixel-by-pixel)
-    size_t csize = static_cast<size_t>(target_height_) * target_width_;
+    const size_t csize = static_cast<size_t>(target_width_) * target_height_;
+    output.resize(csize * 3);
     for (int c = 0; c < 3; ++c) {
-        const float* data = channels[c].ptr<float>();
-        std::memcpy(output.data() + c * csize, data, csize * sizeof(float));
+        const float* data = scratch.channels[c].ptr<float>();
+        std::memcpy(output.data() + static_cast<size_t>(c) * csize, data, csize * sizeof(float));
     }
 }
 
