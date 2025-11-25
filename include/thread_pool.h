@@ -40,8 +40,7 @@ struct EngineGroup {
         : engine_id(id), engine_path(path), engine_name(name), num_detectors(num_det),
           input_width(in_w), input_height(in_h), roi_cropping(roi) {
         tensor_elements = static_cast<size_t>(input_width) * input_height * 3;
-        // Increased queue size to reduce blocking when preprocessors are faster than detectors
-        frame_queue = std::make_unique<FrameQueue>(1000);
+        frame_queue = std::make_unique<FrameQueue>(100);
         preprocessor = std::make_unique<Preprocessor>(input_width, input_height);
     }
     

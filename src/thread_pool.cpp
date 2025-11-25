@@ -788,24 +788,10 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
             frame_count++;
             global_frame_number++;
             
-            // Print progress every 20 frames to show continuous operation
-            if (frame_count % 20 == 0) {
-                LOG_INFO("Reader", "[RUNNING] Reader " + std::to_string(reader_id) + 
-                         " processing video (video_key='" + video_key + "')" + 
-                         " - Frame " + std::to_string(frame_count) + " read and queued");
-            }
-            
-            // Also log every 100 frames with more detail
-            if (frame_count % 100 == 0) {
-                LOG_DEBUG("Reader", "Reader " + std::to_string(reader_id) + 
-                         " processed " + std::to_string(frame_count) + " frames from video (video_key='" + 
-                         video_key + "')");
-            }
+            // Removed frequent logging - too expensive in hot path
         }
         
-        // Reduced logging - only log completion for debugging
-        LOG_DEBUG("Reader", "Reader " + std::to_string(reader_id) + 
-                 " finished video (" + std::to_string(frame_count) + " frames)");
+        // Removed logging - too expensive
     
     // Always mark reading complete when video processing finishes (even if not finalize_message)
     // This ensures reading_completed is set as soon as possible, not waiting for all videos
@@ -832,13 +818,14 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             continue;
         }
         
-        auto preprocess_start = std::chrono::steady_clock::now();
-        
         // Process all engines sequentially (std::async overhead was too high)
         // The multiple preprocessor threads already provide parallelism
         // OPTIMIZATION: Pre-compute dimensions once to avoid repeated access
         int true_original_width = raw_frame.true_original_width > 0 ? raw_frame.true_original_width : raw_frame.original_width;
         int true_original_height = raw_frame.true_original_height > 0 ? raw_frame.true_original_height : raw_frame.original_height;
+        
+        // OPTIMIZATION: Batch timing - only measure once per frame across all engines
+        auto preprocess_start = std::chrono::steady_clock::now();
         
         for (auto& engine_group : engine_groups_) {
             cv::Mat frame_to_process = raw_frame.frame;
@@ -879,19 +866,7 @@ void ThreadPool::preprocessorWorker(int worker_id) {
                     roi_offset_x = x1;
                     roi_offset_y = y1;
                     
-                    // Reduced logging - only log once per worker, not per frame
-                    static thread_local bool logged_roi_crop = false;
-                    if (!logged_roi_crop && worker_id == 0) {
-                        LOG_DEBUG("Preprocessor", "ROI cropping enabled for engine " + engine_group->engine_name);
-                        logged_roi_crop = true;
-                    }
-                } else {
-                    // Reduced logging - only log once per worker
-                    static thread_local bool logged_roi_missing = false;
-                    if (!logged_roi_missing && worker_id == 0) {
-                        LOG_DEBUG("Preprocessor", "ROI cropping enabled but no ROI metadata available");
-                        logged_roi_missing = true;
-                    }
+                    // Removed logging - too expensive in hot path
                 }
             }
             
@@ -931,6 +906,7 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             engine_group->frame_queue->push(processed);
         }
         
+        // OPTIMIZATION: Batch timing update - only update stats once per frame
         auto preprocess_end = std::chrono::steady_clock::now();
         auto preprocess_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             preprocess_end - preprocess_start).count();
@@ -1010,15 +986,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 if (!engine_group->frame_queue->pop(frame_data, 100)) {
                     if (stop_flag_) break;
                     
-                    // Log waiting status periodically (every 5 seconds)
-                    auto now = std::chrono::steady_clock::now();
-                    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_wait_log).count();
-                    if (elapsed >= 5) {
-                        LOG_INFO("Detector", "[WAITING] Detector " + std::to_string(detector_id) + 
-                                 " (" + engine_group->engine_name + ") waiting for frames... " +
-                                 "(Queue size: " + std::to_string(engine_group->frame_queue->size()) + ")");
-                        last_wait_log = now;
-                    }
+                    // Removed waiting log - too expensive, queue size check involves mutex
                     continue;
                 }
                 
@@ -1155,13 +1123,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     }
                     processed_count += batch_size;
                     
-                    // Print progress every 10 batches to show continuous operation
-                    if (processed_count % (10 * batch_size) == 0) {
-                        LOG_INFO("Detector", "[RUNNING] Detector " + std::to_string(detector_id) + 
-                                 " (" + engine_group->engine_name + ") processed " + 
-                                 std::to_string(processed_count) + " frames (batch_size=" + 
-                                 std::to_string(batch_size) + ")");
-                    }
+                    // Removed frequent logging - too expensive in hot path
                 } else {
                     {
                         std::lock_guard<std::mutex> lock(stats_.stats_mutex);
@@ -1177,15 +1139,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             if (!engine_group->frame_queue->pop(frame_data, 100)) {
                 if (stop_flag_) break;
                 
-                // Log waiting status periodically (every 5 seconds)
-                auto now = std::chrono::steady_clock::now();
-                auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_wait_log).count();
-                if (elapsed >= 5) {
-                    LOG_INFO("Detector", "[WAITING] Detector " + std::to_string(detector_id) + 
-                             " (" + engine_group->engine_name + ") waiting for frames... " +
-                             "(Queue size: " + std::to_string(engine_group->frame_queue->size()) + ")");
-                    last_wait_log = now;
-                }
+                // Removed waiting log - too expensive, queue size check involves mutex
                 continue;
             }
             
@@ -1304,20 +1258,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 }
                 processed_count++;
                 
-                // Print progress every 10 frames to show continuous operation
-                if (processed_count % 10 == 0) {
-                    LOG_INFO("Detector", "[RUNNING] Detector " + std::to_string(detector_id) + 
-                             " (" + engine_group->engine_name + ") processed " + 
-                             std::to_string(processed_count) + " frames - " +
-                             "Video: " + std::to_string(frame_data.video_id) + 
-                             ", Frame: " + std::to_string(frame_data.frame_number));
-                }
-                
-                LOG_DEBUG("Detector", "Detection completed: " + output_path + 
-                         " (Video: " + std::to_string(frame_data.video_id) + 
-                         ", Frame: " + std::to_string(frame_data.frame_number) + 
-                         ", Engine: " + engine_group->engine_name +
-                         ", Detector: " + std::to_string(detector_id) + ")");
+                // Removed expensive logging - string operations accumulate overhead over time
             } else {
                 {
                     std::lock_guard<std::mutex> lock(stats_.stats_mutex);
@@ -1330,9 +1271,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             
             // Also log every 50 frames with summary
             if (processed_count % 50 == 0) {
-                LOG_DEBUG("Detector", "Detector " + std::to_string(detector_id) + 
-                         " (" + engine_group->engine_name + ") processed " + 
-                         std::to_string(processed_count) + " frames");
+                // Removed expensive logging - string operations accumulate overhead
             }
         }
     }
@@ -1519,29 +1458,11 @@ void ThreadPool::monitorWorker() {
         }
         stats_oss << std::endl;
         
-        // Queue sizes
-        stats_oss << "Queue Sizes: ";
-        for (size_t i = 0; i < engine_groups_.size(); ++i) {
-            stats_oss << engine_groups_[i]->engine_name << "=" 
-                      << engine_groups_[i]->frame_queue->size();
-            if (i < engine_groups_.size() - 1) stats_oss << ", ";
-        }
-        stats_oss << std::endl;
+        // OPTIMIZATION: Removed queue size checks - they involve mutex locks which can block
+        // Queue sizes are not critical for monitoring and cause performance degradation
 
-        if (use_redis_queue_ && input_queue_) {
-            // Use try-catch and timeout to prevent blocking the monitor thread
-            try {
-                int input_len = input_queue_->getQueueLength(input_queue_name_);
-                stats_oss << "Redis Input Queue (" << input_queue_name_ << "): " << input_len;
-                if (output_queue_) {
-                    int output_len = output_queue_->getQueueLength(output_queue_name_);
-                    stats_oss << " | Redis Output Queue (" << output_queue_name_ << "): " << output_len;
-                }
-            } catch (const std::exception& e) {
-                stats_oss << "Redis Queue (error getting length: " << e.what() << ")";
-            }
-            stats_oss << std::endl;
-        }
+        // OPTIMIZATION: Removed Redis queue length checks - they involve network operations
+        // that can block and degrade performance over time. These are not critical for monitoring.
         
         // Per-engine statistics
         {
@@ -1745,8 +1666,7 @@ void ThreadPool::markFrameProcessed(const std::string& message_key, const std::s
         
         // If message was already pushed, don't process further updates
         if (status.message_pushed) {
-            LOG_DEBUG("RedisOutput", "markFrameProcessed: message_key '" + message_key + 
-                     "' already pushed, skipping update");
+            // Removed logging - too expensive in hot path
             return;
         }
         if (!output_path.empty()) {
@@ -1806,30 +1726,7 @@ void ThreadPool::markVideoReadingComplete(const std::string& message_key) {
             return;  // Already marked, skip
         }
         
-        // Only log status occasionally (every 10th call) to reduce overhead
-        static std::atomic<int> log_counter{0};
-        bool should_log_status = (++log_counter % 10 == 0);
-        
-        if (should_log_status) {
-            std::ostringstream status_oss;
-            status_oss << "pending_counts: ";
-            bool first = true;
-            for (const auto& kv : it->second.pending_counts) {
-                if (!first) status_oss << ", ";
-                status_oss << kv.first << "=" << kv.second;
-                first = false;
-            }
-            status_oss << " | has_outputs: ";
-            bool has_outputs = false;
-            for (const auto& kv : it->second.detector_outputs) {
-                if (!kv.second.empty()) {
-                    has_outputs = true;
-                    break;
-                }
-            }
-            status_oss << (has_outputs ? "yes" : "no");
-            LOG_DEBUG("RedisOutput", "markVideoReadingComplete: message_key='" + message_key + "' status: " + status_oss.str());
-        }
+        // Removed expensive logging - string building operations accumulate overhead
         
         it->second.reading_completed = true;
         message_to_push = tryPushOutputLocked(message_key, it->second);
