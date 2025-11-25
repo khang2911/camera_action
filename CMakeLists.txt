@@ -161,7 +161,7 @@ include_directories(
 # Source files
 set(SOURCES
     src/main.cpp
-    src/video_reader.cpp
+    src/video_reader.cu
     src/preprocessor.cpp
     src/yolo_detector.cpp
     src/thread_pool.cpp
