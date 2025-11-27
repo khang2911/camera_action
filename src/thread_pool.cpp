@@ -732,8 +732,17 @@ std::vector<VideoClip> ThreadPool::parseJsonToVideoClips(const std::string& json
             }
         }
         
-        double start_ts = ConfigParser::parseTimestamp(getString(raw_alarm, "video_start_time"));
-        double end_ts = ConfigParser::parseTimestamp(getString(raw_alarm, "video_end_time"));
+        std::string video_start_time_str = getString(raw_alarm, "video_start_time");
+        std::string video_end_time_str = getString(raw_alarm, "video_end_time");
+        double start_ts = ConfigParser::parseTimestamp(video_start_time_str);
+        double end_ts = ConfigParser::parseTimestamp(video_end_time_str);
+        
+        // Log parsed time window for debugging
+        LOG_DEBUG("Reader", "Parsed time window: video_start_time='" + video_start_time_str + 
+                 "' -> " + std::to_string(start_ts) +
+                 ", video_end_time='" + video_end_time_str + 
+                 "' -> " + std::to_string(end_ts) +
+                 ", duration=" + std::to_string(end_ts - start_ts) + "s");
         
         std::string message_key = !tracking_key.empty() ? tracking_key : buildMessageKey(serial, record_id);
 
@@ -816,6 +825,13 @@ std::vector<VideoClip> ThreadPool::parseJsonToVideoClips(const std::string& json
                         clip.duration_seconds = 0.0;
                     }
                 }
+                
+                // Log clip time info for debugging
+                LOG_DEBUG("Reader", "Clip " + std::to_string(i) + ": moment_time=" + std::to_string(clip.moment_time) +
+                         ", duration=" + std::to_string(clip.duration_seconds) +
+                         ", start_ts=" + std::to_string(clip.start_timestamp) +
+                         ", end_ts=" + std::to_string(clip.end_timestamp) +
+                         ", has_time_window=" + (clip.has_time_window ? "true" : "false"));
             }
             
             clips.push_back(clip);
@@ -924,6 +940,11 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
         }
         
         // Removed logging - too expensive
+    
+    // Log frame count for this video
+    LOG_INFO("Reader", "Reader " + std::to_string(reader_id) + " finished video " + video_key +
+             ": frames_read=" + std::to_string(frame_count) +
+             ", path=" + clip.path);
     
     // Update total frames read for this message (for validation)
     if (use_redis_queue_ && output_queue_ && !message_key.empty()) {

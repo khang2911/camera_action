@@ -221,8 +221,22 @@ bool VideoReader::initialize(const VideoClip* clip) {
         return false;
     }
     initializeMetadata();
-    LOG_INFO("VideoReader", std::string("Initialized reader for ") + video_path_ +
-                 (use_hw_decode_ ? " [NVDEC]" : " [CPU]"));
+    
+    std::string decoder_type = use_hw_decode_ ? " [NVDEC]" : " [CPU]";
+    LOG_INFO("VideoReader", std::string("Initialized reader for ") + video_path_ + decoder_type);
+    
+    // Log time window information for debugging
+    if (has_clip_metadata_ && clip_.has_time_window) {
+        double expected_frames = (clip_.end_timestamp - clip_.start_timestamp) * fps_;
+        LOG_INFO("VideoReader", "Time window: start_ts=" + std::to_string(clip_.start_timestamp) +
+                 ", end_ts=" + std::to_string(clip_.end_timestamp) +
+                 ", moment_time=" + std::to_string(clip_.moment_time) +
+                 ", duration=" + std::to_string(clip_.duration_seconds) +
+                 ", fps=" + std::to_string(fps_) +
+                 ", expected_frames~" + std::to_string(static_cast<int>(expected_frames)) +
+                 ", seek_to_frame=" + std::to_string(total_frames_read_));
+    }
+    
     if (options_.enable_prefetch) {
         startPrefetchThread();
     }
@@ -508,11 +522,30 @@ bool VideoReader::readFrame(cv::Mat& frame) {
             
             if (has_clip_metadata_ && clip_.has_time_window) {
                 double effective_fps = (fps_ > 0.0) ? fps_ : 30.0;
-                double current_ts = clip_.moment_time + static_cast<double>(total_frames_read_) / effective_fps;
+                // Use (total_frames_read_ - 1) because we already incremented it above
+                // This gives us the timestamp of the CURRENT frame, not the next one
+                double current_ts = clip_.moment_time + static_cast<double>(total_frames_read_ - 1) / effective_fps;
+                
+                // Debug logging for first few frames to verify time filtering
+                static thread_local int time_filter_log_count = 0;
+                if (time_filter_log_count < 5) {
+                    LOG_DEBUG("VideoReader", "Time filter: frame=" + std::to_string(total_frames_read_ - 1) +
+                             ", current_ts=" + std::to_string(current_ts) +
+                             ", start_ts=" + std::to_string(clip_.start_timestamp) +
+                             ", end_ts=" + std::to_string(clip_.end_timestamp) +
+                             ", moment_time=" + std::to_string(clip_.moment_time) +
+                             ", fps=" + std::to_string(effective_fps));
+                    time_filter_log_count++;
+                }
+                
                 if (current_ts < clip_.start_timestamp) {
                     continue;  // Skip this frame, try next one
                 }
                 if (current_ts > clip_.end_timestamp) {
+                    LOG_DEBUG("VideoReader", "Reached end of time window at frame " + 
+                             std::to_string(total_frames_read_ - 1) + 
+                             ", current_ts=" + std::to_string(current_ts) +
+                             ", end_ts=" + std::to_string(clip_.end_timestamp));
                     return false;  // Past end time, done with this clip
                 }
             }
