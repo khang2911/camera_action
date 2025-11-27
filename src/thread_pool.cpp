@@ -826,14 +826,20 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
             // Store ROI offset for scaling detections back to true original frame
             frame_data.roi_offset_x = clip.has_roi ? clip.roi_offset_x : 0;
             frame_data.roi_offset_y = clip.has_roi ? clip.roi_offset_y : 0;
-            // CRITICAL: Use timeout push to prevent indefinite blocking
-            // If queue is full, wait briefly (100ms) then use blocking push as fallback
-            // This prevents readers from blocking indefinitely while still ensuring frames aren't lost
+            // Use timeout push to prevent indefinite blocking
+            // Increased timeout to 500ms to allow more buffering before blocking
+            // This prevents readers from blocking too quickly while still ensuring frames are processed
             if (raw_frame_queue_) {
-                if (!raw_frame_queue_->push(frame_data, 100)) {
-                    // Queue still full after timeout - use blocking push to ensure frame is not lost
-                    // This indicates preprocessors are very slow, but we must process all frames
-                    raw_frame_queue_->push(frame_data);
+                if (!raw_frame_queue_->push(frame_data, 500)) {
+                    // Queue still full after longer timeout - this indicates a serious bottleneck
+                    // Log warning but still push (blocking) to ensure frame is not lost
+                    static thread_local int slow_push_count = 0;
+                    if (++slow_push_count % 100 == 0) {
+                        LOG_WARNING("Reader", "Reader " + std::to_string(reader_id) + 
+                                   " queue push slow (" + std::to_string(slow_push_count) + 
+                                   " times) - preprocessors may be bottleneck");
+                    }
+                    raw_frame_queue_->push(frame_data);  // Blocking push as last resort
                 }
             }
             

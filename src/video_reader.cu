@@ -379,8 +379,9 @@ bool VideoReader::readFrame(cv::Mat& frame) {
         }
         
         // Decoder needs more input. Try to send packets.
-        // For hardware decoders, try sending a couple packets to keep decoder busy.
-        int max_packets = use_hw_decode_ ? 2 : 1;
+        // For hardware decoders, send more packets to keep decoder busy and hide I/O latency
+        // This is especially important for network storage where I/O can be slow
+        int max_packets = use_hw_decode_ ? 8 : 1;
         bool sent_any = false;
         
         for (int i = 0; i < max_packets && !end_of_stream_; ++i) {
