@@ -180,7 +180,10 @@ bool VideoReader::setupDecoder() {
     }
     
     codec_ctx_->pkt_timebase = video_stream_->time_base;
-    codec_ctx_->thread_count = 1;
+    codec_ctx_->thread_count = 1;  // Hardware decoding doesn't use CPU threads
+    
+    // For hardware decoding, we want to use async decoding
+    codec_ctx_->extra_hw_frames = 8;  // Allow more buffering for async decode
     
     if (initHardwareDecoder(decoder)) {
         codec_ctx_->opaque = this;
@@ -352,11 +355,13 @@ bool VideoReader::receiveFrame(cv::Mat& out) {
             return false;
         }
         
+        // Frame format check - only log first few frames
         static thread_local int frame_count = 0;
-        if (use_hw_decode_ && frame_count++ < 10) {
-            LOG_INFO("VideoReader", std::string("Received frame format: ") + std::to_string(frame_->format) + 
+        if (use_hw_decode_ && frame_count++ == 0) {
+            LOG_INFO("VideoReader", std::string("First frame format: ") + std::to_string(frame_->format) + 
                      ", expected hw format: " + std::to_string(hw_pix_fmt_) + 
-                     ", match: " + (frame_->format == hw_pix_fmt_ ? "YES" : "NO"));
+                     ", match: " + (frame_->format == hw_pix_fmt_ ? "YES" : "NO") +
+                     ", hw_frames_ctx: " + (frame_->hw_frames_ctx ? "YES" : "NO"));
         }
         
         if (convertFrameToMat(frame_, out)) {
@@ -373,7 +378,8 @@ bool VideoReader::convertFrameToMat(AVFrame* src, cv::Mat& out) {
     if (use_hw_decode_ && src->format == hw_pix_fmt_) {
         if (convertFrameToMatGPU(src, out)) {
             gpu_count++;
-            if (gpu_count % 100 == 0 && gpu_count > last_log_frame) {
+            // Only log every 1000 frames to reduce overhead
+            if (gpu_count % 1000 == 0 && gpu_count > last_log_frame) {
                 LOG_INFO("VideoReader", std::string("GPU conversion stats - GPU: ") + std::to_string(gpu_count) + 
                          ", CPU: " + std::to_string(cpu_count) + ", GPU%: " + 
                          std::to_string(100.0 * gpu_count / (gpu_count + cpu_count)));
@@ -384,15 +390,15 @@ bool VideoReader::convertFrameToMat(AVFrame* src, cv::Mat& out) {
         LOG_ERROR("VideoReader", "GPU conversion failed, falling back to CPU path");
     } else {
         static thread_local int format_mismatch_count = 0;
-        if (use_hw_decode_ && format_mismatch_count++ < 20) {
-            LOG_INFO("VideoReader", std::string("Frame NOT in hardware format! hw_decode: ") + 
+        if (use_hw_decode_ && format_mismatch_count++ < 5) {
+            LOG_WARNING("VideoReader", std::string("Frame NOT in hardware format! hw_decode: ") + 
                      std::to_string(use_hw_decode_) + ", format: " + std::to_string(src->format) + 
                      ", expected: " + std::to_string(hw_pix_fmt_));
         }
     }
     
     cpu_count++;
-    if (cpu_count % 100 == 0 && cpu_count > last_log_frame) {
+    if (cpu_count % 1000 == 0 && cpu_count > last_log_frame) {
         LOG_INFO("VideoReader", std::string("CPU conversion stats - GPU: ") + std::to_string(gpu_count) + 
                  ", CPU: " + std::to_string(cpu_count) + ", GPU%: " + 
                  std::to_string(100.0 * gpu_count / (gpu_count + cpu_count)));
@@ -445,8 +451,6 @@ bool VideoReader::ensureCudaBuffer(int width, int height) {
 }
 
 bool VideoReader::convertFrameToMatGPU(AVFrame* src, cv::Mat& out) {
-    auto start = std::chrono::high_resolution_clock::now();
-
     if (!ensureCudaBuffer(src->width, src->height)) {
         return false;
     }
@@ -459,9 +463,6 @@ bool VideoReader::convertFrameToMatGPU(AVFrame* src, cv::Mat& out) {
     dim3 block(32, 8);
     dim3 grid((src->width + block.x - 1) / block.x,
               (src->height + block.y - 1) / block.y);
-
-    LOG_DEBUG("VideoReader", std::string("GPU conversion: ") + std::to_string(src->width) + "x" +
-               std::to_string(src->height) + ", grid: " + std::to_string(grid.x) + "x" + std::to_string(grid.y));
 
     nv12ToBgrKernel<<<grid, block, 0, cuda_stream_>>>(
         y_plane,
@@ -491,15 +492,19 @@ bool VideoReader::convertFrameToMatGPU(AVFrame* src, cv::Mat& out) {
         LOG_ERROR("VideoReader", std::string("cudaMemcpy2DAsync failed: ") + cudaGetErrorString(err));
         return false;
     }
-    err = cudaStreamSynchronize(cuda_stream_);
-    if (err != cudaSuccess) {
-        LOG_ERROR("VideoReader", std::string("cudaStreamSynchronize failed: ") + cudaGetErrorString(err));
+    // Use cudaStreamQuery to check completion without blocking, then sync only if needed
+    cudaError_t query_err = cudaStreamQuery(cuda_stream_);
+    if (query_err == cudaErrorNotReady) {
+        // Stream is still running, must sync
+        err = cudaStreamSynchronize(cuda_stream_);
+        if (err != cudaSuccess) {
+            LOG_ERROR("VideoReader", std::string("cudaStreamSynchronize failed: ") + cudaGetErrorString(err));
+            return false;
+        }
+    } else if (query_err != cudaSuccess) {
+        LOG_ERROR("VideoReader", std::string("cudaStreamQuery failed: ") + cudaGetErrorString(err));
         return false;
     }
-
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    LOG_DEBUG("VideoReader", std::string("GPU conversion took: ") + std::to_string(duration.count()) + " us");
 
     return true;
 }
