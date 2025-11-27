@@ -346,8 +346,36 @@ bool VideoReader::readFrame(cv::Mat& frame) {
     while (true) {
         // Try to receive a frame first
         if (receiveFrame(frame)) {
-            // Successfully received a frame
-            break;
+            // Successfully received a frame - process it
+            ++frame_number_;
+            ++total_frames_read_;
+            actual_frame_position_ = static_cast<int>(total_frames_read_ - 1);
+            
+            original_width_ = frame.cols;
+            original_height_ = frame.rows;
+            
+            if (has_clip_metadata_ && clip_.has_roi && !frame.empty()) {
+                int x1 = static_cast<int>(clip_.roi_x1 * original_width_);
+                int y1 = static_cast<int>(clip_.roi_y1 * original_height_);
+                clip_.roi_offset_x = std::max(0, std::min(x1, original_width_ - 1));
+                clip_.roi_offset_y = std::max(0, std::min(y1, original_height_ - 1));
+            } else if (has_clip_metadata_) {
+                clip_.roi_offset_x = 0;
+                clip_.roi_offset_y = 0;
+            }
+            
+            if (has_clip_metadata_ && clip_.has_time_window) {
+                double effective_fps = (fps_ > 0.0) ? fps_ : 30.0;
+                double current_ts = clip_.moment_time + static_cast<double>(total_frames_read_) / effective_fps;
+                if (current_ts < clip_.start_timestamp) {
+                    continue;  // Skip this frame, try next one
+                }
+                if (current_ts > clip_.end_timestamp) {
+                    return false;  // Past end time, done with this clip
+                }
+            }
+            
+            return true;  // Frame is ready
         }
         
         // Decoder needs more input. Try to send packets.
@@ -372,36 +400,6 @@ bool VideoReader::readFrame(cv::Mat& frame) {
         
         // If we sent packets or got EAGAIN, loop back to try receiving frames
         continue;
-        
-        ++frame_number_;
-        ++total_frames_read_;
-        actual_frame_position_ = static_cast<int>(total_frames_read_ - 1);
-        
-        original_width_ = frame.cols;
-        original_height_ = frame.rows;
-        
-        if (has_clip_metadata_ && clip_.has_roi && !frame.empty()) {
-            int x1 = static_cast<int>(clip_.roi_x1 * original_width_);
-            int y1 = static_cast<int>(clip_.roi_y1 * original_height_);
-            clip_.roi_offset_x = std::max(0, std::min(x1, original_width_ - 1));
-            clip_.roi_offset_y = std::max(0, std::min(y1, original_height_ - 1));
-        } else if (has_clip_metadata_) {
-            clip_.roi_offset_x = 0;
-            clip_.roi_offset_y = 0;
-        }
-        
-        if (has_clip_metadata_ && clip_.has_time_window) {
-            double effective_fps = (fps_ > 0.0) ? fps_ : 30.0;
-            double current_ts = clip_.moment_time + static_cast<double>(total_frames_read_) / effective_fps;
-            if (current_ts < clip_.start_timestamp) {
-                continue;
-            }
-            if (current_ts > clip_.end_timestamp) {
-                return false;
-            }
-        }
-        
-        return true;
     }
 }
 
