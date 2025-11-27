@@ -15,6 +15,7 @@
 #include <future>
 #include <fstream>
 #include <atomic>
+#include <deque>
 #include <yaml-cpp/yaml.h>
 #include <cuda_runtime_api.h>
 
@@ -942,46 +943,81 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
 void ThreadPool::preprocessorWorker(int worker_id) {
     LOG_INFO("Preprocessor", "Preprocess dispatcher thread " + std::to_string(worker_id) + " started");
     
+    // Each dispatcher has its own pending queue per group to avoid blocking other groups
+    struct PendingFrame {
+        SharedPreprocessGroup* group;
+        FrameData frame;
+    };
+    std::vector<std::deque<PendingFrame>> pending_per_group;
+    pending_per_group.resize(preprocess_groups_.size());
+    
+    const size_t max_pending_per_group = 50;  // Limit pending frames per group
+    
     while (!stop_flag_) {
+        // First, try to drain pending frames for each group (non-blocking)
+        for (size_t g = 0; g < preprocess_groups_.size(); ++g) {
+            auto& pending = pending_per_group[g];
+            while (!pending.empty()) {
+                auto& pf = pending.front();
+                if (pf.group && pf.group->queue && pf.group->queue->push(pf.frame, 1)) {
+                    pending.pop_front();
+                } else {
+                    break;  // Queue still full, try later
+                }
+            }
+        }
+        
+        // Check if any group has too many pending frames - if so, wait a bit
+        bool any_backpressure = false;
+        for (size_t g = 0; g < preprocess_groups_.size(); ++g) {
+            if (pending_per_group[g].size() >= max_pending_per_group) {
+                any_backpressure = true;
+                break;
+            }
+        }
+        
+        if (any_backpressure) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            continue;  // Don't pop new frame, drain pending first
+        }
+        
+        // Pop a new frame from raw queue
         FrameData raw_frame;
-        if (!raw_frame_queue_ || !raw_frame_queue_->pop(raw_frame, 100)) {
+        if (!raw_frame_queue_ || !raw_frame_queue_->pop(raw_frame, 50)) {
             if (stop_flag_) break;
             continue;
         }
         
-        // Dispatch copies of the frame to each shared preprocess queue without blocking
-        struct PendingFrame {
-            SharedPreprocessGroup* group;
-            FrameData frame;
-        };
-        std::vector<PendingFrame> pending;
-        pending.reserve(preprocess_groups_.size());
-        
-        for (auto& shared_group_ptr : preprocess_groups_) {
+        // Try to push to each group's queue, queue failures go to pending
+        for (size_t g = 0; g < preprocess_groups_.size(); ++g) {
+            auto& shared_group_ptr = preprocess_groups_[g];
             if (!shared_group_ptr || !shared_group_ptr->queue) {
                 continue;
             }
             auto* shared_group = shared_group_ptr.get();
-            PendingFrame pf;
-            pf.group = shared_group;
-            pf.frame = raw_frame;  // cv::Mat uses reference counting
             
-            if (!shared_group->queue->push(pf.frame, 5)) {
-                pending.push_back(std::move(pf));
+            FrameData frame_copy = raw_frame;  // cv::Mat uses reference counting
+            
+            // Try quick push (1ms timeout)
+            if (!shared_group->queue->push(frame_copy, 1)) {
+                // Queue full - add to this group's pending list
+                PendingFrame pf;
+                pf.group = shared_group;
+                pf.frame = std::move(frame_copy);
+                pending_per_group[g].push_back(std::move(pf));
             }
         }
-        
+    }
+    
+    // Drain remaining pending frames on shutdown
+    for (size_t g = 0; g < preprocess_groups_.size(); ++g) {
+        auto& pending = pending_per_group[g];
         while (!pending.empty() && !stop_flag_) {
-            for (auto it = pending.begin(); it != pending.end(); ) {
-                if (it->group->queue->push(it->frame, 5)) {
-                    it = pending.erase(it);
-                } else {
-                    ++it;
-                }
-            }
-            
-            if (!pending.empty()) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            auto& pf = pending.front();
+            if (pf.group && pf.group->queue && pf.group->queue->push(pf.frame, 10)) {
+                pending.pop_front();
+            } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
             }
         }
     }

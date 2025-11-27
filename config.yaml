@@ -16,7 +16,7 @@ models:
     decode_gpu_id: 1                      # GPU used for NVDEC (optional)
     roi_cropping: true                   # Enable ROI cropping for this engine (uses config.box from video_list.jsonl)
   - path: "/workspace/khangtd6/longchau_vaccine/action_c/weights/hand/2025-11-18_batch_16_864x864_fp16.engine"   # Path to TensorRT engine file
-    num_detectors: 1                      # Number of detector threads for this engine
+    num_detectors: 2                      # Number of detector threads for this engine (increased - was bottleneck)
     name: "hand"                        # Optional: name identifier for output files
     type: "detection"                     # Model type: "detection" or "pose"
     batch_size: 16                         # Batch size for inference (must match engine batch size)
@@ -28,7 +28,7 @@ models:
     decode_gpu_id: 1
     roi_cropping: false                   # Enable ROI cropping for this engine (uses config.box from video_list.jsonl)
   - path: "/workspace/khangtd6/longchau_vaccine/action_c/weights/pose/2025-11-18_batch_16_640x640_fp16.engine"   # Path to TensorRT engine file
-    num_detectors: 1                      # Number of detector threads for this engine
+    num_detectors: 2                      # Number of detector threads for this engine (increased - pose is slowest)
     name: "pose"                        # Optional: name identifier for output files
     type: "pose"                     # Model type: "detection" or "pose"
     batch_size: 16                         # Batch size for inference (must match engine batch size)
@@ -59,8 +59,8 @@ videos:
 
 # Thread Configuration
 threads:
-  num_readers: 3      # Number of reader/preprocessor threads (CPU)
-  num_preprocessors: 10  # Number of preprocessing workers (CPU)
+  num_readers: 2      # Number of reader threads (keep low to avoid NVDEC OOM)
+  num_preprocessors: 30  # Number of preprocessing workers (need ~3x readers since 3 engines)
 
 # Reader tuning (FFmpeg + packet scheduling)
 reader:
