@@ -133,6 +133,8 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
                 if (node["conf_threshold"]) cfg.conf_threshold = node["conf_threshold"].as<float>();
                 if (node["nms_threshold"]) cfg.nms_threshold = node["nms_threshold"].as<float>();
                 if (node["gpu_id"]) cfg.gpu_id = node["gpu_id"].as<int>();
+                if (node["decode_gpu_id"]) cfg.decode_gpu_id = node["decode_gpu_id"].as<int>();
+                if (node["decode_gpu_id"]) cfg.decode_gpu_id = node["decode_gpu_id"].as<int>();
                 if (node["roi_cropping"]) {
                     try {
                         cfg.roi_cropping = node["roi_cropping"].as<bool>();

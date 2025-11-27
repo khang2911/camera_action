@@ -13,6 +13,7 @@ models:
     conf_threshold: 0.2                  # Confidence threshold (0.0-1.0)
     nms_threshold: 0.55                  # NMS IoU threshold (0.0-1.0)
     gpu_id: 0                             # GPU device ID (0, 1, 2, etc.)
+    decode_gpu_id: 1                      # GPU used for NVDEC (optional)
     roi_cropping: true                   # Enable ROI cropping for this engine (uses config.box from video_list.jsonl)
   - path: "/workspace/khangtd6/longchau_vaccine/action_c/weights/hand/2025-11-18_batch_16_864x864_fp16.engine"   # Path to TensorRT engine file
     num_detectors: 1                      # Number of detector threads for this engine
@@ -24,6 +25,7 @@ models:
     conf_threshold: 0.2                  # Confidence threshold (0.0-1.0)
     nms_threshold: 0.6                  # NMS IoU threshold (0.0-1.0)
     gpu_id: 0                             # GPU device ID (0, 1, 2, etc.)
+    decode_gpu_id: 1
     roi_cropping: false                   # Enable ROI cropping for this engine (uses config.box from video_list.jsonl)
   - path: "/workspace/khangtd6/longchau_vaccine/action_c/weights/pose/2025-11-18_batch_16_640x640_fp16.engine"   # Path to TensorRT engine file
     num_detectors: 1                      # Number of detector threads for this engine
@@ -35,6 +37,7 @@ models:
     conf_threshold: 0.4                  # Confidence threshold (0.0-1.0)
     nms_threshold: 0.55                  # NMS IoU threshold (0.0-1.0)
     gpu_id: 0                             # GPU device ID (0, 1, 2, etc.)
+    decode_gpu_id: 1
     roi_cropping: false                   # Enable ROI cropping for this engine (uses config.box from video_list.jsonl)
 
 # Video Sources

@@ -363,21 +363,52 @@ bool VideoReader::setupDecoder() {
         LOG_INFO("VideoReader", "Setting CUVID decoder with 32 surfaces for async decode");
     }
     
-    ret = avcodec_open2(codec_ctx_, decoder, &opts);
-    if (ret < 0) {
+    auto open_decoder = [&](const AVCodec* dec, AVDictionary** options) -> int {
+        int open_ret = avcodec_open2(codec_ctx_, dec, options);
+        if (options && *options) {
+            AVDictionaryEntry* entry = nullptr;
+            while ((entry = av_dict_get(*options, "", entry, AV_DICT_IGNORE_SUFFIX))) {
+                LOG_WARNING("VideoReader", std::string("Unused decoder option: ") + entry->key + "=" + entry->value);
+            }
+        }
+        av_dict_free(options);
+        return open_ret;
+    };
+    
+    ret = open_decoder(decoder, &opts);
+    if (ret < 0 && is_cuvid_decoder) {
+        LOG_WARNING("VideoReader", "Failed to initialize NVDEC decoder, falling back to CPU decoding");
         log_ffmpeg_error("avcodec_open2", ret);
-        av_dict_free(&opts);
-        return false;
+        use_hw_decode_ = false;
+        hw_pix_fmt_ = AV_PIX_FMT_NONE;
+        if (hw_device_ctx_) {
+            av_buffer_unref(&hw_device_ctx_);
+            hw_device_ctx_ = nullptr;
+        }
+        avcodec_free_context(&codec_ctx_);
+        decoder = avcodec_find_decoder(video_stream_->codecpar->codec_id);
+        if (!decoder) {
+            LOG_ERROR("VideoReader", "CPU fallback decoder not found");
+            return false;
+        }
+        codec_ctx_ = avcodec_alloc_context3(decoder);
+        if (!codec_ctx_) {
+            LOG_ERROR("VideoReader", "Failed to allocate CPU decoder context");
+            return false;
+        }
+        if (avcodec_parameters_to_context(codec_ctx_, video_stream_->codecpar) < 0) {
+            LOG_ERROR("VideoReader", "Failed to copy codec parameters for CPU decoder");
+            return false;
+        }
+        codec_ctx_->pkt_timebase = video_stream_->time_base;
+        codec_ctx_->thread_count = std::max(1, static_cast<int>(std::thread::hardware_concurrency()));
+        ret = open_decoder(decoder, nullptr);
     }
     
-    // Log any unused options (for debugging)
-    if (opts) {
-        AVDictionaryEntry* entry = nullptr;
-        while ((entry = av_dict_get(opts, "", entry, AV_DICT_IGNORE_SUFFIX))) {
-            LOG_WARNING("VideoReader", std::string("Unused decoder option: ") + entry->key + "=" + entry->value);
-        }
+    if (ret < 0) {
+        log_ffmpeg_error("avcodec_open2", ret);
+        return false;
     }
-    av_dict_free(&opts);
     
     if (use_hw_decode_) {
         LOG_INFO("VideoReader", std::string("Codec opened with hardware decoder, decoder: ") + 

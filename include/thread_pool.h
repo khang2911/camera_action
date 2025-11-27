@@ -35,6 +35,9 @@ struct EngineGroup {
     std::unique_ptr<FrameQueue> frame_queue;
     std::unique_ptr<Preprocessor> preprocessor;
     SharedPreprocessGroup* shared_preprocess = nullptr;
+    int decode_gpu_id = 0;
+    bool manages_decode_ctx = false;
+    CUcontext decode_ctx = nullptr;
     
     EngineGroup(int id, const std::string& path, const std::string& name, int num_det,
                 int in_w, int in_h, bool roi = false, size_t queue_size = 500)
@@ -218,6 +221,7 @@ private:
     std::shared_ptr<RedisQueue> output_queue_;
     std::string input_queue_name_;
     std::string output_queue_name_;
+    ReaderOptions reader_options_;
     ReaderOptions reader_options_;
     
     std::vector<std::thread> reader_threads_;
