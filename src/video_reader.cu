@@ -246,10 +246,10 @@ bool VideoReader::setupDecoder() {
     AVDictionary* opts = nullptr;
     if (is_cuvid_decoder) {
         // CUVID decoder options - these help ensure NVDEC is used efficiently
-        av_dict_set(&opts, "surfaces", "8", 0);  // Number of surfaces for async decode
+        av_dict_set(&opts, "surfaces", "32", 0);  // Increase surfaces for better async decode and higher utilization
         av_dict_set(&opts, "deint", "0", 0);     // No deinterlacing needed
         av_dict_set(&opts, "output", "cuda", 0); // Output frames in CUDA format (GPU memory)
-        LOG_INFO("VideoReader", "Setting CUVID decoder output to CUDA format");
+        LOG_INFO("VideoReader", "Setting CUVID decoder with 32 surfaces for async decode");
     }
     
     ret = avcodec_open2(codec_ctx_, decoder, &opts);
@@ -341,8 +341,29 @@ bool VideoReader::readFrame(cv::Mat& frame) {
         return false;
     }
     
+    // For hardware decoders, keep the decoder busy by maintaining a queue of packets.
+    // Try to receive a frame first, and if the decoder needs more data, send multiple packets.
     while (true) {
         if (!receiveFrame(frame)) {
+            // Decoder needs more input. For hardware decoders, send multiple packets
+            // to keep the decoder busy and improve NVDEC utilization.
+            if (use_hw_decode_ && !end_of_stream_) {
+                // Send up to 4 packets to keep decoder busy
+                int packets_sent = 0;
+                for (int i = 0; i < 4 && !end_of_stream_; ++i) {
+                    if (sendNextPacket()) {
+                        packets_sent++;
+                    } else {
+                        break;
+                    }
+                }
+                // If we sent packets, try receiving again
+                if (packets_sent > 0) {
+                    continue;
+                }
+            }
+            
+            // Normal path: send one packet
             if (!sendNextPacket()) {
                 return false;
             }
