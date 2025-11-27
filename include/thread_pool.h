@@ -137,10 +137,15 @@ public:
 private:
     struct VideoOutputStatus {
         std::string original_message;
-        std::unordered_map<std::string, int> pending_counts;
+        std::unordered_map<std::string, int> pending_counts;      // Frames pending per engine
+        std::unordered_map<std::string, int> registered_counts;   // Frames registered per engine (for validation)
+        std::unordered_map<std::string, int> processed_counts;    // Frames processed per engine (for validation)
         std::unordered_map<std::string, std::map<int, std::string>> detector_outputs;
         bool reading_completed = false;
         bool message_pushed = false;
+        int total_frames_read = 0;                                // Total frames read from video
+        std::chrono::steady_clock::time_point created_at;         // For timeout tracking
+        bool timed_out = false;                                   // Mark if message timed out
     };
     
     // Post-processing task structure

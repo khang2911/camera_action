@@ -925,6 +925,15 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
         
         // Removed logging - too expensive
     
+    // Update total frames read for this message (for validation)
+    if (use_redis_queue_ && output_queue_ && !message_key.empty()) {
+        std::lock_guard<std::mutex> lock(video_output_mutex_);
+        auto it = video_output_status_.find(message_key);
+        if (it != video_output_status_.end()) {
+            it->second.total_frames_read += frame_count;
+        }
+    }
+    
     // Always mark reading complete when video processing finishes (even if not finalize_message)
     // This ensures reading_completed is set as soon as possible, not waiting for all videos
     // The finalize_message flag is only used to determine if this is the last video in a multi-video message
@@ -1781,6 +1790,47 @@ void ThreadPool::monitorWorker() {
         stats_oss << std::endl;
         
         LOG_STATS("Monitor", stats_oss.str());
+        
+        // Check for timed out messages (only in Redis mode)
+        // Timeout = 5 minutes (300 seconds) for a message to complete processing
+        if (use_redis_queue_) {
+            const int message_timeout_seconds = 300;
+            std::lock_guard<std::mutex> lock(video_output_mutex_);
+            for (auto& kv : video_output_status_) {
+                auto& status = kv.second;
+                if (status.message_pushed || status.timed_out) {
+                    continue;  // Already handled
+                }
+                
+                auto age = std::chrono::duration_cast<std::chrono::seconds>(
+                    now - status.created_at).count();
+                
+                if (age > message_timeout_seconds) {
+                    // Message timed out - mark it and log warning
+                    status.timed_out = true;
+                    
+                    int total_pending = 0;
+                    int total_registered = 0;
+                    int total_processed = 0;
+                    for (const auto& pc : status.pending_counts) {
+                        total_pending += pc.second;
+                    }
+                    for (const auto& rc : status.registered_counts) {
+                        total_registered += rc.second;
+                    }
+                    for (const auto& pc : status.processed_counts) {
+                        total_processed += pc.second;
+                    }
+                    
+                    LOG_ERROR("RedisOutput", "Message TIMED OUT (not pushed): key='" + kv.first + 
+                             "', age=" + std::to_string(age) + "s" +
+                             ", reading_completed=" + (status.reading_completed ? "true" : "false") +
+                             ", pending=" + std::to_string(total_pending) +
+                             ", registered=" + std::to_string(total_registered) +
+                             ", processed=" + std::to_string(total_processed));
+                }
+            }
+        }
     }
     
     LOG_INFO("Monitor", "Monitoring thread finished");
@@ -1884,6 +1934,9 @@ void ThreadPool::registerVideoMessage(const std::string& message_key, const std:
     status.original_message = message;
     status.reading_completed = false;
     status.message_pushed = false;
+    status.timed_out = false;
+    status.total_frames_read = 0;
+    status.created_at = std::chrono::steady_clock::now();
 }
 
 void ThreadPool::registerPendingFrame(const std::string& message_key, const std::string& engine_name) {
@@ -1894,6 +1947,7 @@ void ThreadPool::registerPendingFrame(const std::string& message_key, const std:
     std::lock_guard<std::mutex> lock(video_output_mutex_);
     VideoOutputStatus& status = video_output_status_[message_key];
     status.pending_counts[engine_name]++;
+    status.registered_counts[engine_name]++;
 }
 
 void ThreadPool::markFrameProcessed(const std::string& message_key, const std::string& engine_name,
@@ -1924,6 +1978,9 @@ void ThreadPool::markFrameProcessed(const std::string& message_key, const std::s
         if (!output_path.empty()) {
             status.detector_outputs[engine_name][video_index] = output_path;
         }
+        
+        // Track processed count for validation
+        status.processed_counts[engine_name]++;
         
         // Decrement pending count (should never go negative, but handle it gracefully)
         int& pending = status.pending_counts[engine_name];
@@ -2002,6 +2059,10 @@ void ThreadPool::markVideoReadingComplete(const std::string& message_key) {
 }
 
 bool ThreadPool::canPushOutputLocked(const VideoOutputStatus& status) const {
+    // Don't push if timed out
+    if (status.timed_out) {
+        return false;
+    }
     if (!status.reading_completed) {
         return false;
     }
@@ -2012,6 +2073,23 @@ bool ThreadPool::canPushOutputLocked(const VideoOutputStatus& status) const {
     // Check if all pending counts are zero
     for (const auto& kv : status.pending_counts) {
         if (kv.second > 0) {
+            return false;
+        }
+    }
+    
+    // Validate that registered == processed for each engine (no frames lost)
+    for (const auto& kv : status.registered_counts) {
+        const std::string& engine_name = kv.first;
+        int registered = kv.second;
+        auto proc_it = status.processed_counts.find(engine_name);
+        int processed = (proc_it != status.processed_counts.end()) ? proc_it->second : 0;
+        
+        if (registered != processed) {
+            // Frames were lost - don't push incomplete results
+            LOG_WARNING("RedisOutput", "Frame count mismatch for engine '" + engine_name + 
+                       "': registered=" + std::to_string(registered) + 
+                       ", processed=" + std::to_string(processed) + 
+                       " - will not push incomplete results");
             return false;
         }
     }
