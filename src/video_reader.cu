@@ -531,6 +531,10 @@ bool VideoReader::sendNextPacket() {
             AVPacket* pkt = nullptr;
             auto result = packet_queue_->pop(pkt, 50);
             if (result == PrefetchQueue::PopResult::kPacket && pkt) {
+                if (pkt->stream_index != static_cast<int>(video_stream_->index)) {
+                    av_packet_free(&pkt);
+                    continue;
+                }
                 int ret = avcodec_send_packet(codec_ctx_, pkt);
                 av_packet_free(&pkt);
                 if (ret == AVERROR(EAGAIN)) {
@@ -928,6 +932,10 @@ void VideoReader::prefetchLoop() {
                 packet_queue_->abort();
             }
             break;
+        }
+        if (pkt->stream_index != static_cast<int>(video_stream_->index)) {
+            av_packet_free(&pkt);
+            continue;
         }
         
         if (!packet_queue_ || !packet_queue_->push(pkt)) {
