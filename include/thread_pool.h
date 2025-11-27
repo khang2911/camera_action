@@ -222,8 +222,6 @@ private:
     std::shared_ptr<RedisQueue> output_queue_;
     std::string input_queue_name_;
     std::string output_queue_name_;
-    ReaderOptions reader_options_;
-    ReaderOptions reader_options_;
     
     std::vector<std::thread> reader_threads_;
     std::vector<std::thread> preprocessor_threads_;
