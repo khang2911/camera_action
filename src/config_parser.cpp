@@ -73,6 +73,23 @@ double nodeToDouble(const YAML::Node& node, double fallback = 0.0) {
     }
 }
  
+bool nodeToBool(const YAML::Node& node, bool fallback = false) {
+    if (!node || !node.IsDefined()) {
+        return fallback;
+    }
+    try {
+        return node.as<bool>();
+    } catch (const YAML::Exception&) {
+        try {
+            std::string value = node.as<std::string>();
+            std::transform(value.begin(), value.end(), value.begin(), ::tolower);
+            return (value == "true" || value == "1" || value == "yes" || value == "on");
+        } catch (...) {
+            return fallback;
+        }
+    }
+}
+
 }  // namespace
  
 ConfigParser::ConfigParser()
@@ -155,6 +172,47 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
                 num_preprocessors_ = threads["num_preprocessors"].as<int>();
             } else if (num_preprocessors_ <= 0) {
                 num_preprocessors_ = num_readers_;
+            }
+        }
+        
+        // Reader tuning (FFmpeg + decode settings)
+        if (config["reader"]) {
+            const auto& reader = config["reader"];
+            if (reader["ffmpeg"]) {
+                const auto& ffmpeg = reader["ffmpeg"];
+                if (ffmpeg["buffer_size"]) {
+                    reader_options_.ffmpeg_buffer_size = std::max(0, ffmpeg["buffer_size"].as<int>());
+                }
+                if (ffmpeg["probesize"]) {
+                    reader_options_.ffmpeg_probe_size = std::max(0LL, ffmpeg["probesize"].as<long long>());
+                }
+                if (ffmpeg["analyzeduration_ms"]) {
+                    reader_options_.ffmpeg_analyze_duration = std::max(0LL, ffmpeg["analyzeduration_ms"].as<long long>()) * 1000LL;
+                }
+                if (ffmpeg["read_timeout_ms"]) {
+                    reader_options_.ffmpeg_read_timeout_ms = std::max(0, ffmpeg["read_timeout_ms"].as<int>());
+                }
+                if (ffmpeg["fast_seek"]) {
+                    reader_options_.ffmpeg_fast_seek = nodeToBool(ffmpeg["fast_seek"], reader_options_.ffmpeg_fast_seek);
+                }
+                if (ffmpeg["fast_io"]) {
+                    reader_options_.ffmpeg_fast_io = nodeToBool(ffmpeg["fast_io"], reader_options_.ffmpeg_fast_io);
+                }
+            }
+            if (reader["packets"]) {
+                const auto& packets = reader["packets"];
+                if (packets["max_per_loop"]) {
+                    reader_options_.max_packets_per_loop = std::max(1, packets["max_per_loop"].as<int>());
+                }
+            }
+            if (reader["prefetch"]) {
+                const auto& prefetch = reader["prefetch"];
+                if (prefetch["enabled"]) {
+                    reader_options_.enable_prefetch = nodeToBool(prefetch["enabled"], reader_options_.enable_prefetch);
+                }
+                if (prefetch["depth"]) {
+                    reader_options_.prefetch_queue_depth = std::max(4, prefetch["depth"].as<int>());
+                }
             }
         }
  

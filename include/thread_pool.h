@@ -18,6 +18,8 @@
 #include "logger.h"
 #include "redis_queue.h"
 
+struct SharedPreprocessGroup;
+
 struct EngineGroup {
     int engine_id;
     std::string engine_path;
@@ -32,11 +34,7 @@ struct EngineGroup {
     std::vector<std::thread> detector_threads;
     std::unique_ptr<FrameQueue> frame_queue;
     std::unique_ptr<Preprocessor> preprocessor;
-    std::unique_ptr<FrameQueue> preprocess_queue;
-    std::vector<std::thread> preprocess_threads;
-    
-    std::vector<std::vector<float>*> buffer_pool;
-    std::mutex buffer_pool_mutex;
+    SharedPreprocessGroup* shared_preprocess = nullptr;
     
     EngineGroup(int id, const std::string& path, const std::string& name, int num_det,
                 int in_w, int in_h, bool roi = false, size_t queue_size = 500)
@@ -47,14 +45,30 @@ struct EngineGroup {
         // With batch_size=16, we need at least 16 * num_detectors * 2 (for pipelining) = 32 * num_detectors
         // Using 500 as default to ensure smooth operation even with multiple detectors
         frame_queue = std::make_unique<FrameQueue>(queue_size);
-        preprocess_queue = std::make_unique<FrameQueue>(queue_size);
         preprocessor = std::make_unique<Preprocessor>(input_width, input_height);
     }
-    
-    ~EngineGroup();
+};
+
+struct SharedPreprocessGroup {
+    SharedPreprocessGroup(int id, int in_w, int in_h, bool roi, size_t queue_capacity);
+    ~SharedPreprocessGroup();
     
     std::shared_ptr<std::vector<float>> acquireBuffer();
     void releaseBuffer(std::vector<float>* buffer);
+    
+    int group_id;
+    int input_width;
+    int input_height;
+    bool roi_cropping;
+    size_t tensor_elements;
+    size_t queue_capacity;
+    std::unique_ptr<FrameQueue> queue;
+    std::unique_ptr<Preprocessor> preprocessor;
+    std::vector<EngineGroup*> engines;
+    
+private:
+    std::vector<std::vector<float>*> buffer_pool;
+    std::mutex buffer_pool_mutex;
 };
 
 class ThreadPool {
@@ -65,7 +79,8 @@ public:
                const std::vector<EngineConfig>& engine_configs,
                const std::string& output_dir,
                bool debug_mode = false,
-               int max_frames_per_video = 0);
+               int max_frames_per_video = 0,
+               const ReaderOptions& reader_options = ReaderOptions());
     
     // Constructor for Redis queue mode
     ThreadPool(int num_readers,
@@ -77,7 +92,8 @@ public:
                const std::string& input_queue_name,
                const std::string& output_queue_name,
                bool debug_mode = false,
-               int max_frames_per_video = 0);
+               int max_frames_per_video = 0,
+               const ReaderOptions& reader_options = ReaderOptions());
     
     ~ThreadPool();
     
@@ -190,7 +206,6 @@ private:
     int num_readers_;
     int num_preprocessors_;
     int preprocess_dispatcher_count_ = 0;
-    int per_engine_preprocessors_ = 1;
     std::vector<VideoClip> video_clips_;
     std::vector<std::unique_ptr<EngineGroup>> engine_groups_;
     std::string output_dir_;
@@ -203,14 +218,17 @@ private:
     std::shared_ptr<RedisQueue> output_queue_;
     std::string input_queue_name_;
     std::string output_queue_name_;
+    ReaderOptions reader_options_;
     
     std::vector<std::thread> reader_threads_;
     std::vector<std::thread> preprocessor_threads_;
+    std::vector<std::thread> shared_preprocess_threads_;
     std::vector<std::thread> postprocess_threads_;  // Post-processing threads
     std::thread monitor_thread_;
     std::thread redis_output_thread_;  // Async Redis message sending thread
     std::unique_ptr<FrameQueue> raw_frame_queue_;
     std::unique_ptr<PostProcessQueue> postprocess_queue_;  // Queue for post-processing tasks
+    std::vector<std::unique_ptr<SharedPreprocessGroup>> preprocess_groups_;
     
     
     std::atomic<bool> stop_flag_;
@@ -230,7 +248,7 @@ private:
     void readerWorker(int reader_id);
     void readerWorkerRedis(int reader_id);
     void preprocessorWorker(int worker_id);
-    void enginePreprocessWorker(int engine_id, int worker_id);
+    void enginePreprocessWorker(int worker_id);
     void detectorWorker(int engine_id, int detector_id);
     void postprocessWorker(int worker_id);  // Post-processing worker thread
     void redisOutputWorker();  // Async Redis message sending worker

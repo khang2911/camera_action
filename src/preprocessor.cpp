@@ -69,8 +69,6 @@ struct ScratchBuffers {
     cv::Mat rgb;
     cv::Mat resized;
     cv::Mat padded;
-    cv::Mat normalized;
-    std::vector<cv::Mat> channels;
 };
 }  // namespace
 
@@ -97,19 +95,26 @@ void Preprocessor::preprocessToFloat(const cv::Mat& frame, std::vector<float>& o
     scratch.padded.setTo(cv::Scalar(0, 0, 0));
     scratch.resized.copyTo(scratch.padded(cv::Rect(pad_w, pad_h, new_w, new_h)));
     
-    // Step 4: Normalize to float
-    scratch.normalized.create(target_height_, target_width_, CV_32FC3);
-    scratch.padded.convertTo(scratch.normalized, CV_32F, 1.0f / 255.0f);
+    const size_t plane_size = static_cast<size_t>(target_width_) * target_height_;
+    output.resize(plane_size * 3);
+    float* dst_r = output.data();
+    float* dst_g = dst_r + plane_size;
+    float* dst_b = dst_g + plane_size;
+    const float inv255 = 1.0f / 255.0f;
     
-    // Step 5: Convert to CHW
-    scratch.channels.resize(3);
-    cv::split(scratch.normalized, scratch.channels);
-    
-    const size_t csize = static_cast<size_t>(target_width_) * target_height_;
-    output.resize(csize * 3);
-    for (int c = 0; c < 3; ++c) {
-        const float* data = scratch.channels[c].ptr<float>();
-        std::memcpy(output.data() + static_cast<size_t>(c) * csize, data, csize * sizeof(float));
+    for (int y = 0; y < target_height_; ++y) {
+        const uint8_t* row_ptr = scratch.padded.ptr<uint8_t>(y);
+        size_t row_index = static_cast<size_t>(y) * target_width_;
+        #if defined(_OPENMP)
+        #pragma omp simd
+        #endif
+        for (int x = 0; x < target_width_; ++x) {
+            size_t idx = row_index + static_cast<size_t>(x);
+            const uint8_t* pixel = row_ptr + (x * 3);
+            dst_r[idx] = pixel[0] * inv255;
+            dst_g[idx] = pixel[1] * inv255;
+            dst_b[idx] = pixel[2] * inv255;
+        }
     }
 }
 

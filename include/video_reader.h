@@ -4,6 +4,9 @@
 #include <opencv2/opencv.hpp>
 #include <string>
 #include <vector>
+#include <memory>
+#include <thread>
+#include <atomic>
 #include <cuda_runtime_api.h>
 
 extern "C" {
@@ -18,11 +21,12 @@ extern "C" {
 }
 
 #include "video_clip.h"
+#include "reader_options.h"
 
 class VideoReader {
 public:
-    VideoReader(const std::string& video_path, int video_id);
-    VideoReader(const VideoClip& clip, int video_id);
+    VideoReader(const std::string& video_path, int video_id, const ReaderOptions& options = ReaderOptions());
+    VideoReader(const VideoClip& clip, int video_id, const ReaderOptions& options = ReaderOptions());
     ~VideoReader();
     
     bool isOpened() const;
@@ -50,6 +54,9 @@ private:
     bool ensureCudaBuffer(int width, int height);
     void cleanup();
     static void ensureFFmpegInitialized();
+    void startPrefetchThread();
+    void stopPrefetchThread();
+    void prefetchLoop();
     
     AVFormatContext* fmt_ctx_;
     AVCodecContext* codec_ctx_;
@@ -79,6 +86,18 @@ private:
     VideoClip clip_;
     int original_width_;   // Original frame width before ROI cropping
     int original_height_;  // Original frame height before ROI cropping
+    
+    ReaderOptions options_;
+    
+    // Packet prefetching
+    struct PrefetchQueue;
+    std::unique_ptr<PrefetchQueue> packet_queue_;
+    std::thread prefetch_thread_;
+    std::atomic<bool> prefetch_stop_{false};
+    std::atomic<bool> prefetch_eof_{false};
+    std::atomic<bool> prefetch_error_{false};
+    std::atomic<bool> prefetch_started_{false};
+    bool prefetch_enabled_ = false;
 };
 
 #endif // VIDEO_READER_H

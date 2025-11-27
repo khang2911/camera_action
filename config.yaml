@@ -59,6 +59,20 @@ threads:
   num_readers: 3      # Number of reader/preprocessor threads (CPU)
   num_preprocessors: 10  # Number of preprocessing workers (CPU)
 
+# Reader tuning (FFmpeg + packet scheduling)
+reader:
+  ffmpeg:
+    buffer_size: 2097152          # Bytes for demux buffer
+    probesize: 8388608            # Bytes to probe stream headers
+    analyzeduration_ms: 250       # Duration FFmpeg analyses per stream
+    read_timeout_ms: 5000         # Network read timeout
+    fast_seek: true               # Enable fast seek hints
+  packets:
+    max_per_loop: 12              # Max packets to feed decoder per loop
+  prefetch:
+    enabled: true
+    depth: 48                     # Prefetch queue depth
+
 # Output Configuration
 output:
   dir: "/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins/"      # Output directory for binary result files

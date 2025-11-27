@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <deque>
 #include <limits>
 #include <mutex>
+#include <condition_variable>
 
 #include "logger.h"
 
@@ -53,7 +55,87 @@ __global__ void nv12ToBgrKernel(const uint8_t* y_plane,
 }
 }  // namespace
 
-VideoReader::VideoReader(const std::string& video_path, int video_id)
+struct VideoReader::PrefetchQueue {
+    enum class PopResult { kPacket, kTimeout, kAborted };
+    
+    explicit PrefetchQueue(size_t capacity)
+        : capacity_(capacity) {}
+    
+    bool push(AVPacket* pkt) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        cv_.wait(lock, [&] { return aborted_ || queue_.size() < capacity_; });
+        if (aborted_) {
+            return false;
+        }
+        queue_.push_back(pkt);
+        lock.unlock();
+        cv_.notify_all();
+        return true;
+    }
+    
+    PopResult pop(AVPacket*& pkt, int timeout_ms) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        auto predicate = [&] { return aborted_ || !queue_.empty() || eof_; };
+        if (timeout_ms < 0) {
+            cv_.wait(lock, predicate);
+        } else {
+            cv_.wait_for(lock, std::chrono::milliseconds(timeout_ms), predicate);
+        }
+        
+        if (aborted_) {
+            return PopResult::kAborted;
+        }
+        if (queue_.empty()) {
+            return PopResult::kTimeout;
+        }
+        
+        pkt = queue_.front();
+        queue_.pop_front();
+        lock.unlock();
+        cv_.notify_all();
+        return PopResult::kPacket;
+    }
+    
+    void signalEof() {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            eof_ = true;
+        }
+        cv_.notify_all();
+    }
+    
+    void abort() {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            aborted_ = true;
+        }
+        cv_.notify_all();
+    }
+    
+    void clear() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        while (!queue_.empty()) {
+            AVPacket* pkt = queue_.front();
+            queue_.pop_front();
+            av_packet_free(&pkt);
+        }
+    }
+    
+    bool empty() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return queue_.empty();
+    }
+    
+private:
+    size_t capacity_;
+    std::deque<AVPacket*> queue_;
+    bool eof_ = false;
+    bool aborted_ = false;
+    mutable std::mutex mutex_;
+    std::condition_variable cv_;
+};
+
+VideoReader::VideoReader(const std::string& video_path, int video_id, const ReaderOptions& options)
     : fmt_ctx_(nullptr),
       codec_ctx_(nullptr),
       video_stream_(nullptr),
@@ -79,11 +161,12 @@ VideoReader::VideoReader(const std::string& video_path, int video_id)
       fps_(0.0),
       has_clip_metadata_(false),
       original_width_(0),
-      original_height_(0) {
+      original_height_(0),
+      options_(options) {
     initialize(nullptr);
 }
 
-VideoReader::VideoReader(const VideoClip& clip, int video_id)
+VideoReader::VideoReader(const VideoClip& clip, int video_id, const ReaderOptions& options)
     : fmt_ctx_(nullptr),
       codec_ctx_(nullptr),
       video_stream_(nullptr),
@@ -110,7 +193,8 @@ VideoReader::VideoReader(const VideoClip& clip, int video_id)
       has_clip_metadata_(true),
       clip_(clip),
       original_width_(0),
-      original_height_(0) {
+      original_height_(0),
+      options_(options) {
     initialize(&clip_);
 }
 
@@ -137,11 +221,36 @@ bool VideoReader::initialize(const VideoClip* clip) {
     initializeMetadata();
     LOG_INFO("VideoReader", std::string("Initialized reader for ") + video_path_ +
                  (use_hw_decode_ ? " [NVDEC]" : " [CPU]"));
+    if (options_.enable_prefetch) {
+        startPrefetchThread();
+    }
     return true;
 }
 
 bool VideoReader::openInput() {
-    int ret = avformat_open_input(&fmt_ctx_, video_path_.c_str(), nullptr, nullptr);
+    AVDictionary* format_opts = nullptr;
+    if (options_.ffmpeg_buffer_size > 0) {
+        av_dict_set_int(&format_opts, "buffer_size", options_.ffmpeg_buffer_size, 0);
+    }
+    if (options_.ffmpeg_probe_size > 0) {
+        av_dict_set_int(&format_opts, "probesize", options_.ffmpeg_probe_size, 0);
+    }
+    if (options_.ffmpeg_analyze_duration > 0) {
+        av_dict_set_int(&format_opts, "analyzeduration", options_.ffmpeg_analyze_duration, 0);
+    }
+    if (options_.ffmpeg_read_timeout_ms > 0) {
+        av_dict_set(&format_opts, "rw_timeout",
+                    std::to_string(static_cast<long long>(options_.ffmpeg_read_timeout_ms) * 1000).c_str(), 0);
+    }
+    if (options_.ffmpeg_fast_seek) {
+        av_dict_set(&format_opts, "fflags", "fastseek", 0);
+    }
+    if (options_.ffmpeg_fast_io) {
+        av_dict_set(&format_opts, "avioflags", "direct", 0);
+    }
+    
+    int ret = avformat_open_input(&fmt_ctx_, video_path_.c_str(), nullptr, &format_opts);
+    av_dict_free(&format_opts);
     if (ret < 0) {
         log_ffmpeg_error("avformat_open_input", ret);
         return false;
@@ -381,7 +490,9 @@ bool VideoReader::readFrame(cv::Mat& frame) {
         // Decoder needs more input. Try to send packets.
         // For hardware decoders, send more packets to keep decoder busy and hide I/O latency
         // This is especially important for network storage where I/O can be slow
-        int max_packets = use_hw_decode_ ? 8 : 1;
+        int max_packets = use_hw_decode_
+                              ? std::max(1, options_.max_packets_per_loop)
+                              : 1;
         bool sent_any = false;
         
         for (int i = 0; i < max_packets && !end_of_stream_; ++i) {
@@ -407,6 +518,46 @@ bool VideoReader::readFrame(cv::Mat& frame) {
 bool VideoReader::sendNextPacket() {
     if (end_of_stream_) {
         return false;
+    }
+    
+    if (prefetch_enabled_ && packet_queue_) {
+        while (true) {
+            if (prefetch_stop_) {
+                return false;
+            }
+            
+            AVPacket* pkt = nullptr;
+            auto result = packet_queue_->pop(pkt, 50);
+            if (result == PrefetchQueue::PopResult::kPacket && pkt) {
+                int ret = avcodec_send_packet(codec_ctx_, pkt);
+                av_packet_free(&pkt);
+                if (ret == AVERROR(EAGAIN)) {
+                    return false;
+                }
+                if (ret < 0) {
+                    log_ffmpeg_error("avcodec_send_packet", ret);
+                    return false;
+                }
+                return true;
+            }
+            
+            if (result == PrefetchQueue::PopResult::kAborted) {
+                return false;
+            }
+            
+            if (prefetch_error_) {
+                LOG_ERROR("VideoReader", "Prefetch thread encountered an error, stopping reader");
+                return false;
+            }
+            
+            if (prefetch_eof_ && packet_queue_->empty()) {
+                end_of_stream_ = true;
+                avcodec_send_packet(codec_ctx_, nullptr);
+                return true;
+            }
+            
+            // Timeout - queue currently empty but not at EOF, continue waiting
+        }
     }
     
     while (true) {
@@ -680,6 +831,7 @@ double VideoReader::computeFps(double reported_duration) const {
 }
 
 void VideoReader::cleanup() {
+    stopPrefetchThread();
     if (sws_ctx_) {
         sws_freeContext(sws_ctx_);
         sws_ctx_ = nullptr;
@@ -716,6 +868,74 @@ void VideoReader::cleanup() {
         cudaStreamDestroy(cuda_stream_);
         cuda_stream_ = nullptr;
         cuda_stream_created_ = false;
+    }
+}
+
+void VideoReader::startPrefetchThread() {
+    if (!options_.enable_prefetch || !fmt_ctx_) {
+        prefetch_enabled_ = false;
+        return;
+    }
+    const size_t depth = static_cast<size_t>(std::max(4, options_.prefetch_queue_depth));
+    packet_queue_ = std::make_unique<PrefetchQueue>(depth);
+    prefetch_stop_ = false;
+    prefetch_eof_ = false;
+    prefetch_error_ = false;
+    prefetch_enabled_ = true;
+    prefetch_thread_ = std::thread(&VideoReader::prefetchLoop, this);
+    prefetch_started_ = true;
+}
+
+void VideoReader::stopPrefetchThread() {
+    if (!prefetch_started_) {
+        return;
+    }
+    prefetch_stop_ = true;
+    if (packet_queue_) {
+        packet_queue_->abort();
+        packet_queue_->clear();
+    }
+    if (prefetch_thread_.joinable()) {
+        prefetch_thread_.join();
+    }
+    packet_queue_.reset();
+    prefetch_started_ = false;
+}
+
+void VideoReader::prefetchLoop() {
+    while (!prefetch_stop_) {
+        AVPacket* pkt = av_packet_alloc();
+        if (!pkt) {
+            prefetch_error_ = true;
+            break;
+        }
+        int ret = av_read_frame(fmt_ctx_, pkt);
+        if (ret == AVERROR_EOF) {
+            av_packet_free(&pkt);
+            prefetch_eof_ = true;
+            if (packet_queue_) {
+                packet_queue_->signalEof();
+            }
+            break;
+        }
+        if (ret < 0) {
+            log_ffmpeg_error("av_read_frame", ret);
+            av_packet_free(&pkt);
+            prefetch_error_ = true;
+            if (packet_queue_) {
+                packet_queue_->abort();
+            }
+            break;
+        }
+        
+        if (!packet_queue_ || !packet_queue_->push(pkt)) {
+            av_packet_free(&pkt);
+            break;
+        }
+    }
+    
+    if (packet_queue_) {
+        packet_queue_->signalEof();
     }
 }
 

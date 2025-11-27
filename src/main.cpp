@@ -159,6 +159,8 @@ int main(int argc, char* argv[]) {
     }
     
     // Create thread pool
+    const ReaderOptions& reader_options = config.getReaderOptions();
+    
     std::unique_ptr<ThreadPool> pool;
     if (use_redis) {
         // Redis queue mode
@@ -179,12 +181,12 @@ int main(int argc, char* argv[]) {
         pool = std::make_unique<ThreadPool>(
             num_readers, num_preprocessors, engine_configs, output_dir,
             input_queue, output_queue, config.getInputQueueName(), config.getOutputQueueName(),
-            debug_mode, max_frames_per_video);
+            debug_mode, max_frames_per_video, reader_options);
     } else {
         // File-based mode
         pool = std::make_unique<ThreadPool>(
             num_readers, num_preprocessors, video_clips, engine_configs, output_dir,
-            debug_mode, max_frames_per_video);
+            debug_mode, max_frames_per_video, reader_options);
     }
     
     // Set up signal handlers for graceful shutdown (especially important for Redis mode)

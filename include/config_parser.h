@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "video_clip.h"
+#include "reader_options.h"
 
 enum class ModelType {
     DETECTION,
@@ -52,6 +53,7 @@ public:
     bool isDebugMode() const { return debug_mode_; }
     int getMaxFramesPerVideo() const { return max_frames_per_video_; }
     bool isRoiCroppingEnabled() const { return roi_cropping_enabled_; }
+    const ReaderOptions& getReaderOptions() const { return reader_options_; }
     
     // Backward compatibility getters
     std::string getModelPath() const { 
@@ -112,6 +114,7 @@ private:
     bool debug_mode_ = false;
     int max_frames_per_video_ = 0;  // 0 means no limit
     bool roi_cropping_enabled_ = false;  // Enable ROI cropping from config.box
+    ReaderOptions reader_options_;
     
     // Redis queue settings
     bool use_redis_queue_ = false;
