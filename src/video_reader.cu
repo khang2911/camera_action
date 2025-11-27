@@ -1,6 +1,7 @@
 #include "video_reader.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <mutex>
@@ -184,7 +185,8 @@ bool VideoReader::setupDecoder() {
     if (initHardwareDecoder(decoder)) {
         codec_ctx_->opaque = this;
         codec_ctx_->get_format = &VideoReader::getHWFormat;
-        LOG_INFO("VideoReader", "Hardware decoder initialized successfully");
+        LOG_INFO("VideoReader", std::string("Hardware decoder initialized successfully, hw_pix_fmt: ") + 
+                 std::to_string(hw_pix_fmt_) + ", device_ctx: " + (hw_device_ctx_ ? "OK" : "NULL"));
     } else {
         LOG_INFO("VideoReader", "Hardware decoder not available, using CPU decoding");
     }
@@ -193,6 +195,11 @@ bool VideoReader::setupDecoder() {
     if (ret < 0) {
         log_ffmpeg_error("avcodec_open2", ret);
         return false;
+    }
+    
+    if (use_hw_decode_) {
+        LOG_INFO("VideoReader", std::string("Codec opened with hardware decoder, active device_ctx: ") + 
+                 (codec_ctx_->hw_device_ctx ? "YES" : "NO"));
     }
     
     packet_ = av_packet_alloc();
@@ -230,10 +237,25 @@ bool VideoReader::initHardwareDecoder(const AVCodec* decoder) {
 
 AVPixelFormat VideoReader::getHWFormat(AVCodecContext* ctx, const AVPixelFormat* pix_fmts) {
     auto* self = reinterpret_cast<VideoReader*>(ctx->opaque);
+    static thread_local int call_count = 0;
+    if (call_count++ < 5) {
+        std::string formats;
+        for (const AVPixelFormat* p = pix_fmts; *p != AV_PIX_FMT_NONE; ++p) {
+            formats += std::to_string(*p) + " ";
+        }
+        LOG_INFO("VideoReader", std::string("getHWFormat called, available formats: ") + formats + 
+                 ", looking for: " + std::to_string(self->hw_pix_fmt_));
+    }
     for (const AVPixelFormat* p = pix_fmts; *p != AV_PIX_FMT_NONE; ++p) {
         if (*p == self->hw_pix_fmt_) {
+            if (call_count <= 5) {
+                LOG_INFO("VideoReader", std::string("getHWFormat returning hardware format: ") + std::to_string(*p));
+            }
             return *p;
         }
+    }
+    if (call_count <= 5) {
+        LOG_WARNING("VideoReader", std::string("getHWFormat: hardware format not found, returning: ") + std::to_string(pix_fmts[0]));
     }
     return pix_fmts[0];
 }
@@ -330,6 +352,13 @@ bool VideoReader::receiveFrame(cv::Mat& out) {
             return false;
         }
         
+        static thread_local int frame_count = 0;
+        if (use_hw_decode_ && frame_count++ < 10) {
+            LOG_INFO("VideoReader", std::string("Received frame format: ") + std::to_string(frame_->format) + 
+                     ", expected hw format: " + std::to_string(hw_pix_fmt_) + 
+                     ", match: " + (frame_->format == hw_pix_fmt_ ? "YES" : "NO"));
+        }
+        
         if (convertFrameToMat(frame_, out)) {
             return true;
         }
@@ -337,15 +366,37 @@ bool VideoReader::receiveFrame(cv::Mat& out) {
 }
 
 bool VideoReader::convertFrameToMat(AVFrame* src, cv::Mat& out) {
+    static thread_local int gpu_count = 0;
+    static thread_local int cpu_count = 0;
+    static thread_local int last_log_frame = 0;
+    
     if (use_hw_decode_ && src->format == hw_pix_fmt_) {
-        LOG_DEBUG("VideoReader", std::string("Using GPU conversion path for format: ") + std::to_string(src->format));
         if (convertFrameToMatGPU(src, out)) {
+            gpu_count++;
+            if (gpu_count % 100 == 0 && gpu_count > last_log_frame) {
+                LOG_INFO("VideoReader", std::string("GPU conversion stats - GPU: ") + std::to_string(gpu_count) + 
+                         ", CPU: " + std::to_string(cpu_count) + ", GPU%: " + 
+                         std::to_string(100.0 * gpu_count / (gpu_count + cpu_count)));
+                last_log_frame = gpu_count;
+            }
             return true;
         }
         LOG_ERROR("VideoReader", "GPU conversion failed, falling back to CPU path");
     } else {
-        LOG_DEBUG("VideoReader", std::string("Using CPU conversion path, hw_decode: ") + std::to_string(use_hw_decode_) +
-                   ", format: " + std::to_string(src->format) + ", expected: " + std::to_string(hw_pix_fmt_));
+        static thread_local int format_mismatch_count = 0;
+        if (use_hw_decode_ && format_mismatch_count++ < 20) {
+            LOG_INFO("VideoReader", std::string("Frame NOT in hardware format! hw_decode: ") + 
+                     std::to_string(use_hw_decode_) + ", format: " + std::to_string(src->format) + 
+                     ", expected: " + std::to_string(hw_pix_fmt_));
+        }
+    }
+    
+    cpu_count++;
+    if (cpu_count % 100 == 0 && cpu_count > last_log_frame) {
+        LOG_INFO("VideoReader", std::string("CPU conversion stats - GPU: ") + std::to_string(gpu_count) + 
+                 ", CPU: " + std::to_string(cpu_count) + ", GPU%: " + 
+                 std::to_string(100.0 * gpu_count / (gpu_count + cpu_count)));
+        last_log_frame = cpu_count;
     }
     
     AVFrame* cpu_frame = src;
