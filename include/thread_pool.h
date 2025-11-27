@@ -215,6 +215,7 @@ private:
     std::string output_dir_;
     bool debug_mode_;
     int max_frames_per_video_;
+    ReaderOptions reader_options_;
     
     // Redis queue mode
     bool use_redis_queue_;
