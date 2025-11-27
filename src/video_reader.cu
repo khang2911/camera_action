@@ -213,37 +213,50 @@ bool VideoReader::setupDecoder() {
     codec_ctx_->pkt_timebase = video_stream_->time_base;
     codec_ctx_->thread_count = 1;  // Hardware decoding doesn't use CPU threads
     
-    // For hardware decoding, we want to use async decoding
-    codec_ctx_->extra_hw_frames = 8;  // Allow more buffering for async decode
+    // Check if we're using CUVID decoder (which is hardware-accelerated by default)
+    std::string decoder_name = decoder->name;
+    bool is_cuvid_decoder = (decoder_name.find("cuvid") != std::string::npos);
     
-    if (initHardwareDecoder(decoder)) {
-        codec_ctx_->opaque = this;
-        codec_ctx_->get_format = &VideoReader::getHWFormat;
-        LOG_INFO("VideoReader", std::string("Hardware decoder initialized successfully, hw_pix_fmt: ") + 
-                 std::to_string(hw_pix_fmt_) + ", device_ctx: " + (hw_device_ctx_ ? "OK" : "NULL"));
+    if (is_cuvid_decoder) {
+        // CUVID decoders decode directly to GPU memory (CUDA frames)
+        // They don't need explicit hardware device context setup
+        // They use NVDEC directly and output frames in AV_PIX_FMT_CUDA format
+        LOG_INFO("VideoReader", std::string("Using CUVID decoder: ") + decoder_name + 
+                 " (NVDEC hardware-accelerated)");
+        use_hw_decode_ = true;
+        hw_pix_fmt_ = AV_PIX_FMT_CUDA;  // CUVID decoders output CUDA frames
     } else {
-        LOG_INFO("VideoReader", "Hardware decoder not available, using CPU decoding");
+        // For generic decoders, try to set up hardware acceleration
+        codec_ctx_->extra_hw_frames = 8;  // Allow more buffering for async decode
+        if (initHardwareDecoder(decoder)) {
+            codec_ctx_->opaque = this;
+            codec_ctx_->get_format = &VideoReader::getHWFormat;
+            LOG_INFO("VideoReader", std::string("Hardware decoder initialized successfully, hw_pix_fmt: ") + 
+                     std::to_string(hw_pix_fmt_) + ", device_ctx: " + (hw_device_ctx_ ? "OK" : "NULL"));
+        } else {
+            LOG_INFO("VideoReader", "Hardware decoder not available, using CPU decoding");
+        }
     }
     
-    ret = avcodec_open2(codec_ctx_, decoder, nullptr);
+    // Set decoder options for CUVID decoders to ensure optimal performance
+    AVDictionary* opts = nullptr;
+    if (is_cuvid_decoder) {
+        // CUVID decoder options - these help ensure NVDEC is used efficiently
+        av_dict_set(&opts, "surfaces", "8", 0);  // Number of surfaces for async decode
+        av_dict_set(&opts, "deint", "0", 0);     // No deinterlacing needed
+    }
+    
+    ret = avcodec_open2(codec_ctx_, decoder, &opts);
+    av_dict_free(&opts);
     if (ret < 0) {
         log_ffmpeg_error("avcodec_open2", ret);
         return false;
     }
     
     if (use_hw_decode_) {
-        LOG_INFO("VideoReader", std::string("Codec opened with hardware decoder, active device_ctx: ") + 
-                 (codec_ctx_->hw_device_ctx ? "YES" : "NO") + 
-                 ", decoder: " + std::string(decoder->name));
-    } else {
-        // Check if we're using CUVID decoder (which is hardware-accelerated by default)
-        std::string decoder_name = decoder->name;
-        if (decoder_name.find("cuvid") != std::string::npos) {
-            LOG_INFO("VideoReader", std::string("Using CUVID decoder: ") + decoder_name + 
-                     " (hardware-accelerated by default)");
-            // CUVID decoders don't need explicit hardware device context setup
-            // They use NVDEC directly
-        }
+        LOG_INFO("VideoReader", std::string("Codec opened with hardware decoder, decoder: ") + 
+                 std::string(decoder->name) + ", hw_pix_fmt: " + std::to_string(hw_pix_fmt_) +
+                 ", codec_id: " + std::to_string(codec_ctx_->codec_id));
     }
     
     packet_ = av_packet_alloc();
@@ -396,13 +409,18 @@ bool VideoReader::receiveFrame(cv::Mat& out) {
             return false;
         }
         
-        // Frame format check - only log first few frames
+        // Frame format check - verify CUVID decoder is working
         static thread_local int frame_count = 0;
-        if (use_hw_decode_ && frame_count++ == 0) {
-            LOG_INFO("VideoReader", std::string("First frame format: ") + std::to_string(frame_->format) + 
-                     ", expected hw format: " + std::to_string(hw_pix_fmt_) + 
-                     ", match: " + (frame_->format == hw_pix_fmt_ ? "YES" : "NO") +
-                     ", hw_frames_ctx: " + (frame_->hw_frames_ctx ? "YES" : "NO"));
+        if (frame_count++ < 3) {
+            std::string decoder_info = "format: " + std::to_string(frame_->format);
+            if (use_hw_decode_) {
+                decoder_info += ", expected: " + std::to_string(hw_pix_fmt_) + 
+                               ", match: " + (frame_->format == hw_pix_fmt_ ? "YES" : "NO");
+            }
+            if (frame_->hw_frames_ctx) {
+                decoder_info += ", hw_frames_ctx: YES";
+            }
+            LOG_INFO("VideoReader", std::string("Frame ") + std::to_string(frame_count) + ": " + decoder_info);
         }
         
         if (convertFrameToMat(frame_, out)) {
