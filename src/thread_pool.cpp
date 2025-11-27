@@ -18,6 +18,7 @@
 #include <deque>
 #include <yaml-cpp/yaml.h>
 #include <cuda_runtime_api.h>
+#include "nlohmann/json.hpp"
 
 SharedPreprocessGroup::SharedPreprocessGroup(int id, int in_w, int in_h, bool roi, size_t queue_cap)
     : group_id(id),
