@@ -11,6 +11,7 @@
 #include <string>
 #include <unordered_map>
 #include <map>
+#include <cuda.h>
 #include "frame_queue.h"
 #include "preprocessor.h"
 #include "yolo_detector.h"
