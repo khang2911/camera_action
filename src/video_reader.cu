@@ -219,12 +219,16 @@ bool VideoReader::setupDecoder() {
     
     if (is_cuvid_decoder) {
         // CUVID decoders decode directly to GPU memory (CUDA frames)
-        // They don't need explicit hardware device context setup
-        // They use NVDEC directly and output frames in AV_PIX_FMT_CUDA format
+        // They use NVDEC directly and should output frames in AV_PIX_FMT_CUDA format
         LOG_INFO("VideoReader", std::string("Using CUVID decoder: ") + decoder_name + 
                  " (NVDEC hardware-accelerated)");
+        
+        // Set up get_format callback to request CUDA format
+        codec_ctx_->opaque = this;
+        codec_ctx_->get_format = &VideoReader::getHWFormat;
+        
         use_hw_decode_ = true;
-        hw_pix_fmt_ = AV_PIX_FMT_CUDA;  // CUVID decoders output CUDA frames
+        hw_pix_fmt_ = AV_PIX_FMT_CUDA;  // CUVID decoders should output CUDA frames
     } else {
         // For generic decoders, try to set up hardware acceleration
         codec_ctx_->extra_hw_frames = 8;  // Allow more buffering for async decode
@@ -244,14 +248,25 @@ bool VideoReader::setupDecoder() {
         // CUVID decoder options - these help ensure NVDEC is used efficiently
         av_dict_set(&opts, "surfaces", "8", 0);  // Number of surfaces for async decode
         av_dict_set(&opts, "deint", "0", 0);     // No deinterlacing needed
+        av_dict_set(&opts, "output", "cuda", 0); // Output frames in CUDA format (GPU memory)
+        LOG_INFO("VideoReader", "Setting CUVID decoder output to CUDA format");
     }
     
     ret = avcodec_open2(codec_ctx_, decoder, &opts);
-    av_dict_free(&opts);
     if (ret < 0) {
         log_ffmpeg_error("avcodec_open2", ret);
+        av_dict_free(&opts);
         return false;
     }
+    
+    // Log any unused options (for debugging)
+    if (opts) {
+        AVDictionaryEntry* entry = nullptr;
+        while ((entry = av_dict_get(opts, "", entry, AV_DICT_IGNORE_SUFFIX))) {
+            LOG_WARNING("VideoReader", std::string("Unused decoder option: ") + entry->key + "=" + entry->value);
+        }
+    }
+    av_dict_free(&opts);
     
     if (use_hw_decode_) {
         LOG_INFO("VideoReader", std::string("Codec opened with hardware decoder, decoder: ") + 
