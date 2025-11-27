@@ -342,33 +342,36 @@ bool VideoReader::readFrame(cv::Mat& frame) {
     }
     
     // For hardware decoders, keep the decoder busy by maintaining a queue of packets.
-    // Try to receive a frame first, and if the decoder needs more data, send multiple packets.
+    // The decoder can accept multiple packets before needing to output frames.
     while (true) {
-        if (!receiveFrame(frame)) {
-            // Decoder needs more input. For hardware decoders, send multiple packets
-            // to keep the decoder busy and improve NVDEC utilization.
-            if (use_hw_decode_ && !end_of_stream_) {
-                // Send up to 4 packets to keep decoder busy
-                int packets_sent = 0;
-                for (int i = 0; i < 4 && !end_of_stream_; ++i) {
-                    if (sendNextPacket()) {
-                        packets_sent++;
-                    } else {
-                        break;
-                    }
-                }
-                // If we sent packets, try receiving again
-                if (packets_sent > 0) {
-                    continue;
-                }
-            }
-            
-            // Normal path: send one packet
-            if (!sendNextPacket()) {
-                return false;
-            }
-            continue;
+        // Try to receive a frame first
+        if (receiveFrame(frame)) {
+            // Successfully received a frame
+            break;
         }
+        
+        // Decoder needs more input. Try to send packets.
+        // For hardware decoders, try sending a couple packets to keep decoder busy.
+        int max_packets = use_hw_decode_ ? 2 : 1;
+        bool sent_any = false;
+        
+        for (int i = 0; i < max_packets && !end_of_stream_; ++i) {
+            if (sendNextPacket()) {
+                sent_any = true;
+            } else {
+                // EAGAIN means decoder buffer is full - need to receive frames first
+                // Break and try receiving again
+                break;
+            }
+        }
+        
+        // If we couldn't send any packets and we're at end of stream, we're done
+        if (!sent_any && end_of_stream_) {
+            return false;
+        }
+        
+        // If we sent packets or got EAGAIN, loop back to try receiving frames
+        continue;
         
         ++frame_number_;
         ++total_frames_read_;
@@ -421,6 +424,11 @@ bool VideoReader::sendNextPacket() {
         if (packet_->stream_index == static_cast<int>(video_stream_->index)) {
             ret = avcodec_send_packet(codec_ctx_, packet_);
             av_packet_unref(packet_);
+            if (ret == AVERROR(EAGAIN)) {
+                // Decoder input buffer is full, need to receive frames first
+                // Don't log as error, this is expected when keeping decoder busy
+                return false;  // Signal caller to receive frames first
+            }
             if (ret < 0) {
                 log_ffmpeg_error("avcodec_send_packet", ret);
                 return false;
