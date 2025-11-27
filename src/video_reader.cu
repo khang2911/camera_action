@@ -162,10 +162,41 @@ bool VideoReader::setupDecoder() {
     }
     video_stream_ = fmt_ctx_->streams[ret];
     
-    const AVCodec* decoder = avcodec_find_decoder(video_stream_->codecpar->codec_id);
+    // Try to find hardware-accelerated decoder first
+    const AVCodec* decoder = nullptr;
+    AVCodecID codec_id = video_stream_->codecpar->codec_id;
+    
+    // Try CUVID decoder first for supported codecs
+    if (codec_id == AV_CODEC_ID_H264) {
+        decoder = avcodec_find_decoder_by_name("h264_cuvid");
+        if (decoder) {
+            LOG_INFO("VideoReader", "Found h264_cuvid hardware decoder");
+        }
+    } else if (codec_id == AV_CODEC_ID_HEVC) {
+        decoder = avcodec_find_decoder_by_name("hevc_cuvid");
+        if (decoder) {
+            LOG_INFO("VideoReader", "Found hevc_cuvid hardware decoder");
+        }
+    } else if (codec_id == AV_CODEC_ID_VP8) {
+        decoder = avcodec_find_decoder_by_name("vp8_cuvid");
+        if (decoder) {
+            LOG_INFO("VideoReader", "Found vp8_cuvid hardware decoder");
+        }
+    } else if (codec_id == AV_CODEC_ID_VP9) {
+        decoder = avcodec_find_decoder_by_name("vp9_cuvid");
+        if (decoder) {
+            LOG_INFO("VideoReader", "Found vp9_cuvid hardware decoder");
+        }
+    }
+    
+    // Fall back to generic decoder if CUVID not found
     if (!decoder) {
-        LOG_ERROR("VideoReader", "Failed to find decoder");
-        return false;
+        decoder = avcodec_find_decoder(codec_id);
+        if (!decoder) {
+            LOG_ERROR("VideoReader", "Failed to find decoder");
+            return false;
+        }
+        LOG_INFO("VideoReader", std::string("Using generic decoder: ") + decoder->name);
     }
     
     codec_ctx_ = avcodec_alloc_context3(decoder);
@@ -202,7 +233,17 @@ bool VideoReader::setupDecoder() {
     
     if (use_hw_decode_) {
         LOG_INFO("VideoReader", std::string("Codec opened with hardware decoder, active device_ctx: ") + 
-                 (codec_ctx_->hw_device_ctx ? "YES" : "NO"));
+                 (codec_ctx_->hw_device_ctx ? "YES" : "NO") + 
+                 ", decoder: " + std::string(decoder->name));
+    } else {
+        // Check if we're using CUVID decoder (which is hardware-accelerated by default)
+        std::string decoder_name = decoder->name;
+        if (decoder_name.find("cuvid") != std::string::npos) {
+            LOG_INFO("VideoReader", std::string("Using CUVID decoder: ") + decoder_name + 
+                     " (hardware-accelerated by default)");
+            // CUVID decoders don't need explicit hardware device context setup
+            // They use NVDEC directly
+        }
     }
     
     packet_ = av_packet_alloc();
