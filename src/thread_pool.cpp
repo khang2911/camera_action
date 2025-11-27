@@ -195,8 +195,9 @@ ThreadPool::ThreadPool(int num_readers,
         engine_groups_.push_back(std::move(engine_group));
     }
     
-    // Configure dispatcher and per-engine preprocessor counts
-    size_t engine_count = std::max<size_t>(1, engine_groups_.size());
+    // Configure dispatcher and shared preprocess worker counts
+    preprocess_dispatcher_count_ = std::max(1, std::min(num_preprocessors_, 4));
+    // Configure dispatcher and shared preprocess worker counts
     preprocess_dispatcher_count_ = std::max(1, std::min(num_preprocessors_, 4));
     
     LOG_INFO("ThreadPool", "ThreadPool initialized with " + std::to_string(num_readers) + 
