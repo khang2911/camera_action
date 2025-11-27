@@ -879,7 +879,7 @@ void VideoReader::startPrefetchThread() {
         return;
     }
     const size_t depth = static_cast<size_t>(std::max(4, options_.prefetch_queue_depth));
-    packet_queue_ = std::make_unique<PrefetchQueue>(depth);
+    packet_queue_.reset(new PrefetchQueue(depth));
     prefetch_stop_ = false;
     prefetch_eof_ = false;
     prefetch_error_ = false;

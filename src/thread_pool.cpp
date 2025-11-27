@@ -325,7 +325,6 @@ ThreadPool::ThreadPool(int num_readers,
         engine_groups_.push_back(std::move(engine_group));
     }
     
-    size_t engine_count = std::max<size_t>(1, engine_groups_.size());
     preprocess_dispatcher_count_ = std::max(1, std::min(num_preprocessors_, 4));
     
     LOG_INFO("ThreadPool", "ThreadPool initialized (Redis mode) with " + std::to_string(num_readers) + 
