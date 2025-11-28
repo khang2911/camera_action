@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <map>
 #include <cuda.h>
+#include <opencv2/opencv.hpp>
 #include "frame_queue.h"
 #include "preprocessor.h"
 #include "yolo_detector.h"
@@ -165,6 +166,12 @@ private:
         std::string engine_name;  // For Redis message tracking
         int engine_id;  // For statistics
         int batch_size;
+        // Debug mode fields (only populated in debug mode)
+        std::vector<cv::Mat> frames;  // Original frames for debug image saving
+        std::vector<int> video_ids;  // For debug image path generation
+        std::vector<std::string> serials;  // For debug image path generation
+        std::vector<std::string> record_ids;  // For debug image path generation
+        std::vector<std::string> record_dates;  // For debug image path generation
     };
     
     // Thread-safe queue for post-processing tasks

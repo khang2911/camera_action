@@ -18,6 +18,8 @@
 #include <atomic>
 #include <deque>
 #include <optional>
+#include <set>
+#include <map>
 #include <yaml-cpp/yaml.h>
 #include <cuda_runtime_api.h>
 #include "nlohmann/json.hpp"
@@ -1686,7 +1688,6 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 
                 auto batch_start = std::chrono::steady_clock::now();
                 bool success = false;
-                std::vector<std::vector<Detection>> batch_detections;
                 
                 // CRITICAL: Validate all batch vectors have the same size after sorting
                 bool batch_valid = true;
@@ -1746,327 +1747,64 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     continue;  // Continue to next batch collection
                 }
                 
-                if (debug_mode_) {
-                    // In debug mode, get detections to draw on images
-                    // Note: We only process full batches, so actual_batch_count == batch_size
-                    static thread_local int batch_count = 0;
-                    batch_count++;
-                    if (batch_count % 10 == 1) {
-                        LOG_INFO("Detector", "Processing batch #" + std::to_string(batch_count) + 
-                                 " (size=" + std::to_string(actual_batch_count) + 
-                                 ", engine=" + engine_group->engine_name + 
-                                 ", detector=" + std::to_string(detector_id) + ")");
+                // Use the same processing path for both debug and normal mode
+                // Get raw inference output and push to post-processing queue
+                std::vector<std::vector<float>> raw_outputs;
+                success = engine_group->detectors[detector_id]->getRawInferenceOutput(
+                    batch_tensors, raw_outputs
+                );
+                
+                if (!success) {
+                    LOG_ERROR("Detector", "getRawInferenceOutput failed for batch_size=" + 
+                             std::to_string(actual_batch_count) + 
+                             " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                } else if (raw_outputs.empty()) {
+                    LOG_ERROR("Detector", "getRawInferenceOutput returned empty raw_outputs for batch_size=" + 
+                             std::to_string(actual_batch_count) + 
+                             " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                    success = false;
+                }
+                
+                if (success && !raw_outputs.empty()) {
+                    // Create post-processing task
+                    PostProcessTask task;
+                    task.detector = engine_group->detectors[detector_id].get();
+                    task.raw_outputs = std::move(raw_outputs);
+                    task.output_paths = batch_output_paths;
+                    task.frame_numbers = batch_frame_numbers;
+                    task.original_widths = batch_original_widths;
+                    task.original_heights = batch_original_heights;
+                    task.roi_offset_x = batch_roi_offset_x;
+                    task.roi_offset_y = batch_roi_offset_y;
+                    task.true_original_widths = batch_true_original_widths;
+                    task.true_original_heights = batch_true_original_heights;
+                    task.message_keys = batch_message_keys;
+                    task.video_indices = batch_video_indices;
+                    task.engine_name = engine_group->engine_name;
+                    task.engine_id = engine_id;
+                    task.batch_size = static_cast<int>(batch_tensors.size());
+                    
+                    // Add debug mode fields if in debug mode
+                    if (debug_mode_) {
+                        task.frames = batch_frames;  // Copy frames for debug image saving
+                        task.video_ids = batch_video_ids;
+                        task.serials = batch_serials;
+                        task.record_ids = batch_record_ids;
+                        task.record_dates = batch_record_dates;
                     }
                     
-                    success = engine_group->detectors[detector_id]->runInferenceWithDetections(
-                        batch_tensors,
-                        batch_output_paths, batch_frame_numbers,
-                        batch_original_widths, batch_original_heights,
-                        batch_detections,
-                        batch_roi_offset_x, batch_roi_offset_y,
-                        batch_true_original_widths, batch_true_original_heights
-                    );
+                    // Note: registerPendingFrame is already called in preprocessorWorker (line 907)
+                    // No need to call it again here to avoid double-counting
                     
-                    if (!success) {
-                        LOG_ERROR("Detector", "runInferenceWithDetections failed for batch_size=" + 
-                                 std::to_string(actual_batch_count) + 
-                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + 
-                                 ", batch_count=" + std::to_string(batch_count) + ")");
-                    } else {
-                        // Log successful batch processing
-                        int total_detections = 0;
-                        for (const auto& dets : batch_detections) {
-                            total_detections += static_cast<int>(dets.size());
-                        }
-                        if (batch_count % 10 == 1) {
-                            LOG_INFO("Detector", "Batch #" + std::to_string(batch_count) + " processed successfully: " +
-                                     std::to_string(total_detections) + " total detections across " +
-                                     std::to_string(actual_batch_count) + " frames");
-                        }
-                    }
-                    
-                    // Validate detections array size matches batch size
-                    if (success && batch_detections.size() != static_cast<size_t>(actual_batch_count)) {
-                        std::string error_msg = std::string("CRITICAL: runInferenceWithDetections returned wrong size! ") +
-                                                "expected=" + std::to_string(actual_batch_count) +
-                                                ", got=" + std::to_string(batch_detections.size()) +
-                                                " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")";
-                        LOG_ERROR("Detector", error_msg);
-                        success = false;  // Mark as failed to prevent saving wrong debug images
-                    }
-                    
-                    // CRITICAL: Validate that detections align with frames after sorting
-                    // After sorting, batch_detections[i] should correspond to batch_frames[i] and batch_frame_numbers[i]
-                    if (success && batch_detections.size() == static_cast<size_t>(actual_batch_count) &&
-                        batch_frames.size() == static_cast<size_t>(actual_batch_count) &&
-                        batch_frame_numbers.size() == static_cast<size_t>(actual_batch_count)) {
-                        // Log alignment info for first and last frame to verify sorting worked
-                        if (actual_batch_count > 0) {
-                            std::string align_info = std::string("Frame-detection alignment after sorting: ") +
-                                                    "frame[0]=" + std::to_string(batch_frame_numbers[0]) +
-                                                    " (detections=" + std::to_string(batch_detections[0].size()) + ")";
-                            if (actual_batch_count > 1) {
-                                align_info += ", frame[" + std::to_string(actual_batch_count-1) + "]=" +
-                                            std::to_string(batch_frame_numbers[actual_batch_count-1]) +
-                                            " (detections=" + std::to_string(batch_detections[actual_batch_count-1].size()) + ")";
-                            }
-                            align_info += " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")";
-                            LOG_DEBUG("Detector", align_info);
-                        }
-                    }
-                } else {
-                    // Get raw inference output and push to post-processing queue
-                    std::vector<std::vector<float>> raw_outputs;
-                    success = engine_group->detectors[detector_id]->getRawInferenceOutput(
-                        batch_tensors, raw_outputs
-                    );
-                    
-                    if (!success) {
-                        LOG_ERROR("Detector", "getRawInferenceOutput failed for batch_size=" + 
-                                 std::to_string(actual_batch_count) + 
-                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
-                    } else if (raw_outputs.empty()) {
-                        LOG_ERROR("Detector", "getRawInferenceOutput returned empty raw_outputs for batch_size=" + 
-                                 std::to_string(actual_batch_count) + 
-                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                    // Push to post-processing queue (non-blocking)
+                    if (!postprocess_queue_ || !postprocess_queue_->push(task)) {
+                        LOG_ERROR("Detector", "Failed to push batch to post-processing queue");
                         success = false;
-                    }
-                    
-                    if (success && !raw_outputs.empty()) {
-                        // Create post-processing task
-                        PostProcessTask task;
-                        task.detector = engine_group->detectors[detector_id].get();
-                        task.raw_outputs = std::move(raw_outputs);
-                        task.output_paths = batch_output_paths;
-                        task.frame_numbers = batch_frame_numbers;
-                        task.original_widths = batch_original_widths;
-                        task.original_heights = batch_original_heights;
-                        task.roi_offset_x = batch_roi_offset_x;
-                        task.roi_offset_y = batch_roi_offset_y;
-                        task.true_original_widths = batch_true_original_widths;
-                        task.true_original_heights = batch_true_original_heights;
-                        task.message_keys = batch_message_keys;
-                        task.video_indices = batch_video_indices;
-                        task.engine_name = engine_group->engine_name;
-                        task.engine_id = engine_id;
-                        task.batch_size = static_cast<int>(batch_tensors.size());
-                        
-                        // Note: registerPendingFrame is already called in preprocessorWorker (line 907)
-                        // No need to call it again here to avoid double-counting
-                        
-                        // Push to post-processing queue (non-blocking)
-                        if (!postprocess_queue_ || !postprocess_queue_->push(task)) {
-                            LOG_ERROR("Detector", "Failed to push batch to post-processing queue");
-                            success = false;
-                        }
                     }
                 }
                 
                 auto batch_end = std::chrono::steady_clock::now();
                 auto batch_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(batch_end - batch_start).count();
-                
-                // Save debug images for batch
-                // Note: We only process full batches, so actual_batch_count == batch_size
-                if (debug_mode_ && success) {
-                    // Validate sizes match
-                    if (batch_detections.size() != static_cast<size_t>(actual_batch_count)) {
-                        std::string error_msg = "CRITICAL: batch_detections size mismatch! detections=" + 
-                                                std::to_string(batch_detections.size()) + 
-                                                ", expected=" + std::to_string(actual_batch_count) +
-                                                " (engine=" + engine_group->engine_name + ")";
-                        LOG_ERROR("Detector", error_msg);
-                    }
-                    if (batch_frames.size() != static_cast<size_t>(actual_batch_count)) {
-                        std::string error_msg = "CRITICAL: batch_frames size mismatch! frames=" + 
-                                                std::to_string(batch_frames.size()) + 
-                                                ", expected=" + std::to_string(actual_batch_count) +
-                                                " (engine=" + engine_group->engine_name + ")";
-                        LOG_ERROR("Detector", error_msg);
-                    }
-                    if (batch_frame_numbers.size() != static_cast<size_t>(actual_batch_count)) {
-                        std::string error_msg = "CRITICAL: batch_frame_numbers size mismatch! frame_numbers=" + 
-                                                std::to_string(batch_frame_numbers.size()) + 
-                                                ", expected=" + std::to_string(actual_batch_count) +
-                                                " (engine=" + engine_group->engine_name + ")";
-                        LOG_ERROR("Detector", error_msg);
-                    }
-                    
-                    // Only save if all sizes match
-                    bool sizes_match = (batch_detections.size() == static_cast<size_t>(actual_batch_count) &&
-                                       batch_frames.size() == static_cast<size_t>(actual_batch_count) &&
-                                       batch_frame_numbers.size() == static_cast<size_t>(actual_batch_count));
-                    
-                    if (!sizes_match) {
-                        LOG_WARNING("Detector", "Debug image save skipped - size mismatch (engine=" + 
-                                   engine_group->engine_name + 
-                                   "): detections=" + std::to_string(batch_detections.size()) +
-                                   ", frames=" + std::to_string(batch_frames.size()) +
-                                   ", frame_numbers=" + std::to_string(batch_frame_numbers.size()) +
-                                   ", expected=" + std::to_string(actual_batch_count));
-                    }
-                    
-                    if (sizes_match) {
-                        for (int b = 0; b < actual_batch_count; ++b) {
-                            // Validate frame number matches expected
-                            if (b > 0 && batch_frame_numbers[b] < batch_frame_numbers[b-1]) {
-                                std::string error_msg = "CRITICAL: Frame number out of order in batch! frame[" + 
-                                                        std::to_string(b-1) + "]=" + std::to_string(batch_frame_numbers[b-1]) +
-                                                        ", frame[" + std::to_string(b) + "]=" + std::to_string(batch_frame_numbers[b]) +
-                                                        " (engine=" + engine_group->engine_name + ")";
-                                LOG_ERROR("Detector", error_msg);
-                            }
-                            
-                            // Validate batch index is within bounds
-                            if (b >= static_cast<int>(batch_detections.size()) || 
-                                b >= static_cast<int>(batch_frames.size()) ||
-                                b >= static_cast<int>(batch_frame_numbers.size())) {
-                                std::string error_msg = "CRITICAL: Batch index out of bounds! b=" + std::to_string(b) +
-                                                        ", detections_size=" + std::to_string(batch_detections.size()) +
-                                                        ", frames_size=" + std::to_string(batch_frames.size()) +
-                                                        ", frame_numbers_size=" + std::to_string(batch_frame_numbers.size()) +
-                                                        " (engine=" + engine_group->engine_name + ")";
-                                LOG_ERROR("Detector", error_msg);
-                                continue;  // Skip this frame
-                            }
-                            
-                            // Validate frame and detection are aligned
-                            int frame_num = batch_frame_numbers[b];
-                            int detection_count = static_cast<int>(batch_detections[b].size());
-                            
-                            // CRITICAL: Validate that we're using the correct frame
-                            // Check if frame is empty or if we're accidentally reusing the same frame
-                            if (batch_frames[b].empty()) {
-                                LOG_ERROR("Detector", "CRITICAL: Empty frame at batch index " + std::to_string(b) + 
-                                         ", frame_number=" + std::to_string(frame_num));
-                                continue;  // Skip this frame
-                            }
-                            
-                            // Validate frame dimensions are reasonable (not all zeros or same)
-                            if (b > 0) {
-                                // Validate both frames are valid before comparison
-                                if (batch_frames[b].empty() || batch_frames[b-1].empty()) {
-                                    LOG_ERROR("Detector", "CRITICAL: Empty frame detected in batch! batch_idx=" + 
-                                             std::to_string(b) + ", frame[" + std::to_string(b-1) + "] empty=" + 
-                                             (batch_frames[b-1].empty() ? "YES" : "NO") +
-                                             ", frame[" + std::to_string(b) + "] empty=" + 
-                                             (batch_frames[b].empty() ? "YES" : "NO"));
-                                    continue;  // Skip this frame
-                                }
-                                
-                                // Check if this frame is different from previous frame
-                                // Convert to grayscale first since countNonZero requires single channel
-                                cv::Mat diff;
-                                cv::absdiff(batch_frames[b], batch_frames[b-1], diff);
-                                
-                                // Convert to grayscale if multi-channel
-                                cv::Mat diff_gray;
-                                if (diff.channels() > 1) {
-                                    cv::cvtColor(diff, diff_gray, cv::COLOR_BGR2GRAY);
-                                } else {
-                                    diff_gray = diff;
-                                }
-                                
-                                int non_zero = cv::countNonZero(diff_gray);
-                                if (non_zero == 0 && batch_frame_numbers[b] != batch_frame_numbers[b-1]) {
-                                    // Additional validation: Check if frame data pointers are the same
-                                    // (This would indicate they're sharing the same underlying buffer - a real bug)
-                                    bool same_data_ptr = (batch_frames[b].data == batch_frames[b-1].data);
-                                    
-                                    if (same_data_ptr) {
-                                        // This is a REAL bug - frames are sharing the same buffer despite cloning
-                                        std::string error_msg = std::string("CRITICAL: Frame data pointers are identical! ") +
-                                                               "Frames are sharing the same buffer despite cloning! " +
-                                                               "batch_idx=" + std::to_string(b) +
-                                                               ", frame[" + std::to_string(b-1) + "]=" + std::to_string(batch_frame_numbers[b-1]) +
-                                                               ", frame[" + std::to_string(b) + "]=" + std::to_string(batch_frame_numbers[b]) +
-                                                               " (engine=" + engine_group->engine_name + ")";
-                                        LOG_ERROR("Detector", error_msg);
-                                    } else {
-                                        // Duplicate pixel data but different buffers - this is expected if source video has duplicate frames
-                                        static thread_local int duplicate_frame_count = 0;
-                                        duplicate_frame_count++;
-                                        if (duplicate_frame_count <= 10) {
-                                            std::string warning_msg = std::string("Duplicate frames detected (expected if source video has duplicate frames): ") +
-                                                                     "batch_idx=" + std::to_string(b) +
-                                                                     ", frame[" + std::to_string(b-1) + "]=" + std::to_string(batch_frame_numbers[b-1]) +
-                                                                     ", frame[" + std::to_string(b) + "]=" + std::to_string(batch_frame_numbers[b]) +
-                                                                     " (engine=" + engine_group->engine_name + ")";
-                                            LOG_WARNING("Detector", warning_msg);
-                                        } else if (duplicate_frame_count == 11) {
-                                            LOG_WARNING("Detector", "Suppressing further duplicate frame warnings (this is normal for videos with duplicate frames)");
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            cv::Mat debug_frame = engine_group->preprocessor->addPadding(batch_frames[b]);
-                            engine_group->detectors[detector_id]->drawDetections(debug_frame, batch_detections[b]);
-                            
-                            // Log frame-detection alignment for debugging
-                            std::string debug_msg = "Debug image: frame=" + std::to_string(frame_num) +
-                                                    ", detections=" + std::to_string(detection_count) +
-                                                    ", batch_idx=" + std::to_string(b) +
-                                                    ", frame_size=" + std::to_string(batch_frames[b].cols) + "x" + std::to_string(batch_frames[b].rows) +
-                                                    ", engine=" + engine_group->engine_name;
-                            LOG_DEBUG("Detector", debug_msg);
-                            
-                            std::string serial_part = serialPart(batch_serials[b], batch_message_keys[b], batch_video_ids[b]);
-                            std::string record_part = recordPart(batch_record_ids[b], batch_message_keys[b], batch_video_ids[b]);
-                            std::string date_part = formatDate(batch_record_dates[b]);
-                            
-                            std::filesystem::path debug_dir = std::filesystem::path(output_dir_) / "debug_images" /
-                                                               engine_group->engine_name / date_part /
-                                                               (serial_part + "_" + record_part + "_v" + std::to_string(batch_video_indices[b]));
-                            std::filesystem::create_directories(debug_dir);
-                            
-                            std::string image_filename = "frame_" + 
-                                std::to_string(batch_frame_numbers[b]) + "_" + 
-                                engine_group->engine_name + ".jpg";
-                            std::filesystem::path image_path = debug_dir / image_filename;
-                            
-                            if (cv::imwrite(image_path.string(), debug_frame)) {
-                                std::string debug_msg = "Saved debug image: frame=" + 
-                                                       std::to_string(batch_frame_numbers[b]) + 
-                                                       ", detections=" + std::to_string(batch_detections[b].size()) +
-                                                       ", path=" + image_path.string();
-                                LOG_DEBUG("Detector", debug_msg);
-                            } else {
-                                LOG_ERROR("Detector", "Failed to save debug image: " + image_path.string());
-                            }
-                            // Note: markFrameProcessed will be called after the loop for all frames
-                        }
-                    } else {
-                        LOG_ERROR("Detector", "Skipping debug image save due to size mismatch (engine=" + 
-                                 engine_group->engine_name + 
-                                 "): detections=" + std::to_string(batch_detections.size()) +
-                                 ", frames=" + std::to_string(batch_frames.size()) +
-                                 ", frame_numbers=" + std::to_string(batch_frame_numbers.size()) +
-                                 ", expected=" + std::to_string(actual_batch_count));
-                    }
-                    
-                    // CRITICAL: Mark ALL frames as processed after debug image saving attempt
-                    // This ensures frames are marked even if debug image saving was skipped or some frames were skipped in the loop
-                    // IMPORTANT: Mark frames even if success is false, to avoid blocking message push
-                    if (use_redis_queue_) {
-                        int marked_count = 0;
-                        for (size_t b = 0; b < batch_message_keys.size() && b < batch_video_indices.size() && b < batch_output_paths.size(); ++b) {
-                            // Use output_path only if success, otherwise use empty string
-                            std::string output_path = success ? batch_output_paths[b] : "";
-                            markFrameProcessed(batch_message_keys[b], engine_group->engine_name, 
-                                              output_path, batch_video_indices[b]);
-                            marked_count++;
-                        }
-                        if (marked_count != actual_batch_count) {
-                            LOG_WARNING("Detector", "Marked " + std::to_string(marked_count) + 
-                                       " frames as processed, but batch size is " + std::to_string(actual_batch_count) +
-                                       " (engine=" + engine_group->engine_name + ", success=" + (success ? "true" : "false") + ")");
-                        } else if (!success) {
-                            LOG_WARNING("Detector", "Marked " + std::to_string(marked_count) + 
-                                       " frames as processed despite runInferenceWithDetections failure " +
-                                       "(engine=" + engine_group->engine_name + ")");
-                        }
-                    }
-                }
                 
                 if (success) {
                     int actual_batch_size = static_cast<int>(batch_tensors.size());
@@ -2129,97 +1867,55 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             }
             
             bool success = false;
-            std::vector<Detection> detections;
             
-            if (debug_mode_) {
-                // In debug mode, get detections to draw on image
-                std::vector<std::vector<Detection>> all_detections;
-                std::vector<std::shared_ptr<std::vector<float>>> single_input = {tensor};
-                success = engine_group->detectors[detector_id]->runInferenceWithDetections(
-                    single_input,
-                    {output_path}, {frame_data.frame_number},
-                    {frame_data.original_width}, {frame_data.original_height},
-                    all_detections,
-                    {frame_data.roi_offset_x}, {frame_data.roi_offset_y},
-                    {frame_data.true_original_width}, {frame_data.true_original_height}
-                );
-                if (success && !all_detections.empty()) {
-                    detections = all_detections[0];
-                }
-            } else {
-                // Get raw inference output and push to post-processing queue
-                std::vector<std::shared_ptr<std::vector<float>>> single_input = {tensor};
-                std::vector<std::vector<float>> raw_outputs;
-                success = engine_group->detectors[detector_id]->getRawInferenceOutput(
-                    single_input, raw_outputs
-                );
+            // Use the same processing path for both debug and normal mode
+            // Get raw inference output and push to post-processing queue
+            std::vector<std::shared_ptr<std::vector<float>>> single_input = {tensor};
+            std::vector<std::vector<float>> raw_outputs;
+            success = engine_group->detectors[detector_id]->getRawInferenceOutput(
+                single_input, raw_outputs
+            );
+            
+            if (success && !raw_outputs.empty()) {
+                // Create post-processing task
+                PostProcessTask task;
+                task.detector = engine_group->detectors[detector_id].get();
+                task.raw_outputs = std::move(raw_outputs);
+                task.output_paths = {output_path};
+                task.frame_numbers = {frame_data.frame_number};
+                task.original_widths = {frame_data.original_width};
+                task.original_heights = {frame_data.original_height};
+                task.roi_offset_x = {frame_data.roi_offset_x};
+                task.roi_offset_y = {frame_data.roi_offset_y};
+                task.true_original_widths = {frame_data.true_original_width};
+                task.true_original_heights = {frame_data.true_original_height};
+                task.message_keys = {frame_data.message_key};
+                task.video_indices = {frame_data.video_index};
+                task.engine_name = engine_group->engine_name;
+                task.engine_id = engine_id;
+                task.batch_size = 1;
                 
-                if (success && !raw_outputs.empty()) {
-                    // Create post-processing task
-                    PostProcessTask task;
-                    task.detector = engine_group->detectors[detector_id].get();
-                    task.raw_outputs = std::move(raw_outputs);
-                    task.output_paths = {output_path};
-                    task.frame_numbers = {frame_data.frame_number};
-                    task.original_widths = {frame_data.original_width};
-                    task.original_heights = {frame_data.original_height};
-                    task.roi_offset_x = {frame_data.roi_offset_x};
-                    task.roi_offset_y = {frame_data.roi_offset_y};
-                    task.true_original_widths = {frame_data.true_original_width};
-                    task.true_original_heights = {frame_data.true_original_height};
-                    task.message_keys = {frame_data.message_key};
-                    task.video_indices = {frame_data.video_index};
-                    task.engine_name = engine_group->engine_name;
-                    task.engine_id = engine_id;
-                    task.batch_size = 1;
-                    
-                    // Note: registerPendingFrame is already called in preprocessorWorker (line 907)
-                    // No need to call it again here to avoid double-counting
-                    
-                    // Push to post-processing queue (non-blocking)
-                    if (!postprocess_queue_ || !postprocess_queue_->push(task)) {
-                        LOG_ERROR("Detector", "Failed to push frame to post-processing queue");
-                        success = false;
-                    }
+                // Add debug mode fields if in debug mode
+                if (debug_mode_) {
+                    task.frames = {frame_data.frame.clone()};  // Copy frame for debug image saving
+                    task.video_ids = {frame_data.video_id};
+                    task.serials = {frame_data.serial};
+                    task.record_ids = {frame_data.record_id};
+                    task.record_dates = {frame_data.record_date};
+                }
+                
+                // Note: registerPendingFrame is already called in preprocessorWorker (line 907)
+                // No need to call it again here to avoid double-counting
+                
+                // Push to post-processing queue (non-blocking)
+                if (!postprocess_queue_ || !postprocess_queue_->push(task)) {
+                    LOG_ERROR("Detector", "Failed to push frame to post-processing queue");
+                    success = false;
                 }
             }
             
             auto detect_end = std::chrono::steady_clock::now();
             auto detect_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(detect_end - detect_start).count();
-            
-            // Save debug image if enabled
-            if (debug_mode_ && success && !frame_data.frame.empty()) {
-                cv::Mat debug_frame = engine_group->preprocessor->addPadding(frame_data.frame);
-                engine_group->detectors[detector_id]->drawDetections(debug_frame, detections);
-                
-                std::string serial_part = serialPart(frame_data.serial, frame_data.message_key, frame_data.video_id);
-                std::string record_part = recordPart(frame_data.record_id, frame_data.message_key, frame_data.video_id);
-                std::string date_part = formatDate(frame_data.record_date);
-                
-                std::filesystem::path debug_dir = std::filesystem::path(output_dir_) / "debug_images" /
-                                                   engine_group->engine_name / date_part /
-                                                   (serial_part + "_" + record_part + "_v" + std::to_string(frame_data.video_index));
-                std::filesystem::create_directories(debug_dir);
-                
-                std::string image_filename = "frame_" + 
-                    std::to_string(frame_data.frame_number) + "_" + 
-                    engine_group->engine_name + ".jpg";
-                std::filesystem::path image_path = debug_dir / image_filename;
-                
-                if (cv::imwrite(image_path.string(), debug_frame)) {
-                    LOG_DEBUG("Detector", "Saved debug image: " + image_path.string());
-                } else {
-                    LOG_ERROR("Detector", "Failed to save debug image: " + image_path.string());
-                }
-                
-                // CRITICAL: Mark frame as processed for Redis message tracking
-                // In debug mode, we process frames directly (not through postprocess queue),
-                // so we need to call markFrameProcessed here
-                if (use_redis_queue_ && !frame_data.message_key.empty()) {
-                    markFrameProcessed(frame_data.message_key, engine_group->engine_name, 
-                                     output_path, frame_data.video_index);
-                }
-            }
             
             if (success) {
                 {
@@ -2327,6 +2023,66 @@ void ThreadPool::postprocessWorker(int worker_id) {
             // We'll use a reasonable limit of 1000 detections per frame
             if (static_cast<int>(detections.size()) > 1000) {
                 detections.resize(1000);
+            }
+            
+            // Save debug images if in debug mode (before scaling to original coordinates)
+            // Debug images should be drawn on the preprocessed frame (resized scale)
+            if (debug_mode_ && b < task.frames.size() && !task.frames[b].empty()) {
+                // Get the preprocessor for this engine (needed for addPadding)
+                // We need to find the engine group to get the preprocessor
+                // For now, we'll use a simpler approach: just draw on the frame directly
+                // The detections are in normalized [0,1] coordinates relative to the preprocessed frame
+                cv::Mat debug_frame = task.frames[b].clone();
+                
+                // Add padding to match the model input size
+                // We need to get the input size from the detector
+                int input_w = task.detector->getInputWidth();
+                int input_h = task.detector->getInputHeight();
+                
+                // Calculate padding
+                int orig_w = debug_frame.cols;
+                int orig_h = debug_frame.rows;
+                float scale = std::min(static_cast<float>(input_w) / orig_w, static_cast<float>(input_h) / orig_h);
+                int new_w = static_cast<int>(orig_w * scale);
+                int new_h = static_cast<int>(orig_h * scale);
+                int pad_w = input_w - new_w;
+                int pad_h = input_h - new_h;
+                
+                // Resize and pad
+                cv::Mat resized;
+                cv::resize(debug_frame, resized, cv::Size(new_w, new_h));
+                cv::Mat padded;
+                cv::copyMakeBorder(resized, padded, 0, pad_h, 0, pad_w, cv::BORDER_CONSTANT, cv::Scalar(114, 114, 114));
+                
+                // Draw detections (they're in normalized [0,1] coordinates relative to padded frame)
+                task.detector->drawDetections(padded, detections);
+                
+                // Generate debug image path
+                if (b < task.serials.size() && b < task.record_ids.size() && b < task.record_dates.size() && 
+                    b < task.message_keys.size() && b < task.video_ids.size() && b < task.video_indices.size()) {
+                    std::string serial_part = serialPart(task.serials[b], task.message_keys[b], task.video_ids[b]);
+                    std::string record_part = recordPart(task.record_ids[b], task.message_keys[b], task.video_ids[b]);
+                    std::string date_part = formatDate(task.record_dates[b]);
+                    
+                    std::filesystem::path debug_dir = std::filesystem::path(output_dir_) / "debug_images" /
+                                                       task.engine_name / date_part /
+                                                       (serial_part + "_" + record_part + "_v" + std::to_string(task.video_indices[b]));
+                    std::filesystem::create_directories(debug_dir);
+                    
+                    std::string image_filename = "frame_" + 
+                        std::to_string(task.frame_numbers[b]) + "_" + 
+                        task.engine_name + ".jpg";
+                    std::filesystem::path image_path = debug_dir / image_filename;
+                    
+                    if (cv::imwrite(image_path.string(), padded)) {
+                        LOG_DEBUG("PostProcess", "Saved debug image: frame=" + 
+                                 std::to_string(task.frame_numbers[b]) + 
+                                 ", detections=" + std::to_string(detections.size()) +
+                                 ", path=" + image_path.string());
+                    } else {
+                        LOG_ERROR("PostProcess", "Failed to save debug image: " + image_path.string());
+                    }
+                }
             }
             
             // Scale to original frame coordinates
@@ -2680,6 +2436,13 @@ void ThreadPool::registerPendingFrame(const std::string& message_key, const std:
 void ThreadPool::markFrameProcessed(const std::string& message_key, const std::string& engine_name,
                                     const std::string& output_path, int video_index) {
     if (!use_redis_queue_ || !output_queue_ || message_key.empty() || engine_name.empty()) {
+        static thread_local int skip_count = 0;
+        if (skip_count++ < 10) {
+            LOG_WARNING("RedisOutput", "markFrameProcessed skipped: use_redis_queue_=" + 
+                       std::to_string(use_redis_queue_) + ", output_queue_=" + 
+                       (output_queue_ ? "valid" : "null") + ", message_key='" + message_key + 
+                       "', engine_name='" + engine_name + "'");
+        }
         return;
     }
     
@@ -2689,9 +2452,13 @@ void ThreadPool::markFrameProcessed(const std::string& message_key, const std::s
         auto it = video_output_status_.find(message_key);
         if (it == video_output_status_.end()) {
             // Entry might have been erased or never created - this is OK if message was already pushed
-            // Don't log as warning since this can happen legitimately after message is pushed
-            LOG_DEBUG("RedisOutput", "markFrameProcessed: message_key '" + message_key + 
-                     "' not found in video_output_status_ (message may have been pushed already)");
+            // But log it as warning since this might indicate messages aren't being registered
+            static thread_local std::set<std::string> logged_missing_keys;
+            if (logged_missing_keys.find(message_key) == logged_missing_keys.end() && logged_missing_keys.size() < 10) {
+                logged_missing_keys.insert(message_key);
+                LOG_WARNING("RedisOutput", "markFrameProcessed: message_key '" + message_key + 
+                           "' not found in video_output_status_ (message may not have been registered or already pushed)");
+            }
             return;
         }
         
@@ -2711,6 +2478,7 @@ void ThreadPool::markFrameProcessed(const std::string& message_key, const std::s
         
         // Decrement pending count (should never go negative, but handle it gracefully)
         int& pending = status.pending_counts[engine_name];
+        int old_pending = pending;
         if (pending > 0) {
             pending--;
         } else if (pending < 0) {
@@ -2719,6 +2487,18 @@ void ThreadPool::markFrameProcessed(const std::string& message_key, const std::s
                        "' engine '" + engine_name + "' is negative (" + std::to_string(pending) + 
                        "), resetting to 0");
             pending = 0;
+        }
+        
+        // Log periodically to track progress
+        static thread_local std::map<std::string, int> mark_log_counters;
+        int& mark_counter = mark_log_counters[message_key + "_" + engine_name];
+        if (++mark_counter % 100 == 0) {
+            int registered = status.registered_counts[engine_name];
+            int processed = status.processed_counts[engine_name];
+            LOG_DEBUG("RedisOutput", "markFrameProcessed progress: message_key='" + message_key + 
+                     "', engine='" + engine_name + "', pending=" + std::to_string(pending) + 
+                     " (was " + std::to_string(old_pending) + "), registered=" + std::to_string(registered) + 
+                     ", processed=" + std::to_string(processed));
         }
         
         message_to_push = tryPushOutputLocked(message_key, status);
@@ -2894,20 +2674,59 @@ std::string ThreadPool::augmentMessageWithDetectors(const std::string& message,
 
 std::string ThreadPool::tryPushOutputLocked(const std::string& message_key, VideoOutputStatus& status) {
     if (!canPushOutputLocked(status)) {
-        // Reduced logging - only log occasionally to avoid performance impact
-        static std::atomic<int> log_counter{0};
-        bool should_log = (++log_counter % 50 == 0);  // Log every 50th call
+        // Log why we can't push (with throttling)
+        static thread_local std::map<std::string, int> log_counters;
+        int& counter = log_counters[message_key];
+        bool should_log = (++counter % 100 == 0);  // Log every 100th call per message_key
         
         if (should_log) {
-            if (!status.reading_completed) {
-                LOG_DEBUG("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
-                         "' reading not completed yet");
+            std::ostringstream reason;
+            if (status.timed_out) {
+                reason << "timed_out=true";
+            } else if (!status.reading_completed) {
+                reason << "reading_completed=false";
             } else if (status.message_pushed) {
-                LOG_DEBUG("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
-                         "' already pushed");
+                reason << "message_pushed=true";
             } else {
-                // Check pending counts (simplified logging)
+                // Check pending counts
                 int total_pending = 0;
+                for (const auto& kv : status.pending_counts) {
+                    total_pending += kv.second;
+                    if (kv.second > 0) {
+                        reason << "pending[" << kv.first << "]=" << kv.second << " ";
+                    }
+                }
+                if (total_pending == 0) {
+                    // Check registered vs processed
+                    for (const auto& kv : status.registered_counts) {
+                        const std::string& engine_name = kv.first;
+                        int registered = kv.second;
+                        auto proc_it = status.processed_counts.find(engine_name);
+                        int processed = (proc_it != status.processed_counts.end()) ? proc_it->second : 0;
+                        if (registered != processed) {
+                            reason << "registered[" << engine_name << "]=" << registered << 
+                                      " != processed[" << engine_name << "]=" << processed << " ";
+                        }
+                    }
+                    // Check if has outputs
+                    bool has_outputs = false;
+                    for (const auto& kv : status.detector_outputs) {
+                        if (!kv.second.empty()) {
+                            has_outputs = true;
+                            break;
+                        }
+                    }
+                    if (!has_outputs) {
+                        reason << "no_detector_outputs ";
+                    }
+                }
+            }
+            LOG_DEBUG("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
+                     "' cannot push: " + reason.str());
+        }
+        
+        // Check pending counts (simplified logging)
+        int total_pending = 0;
                 for (const auto& kv : status.pending_counts) {
                     total_pending += kv.second;
                 }
