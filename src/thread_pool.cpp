@@ -1318,11 +1318,12 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                             }
                             int non_zero = cv::countNonZero(diff_gray);
                             if (non_zero == 0 && frame_data.frame_number != batch_frame_numbers.back()) {
-                                LOG_ERROR("Detector", "CRITICAL: Duplicate frame detected when adding to batch! " +
-                                         "frame_number=" + std::to_string(frame_data.frame_number) +
-                                         ", previous_frame_number=" + std::to_string(batch_frame_numbers.back()) +
-                                         " (engine=" + engine_group->engine_name + 
-                                         ", detector=" + std::to_string(detector_id) + ")");
+                                std::string error_msg = std::string("CRITICAL: Duplicate frame detected when adding to batch! ") +
+                                                       "frame_number=" + std::to_string(frame_data.frame_number) +
+                                                       ", previous_frame_number=" + std::to_string(batch_frame_numbers.back()) +
+                                                       " (engine=" + engine_group->engine_name + 
+                                                       ", detector=" + std::to_string(detector_id) + ")";
+                                LOG_ERROR("Detector", error_msg);
                             }
                         }
                     }
