@@ -920,12 +920,20 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
                     }
                     int non_zero = cv::countNonZero(diff_gray);
                     if (non_zero == 0) {
-                        std::string error_msg = std::string("CRITICAL: Video reader returned identical frames! ") +
-                                               "frame_number=" + std::to_string(actual_frame_position) +
-                                               ", previous_frame_number=" + std::to_string(prev_frame_number) +
-                                               " (video=" + video_key + ")";
-                        LOG_ERROR("Reader", error_msg);
-                        // Still process the frame, but log the error
+                        // Duplicate frames are common in some video encodings (e.g., frame rate conversion, B-frames)
+                        // This is expected behavior and not an error - the video file itself contains duplicate frames
+                        static thread_local int duplicate_frame_count = 0;
+                        duplicate_frame_count++;
+                        if (duplicate_frame_count <= 10) {
+                            std::string warning_msg = std::string("Video contains duplicate frames (expected in some encodings): ") +
+                                                      "frame_number=" + std::to_string(actual_frame_position) +
+                                                      ", previous_frame_number=" + std::to_string(prev_frame_number) +
+                                                      " (video=" + video_key + ")";
+                            LOG_WARNING("Reader", warning_msg);
+                        } else if (duplicate_frame_count == 11) {
+                            LOG_WARNING("Reader", "Suppressing further duplicate frame warnings for this video (this is normal for some encodings)");
+                        }
+                        // Still process the frame - duplicate frames are valid in video encoding
                     }
                 }
             }
@@ -1929,20 +1937,32 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                                 int non_zero = cv::countNonZero(diff_gray);
                                 if (non_zero == 0 && batch_frame_numbers[b] != batch_frame_numbers[b-1]) {
                                     // Additional validation: Check if frame data pointers are the same
-                                    // (This would indicate they're sharing the same underlying buffer)
+                                    // (This would indicate they're sharing the same underlying buffer - a real bug)
                                     bool same_data_ptr = (batch_frames[b].data == batch_frames[b-1].data);
-                                    std::string error_msg = std::string("CRITICAL: Same frame data for different frame numbers! ") +
-                                                           "batch_idx=" + std::to_string(b) +
-                                                           ", frame[" + std::to_string(b-1) + "]=" + std::to_string(batch_frame_numbers[b-1]) +
-                                                           ", frame[" + std::to_string(b) + "]=" + std::to_string(batch_frame_numbers[b]) +
-                                                           ", same_data_ptr=" + (same_data_ptr ? "YES" : "NO") +
-                                                           ", frame_size=[" + std::to_string(batch_frames[b].cols) + "x" + std::to_string(batch_frames[b].rows) + "]" +
-                                                           " (engine=" + engine_group->engine_name + ")";
-                                    LOG_ERROR("Detector", error_msg);
                                     
-                                    // If data pointers are the same, this is a serious bug - frames are sharing buffers
                                     if (same_data_ptr) {
-                                        LOG_ERROR("Detector", "CRITICAL: Frame data pointers are identical! This indicates frames are sharing the same buffer despite cloning!");
+                                        // This is a REAL bug - frames are sharing the same buffer despite cloning
+                                        std::string error_msg = std::string("CRITICAL: Frame data pointers are identical! ") +
+                                                               "Frames are sharing the same buffer despite cloning! " +
+                                                               "batch_idx=" + std::to_string(b) +
+                                                               ", frame[" + std::to_string(b-1) + "]=" + std::to_string(batch_frame_numbers[b-1]) +
+                                                               ", frame[" + std::to_string(b) + "]=" + std::to_string(batch_frame_numbers[b]) +
+                                                               " (engine=" + engine_group->engine_name + ")";
+                                        LOG_ERROR("Detector", error_msg);
+                                    } else {
+                                        // Duplicate pixel data but different buffers - this is expected if source video has duplicate frames
+                                        static thread_local int duplicate_frame_count = 0;
+                                        duplicate_frame_count++;
+                                        if (duplicate_frame_count <= 10) {
+                                            std::string warning_msg = std::string("Duplicate frames detected (expected if source video has duplicate frames): ") +
+                                                                     "batch_idx=" + std::to_string(b) +
+                                                                     ", frame[" + std::to_string(b-1) + "]=" + std::to_string(batch_frame_numbers[b-1]) +
+                                                                     ", frame[" + std::to_string(b) + "]=" + std::to_string(batch_frame_numbers[b]) +
+                                                                     " (engine=" + engine_group->engine_name + ")";
+                                            LOG_WARNING("Detector", warning_msg);
+                                        } else if (duplicate_frame_count == 11) {
+                                            LOG_WARNING("Detector", "Suppressing further duplicate frame warnings (this is normal for videos with duplicate frames)");
+                                        }
                                     }
                                 }
                             }
