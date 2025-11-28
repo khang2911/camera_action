@@ -1793,10 +1793,11 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                                 cv::absdiff(batch_frames[b], batch_frames[b-1], diff);
                                 int non_zero = cv::countNonZero(diff);
                                 if (non_zero == 0 && batch_frame_numbers[b] != batch_frame_numbers[b-1]) {
-                                    LOG_ERROR("Detector", "CRITICAL: Same frame data for different frame numbers! " +
-                                             "batch_idx=" + std::to_string(b) +
-                                             ", frame[" + std::to_string(b-1) + "]=" + std::to_string(batch_frame_numbers[b-1]) +
-                                             ", frame[" + std::to_string(b) + "]=" + std::to_string(batch_frame_numbers[b]));
+                                    std::string error_msg = std::string("CRITICAL: Same frame data for different frame numbers! ") +
+                                                           "batch_idx=" + std::to_string(b) +
+                                                           ", frame[" + std::to_string(b-1) + "]=" + std::to_string(batch_frame_numbers[b-1]) +
+                                                           ", frame[" + std::to_string(b) + "]=" + std::to_string(batch_frame_numbers[b]);
+                                    LOG_ERROR("Detector", error_msg);
                                 }
                             }
                             
