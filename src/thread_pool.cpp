@@ -565,6 +565,10 @@ void ThreadPool::waitForCompletion() {
                     break;
                 }
             }
+            // Also check postprocessor queue
+            if (postprocess_queue_ && !postprocess_queue_->empty()) {
+                all_queues_empty = false;
+            }
             
             if (all_videos_processed && all_queues_empty) {
                 // Both conditions met, but wait a bit more to ensure detectors finish processing
@@ -601,7 +605,9 @@ void ThreadPool::waitForCompletion() {
             }
         }
         
-        LOG_INFO("ThreadPool", "All processing complete. Stopping all threads...");
+        LOG_INFO("ThreadPool", "=== All Processing Complete ===");
+        LOG_INFO("ThreadPool", "All videos processed, all queues empty, and all threads stopped.");
+        LOG_INFO("ThreadPool", "Stopping all threads...");
         
         stop_flag_ = true;
         stop();

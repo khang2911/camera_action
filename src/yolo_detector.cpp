@@ -309,17 +309,32 @@ bool YOLODetector::runWithPreprocessedBatch(
 
 bool YOLODetector::getRawInferenceOutput(const std::vector<std::shared_ptr<std::vector<float>>>& inputs,
                                           std::vector<std::vector<float>>& raw_outputs) {
-    if (static_cast<int>(inputs.size()) != batch_size_) {
-        std::cerr << "Error: getRawInferenceOutput expected " << batch_size_
-                  << " inputs, received " << inputs.size() << std::endl;
+    int actual_batch_size = static_cast<int>(inputs.size());
+    if (actual_batch_size == 0) {
+        std::cerr << "Error: getRawInferenceOutput received empty input" << std::endl;
+        return false;
+    }
+    if (actual_batch_size > batch_size_) {
+        std::cerr << "Error: getRawInferenceOutput received " << actual_batch_size
+                  << " inputs, but batch_size is " << batch_size_ << std::endl;
         return false;
     }
     
     // Set CUDA device
     cudaSetDevice(gpu_id_);
     
-    // Copy inputs to device
-    if (!copyInputsToDevice(inputs)) {
+    // Pad inputs to batch_size_ if needed (for partial batches)
+    std::vector<std::shared_ptr<std::vector<float>>> padded_inputs = inputs;
+    if (actual_batch_size < batch_size_) {
+        // Create zero-filled tensors for padding
+        auto zero_tensor = std::make_shared<std::vector<float>>(input_elements_, 0.0f);
+        for (int i = actual_batch_size; i < batch_size_; ++i) {
+            padded_inputs.push_back(zero_tensor);
+        }
+    }
+    
+    // Copy inputs to device (now padded to batch_size_)
+    if (!copyInputsToDevice(padded_inputs)) {
         return false;
     }
     
@@ -348,10 +363,11 @@ bool YOLODetector::getRawInferenceOutput(const std::vector<std::shared_ptr<std::
         return false;
     }
     
+    // Only extract outputs for actual frames (not padded ones)
     raw_outputs.clear();
-    raw_outputs.resize(batch_size_);
+    raw_outputs.resize(actual_batch_size);
     
-    for (int b = 0; b < batch_size_; ++b) {
+    for (int b = 0; b < actual_batch_size; ++b) {
         size_t batch_offset = static_cast<size_t>(b) * output_per_frame;
         raw_outputs[b].resize(output_per_frame);
         std::copy(output_data.begin() + batch_offset,
@@ -363,9 +379,10 @@ bool YOLODetector::getRawInferenceOutput(const std::vector<std::shared_ptr<std::
 }
 
 bool YOLODetector::copyInputsToDevice(const std::vector<std::shared_ptr<std::vector<float>>>& inputs) {
-    if (static_cast<int>(inputs.size()) != batch_size_) {
+    int input_count = static_cast<int>(inputs.size());
+    if (input_count != batch_size_) {
         std::cerr << "Error: copyInputsToDevice expected " << batch_size_
-                  << " inputs, received " << inputs.size() << std::endl;
+                  << " inputs, received " << input_count << std::endl;
         return false;
     }
     
