@@ -90,8 +90,8 @@ ThreadPool::ThreadPool(int num_readers,
       output_dir_(output_dir),
       debug_mode_(debug_mode),
       max_frames_per_video_(max_frames_per_video),
-      use_redis_queue_(false),
       reader_options_(reader_options),
+      use_redis_queue_(false),
       stop_flag_(false) {
     
     
@@ -225,12 +225,12 @@ ThreadPool::ThreadPool(int num_readers,
       output_dir_(output_dir),
       debug_mode_(debug_mode),
       max_frames_per_video_(max_frames_per_video),
+      reader_options_(reader_options),
       use_redis_queue_(true),
       input_queue_(input_queue),
       output_queue_(output_queue),
       input_queue_name_(input_queue_name),
       output_queue_name_(output_queue_name),
-      reader_options_(reader_options),
       stop_flag_(false) {
     
     // Log debug mode status
@@ -1304,7 +1304,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     
                     // Validate detections array size matches batch size
                     if (success && batch_detections.size() != static_cast<size_t>(actual_batch_count)) {
-                        std::string error_msg = "CRITICAL: runInferenceWithDetections returned wrong size! " +
+                        std::string error_msg = std::string("CRITICAL: runInferenceWithDetections returned wrong size! ") +
                                                 "expected=" + std::to_string(actual_batch_count) +
                                                 ", got=" + std::to_string(batch_detections.size()) +
                                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")";
