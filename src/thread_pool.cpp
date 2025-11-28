@@ -1000,7 +1000,15 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             }
             auto* shared_group = shared_group_ptr.get();
             
-            FrameData frame_copy = raw_frame;  // cv::Mat uses reference counting
+            // CRITICAL: Create a deep copy to ensure each group gets an independent frame
+            // cv::Mat uses reference counting, so assignment creates a shallow copy
+            FrameData frame_copy = raw_frame;
+            // Ensure the frame is a deep copy
+            if (!raw_frame.frame.empty()) {
+                cv::Mat frame_clone;
+                raw_frame.frame.copyTo(frame_clone);
+                frame_copy.frame = frame_clone;
+            }
             
             // Use blocking push (500ms timeout) to maintain strict FIFO order
             // If queue is full, we wait rather than buffering out of order
@@ -1060,7 +1068,12 @@ void ThreadPool::enginePreprocessWorker(int worker_id) {
         int true_original_width = frame_data.true_original_width > 0 ? frame_data.true_original_width : frame_data.original_width;
         int true_original_height = frame_data.true_original_height > 0 ? frame_data.true_original_height : frame_data.original_height;
         
-        cv::Mat frame_to_process = frame_data.frame;
+        // CRITICAL: Create a deep copy of the frame to ensure independence
+        // frame_data.frame might be shared with other FrameData objects due to cv::Mat reference counting
+        cv::Mat frame_to_process;
+        if (!frame_data.frame.empty()) {
+            frame_data.frame.copyTo(frame_to_process);
+        }
         int cropped_width = frame_data.original_width;
         int cropped_height = frame_data.original_height;
         int roi_offset_x = frame_data.roi_offset_x;
@@ -1239,8 +1252,13 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 // CRITICAL: Clone the frame immediately after popping to ensure independence
                 // Even though frame_data is copied from the queue, cv::Mat uses reference counting
                 // We need to ensure the frame is completely independent before using it
-                cv::Mat frame_clone = frame_data.frame.clone();
-                frame_data.frame = frame_clone;  // Replace with independent copy
+                // Use copyTo() to create a truly independent Mat with its own data buffer
+                cv::Mat independent_frame;
+                if (!frame_data.frame.empty()) {
+                    frame_data.frame.copyTo(independent_frame);
+                }
+                // Replace frame_data.frame with the independent copy
+                frame_data.frame = independent_frame;
                 
                 // Build video_key: message_key + video_index uniquely identifies a video
                 std::string current_video_key = frame_data.message_key + "_v" + std::to_string(frame_data.video_index);
