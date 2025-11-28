@@ -1265,21 +1265,26 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 for (size_t i = 1; i < batch_frame_numbers.size(); ++i) {
                     if (batch_frame_numbers[i] < batch_frame_numbers[i-1]) {
                         frame_order_valid = false;
-                        LOG_ERROR("Detector", "Frame order violation in batch: frame[" + 
-                                 std::to_string(i-1) + "]=" + std::to_string(batch_frame_numbers[i-1]) +
-                                 ", frame[" + std::to_string(i) + "]=" + std::to_string(batch_frame_numbers[i]) +
-                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                        std::string error_msg = "Frame order violation in batch: frame[" + 
+                                                std::to_string(i-1) + "]=" + std::to_string(batch_frame_numbers[i-1]) +
+                                                ", frame[" + std::to_string(i) + "]=" + std::to_string(batch_frame_numbers[i]) +
+                                                " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")";
+                        LOG_ERROR("Detector", error_msg);
                         break;
                     }
                 }
                 
                 // Log batch info for debugging
                 if (debug_mode_ && actual_batch_count > 0) {
-                    LOG_DEBUG("Detector", "Processing batch: engine=" + engine_group->engine_name + 
-                             ", detector=" + std::to_string(detector_id) +
-                             ", batch_size=" + std::to_string(actual_batch_count) +
-                             ", frames=[" + std::to_string(batch_frame_numbers[0]) + 
-                             (actual_batch_count > 1 ? ".." + std::to_string(batch_frame_numbers[actual_batch_count-1]) : "") + "]");
+                    std::string batch_info = "Processing batch: engine=" + engine_group->engine_name + 
+                                            ", detector=" + std::to_string(detector_id) +
+                                            ", batch_size=" + std::to_string(actual_batch_count) +
+                                            ", frames=[" + std::to_string(batch_frame_numbers[0]);
+                    if (actual_batch_count > 1) {
+                        batch_info += ".." + std::to_string(batch_frame_numbers[actual_batch_count-1]);
+                    }
+                    batch_info += "]";
+                    LOG_DEBUG("Detector", batch_info);
                 }
                 
                 auto batch_start = std::chrono::steady_clock::now();
@@ -1299,10 +1304,11 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     
                     // Validate detections array size matches batch size
                     if (success && batch_detections.size() != static_cast<size_t>(actual_batch_count)) {
-                        LOG_ERROR("Detector", "CRITICAL: runInferenceWithDetections returned wrong size! " +
-                                 "expected=" + std::to_string(actual_batch_count) +
-                                 ", got=" + std::to_string(batch_detections.size()) +
-                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                        std::string error_msg = "CRITICAL: runInferenceWithDetections returned wrong size! " +
+                                                "expected=" + std::to_string(actual_batch_count) +
+                                                ", got=" + std::to_string(batch_detections.size()) +
+                                                " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")";
+                        LOG_ERROR("Detector", error_msg);
                         success = false;  // Mark as failed to prevent saving wrong debug images
                     }
                 } else {
@@ -1351,22 +1357,25 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 if (debug_mode_ && success) {
                     // Validate sizes match
                     if (batch_detections.size() != static_cast<size_t>(actual_batch_count)) {
-                        LOG_ERROR("Detector", "CRITICAL: batch_detections size mismatch! detections=" + 
-                                 std::to_string(batch_detections.size()) + 
-                                 ", expected=" + std::to_string(actual_batch_count) +
-                                 " (engine=" + engine_group->engine_name + ")");
+                        std::string error_msg = "CRITICAL: batch_detections size mismatch! detections=" + 
+                                                std::to_string(batch_detections.size()) + 
+                                                ", expected=" + std::to_string(actual_batch_count) +
+                                                " (engine=" + engine_group->engine_name + ")";
+                        LOG_ERROR("Detector", error_msg);
                     }
                     if (batch_frames.size() != static_cast<size_t>(actual_batch_count)) {
-                        LOG_ERROR("Detector", "CRITICAL: batch_frames size mismatch! frames=" + 
-                                 std::to_string(batch_frames.size()) + 
-                                 ", expected=" + std::to_string(actual_batch_count) +
-                                 " (engine=" + engine_group->engine_name + ")");
+                        std::string error_msg = "CRITICAL: batch_frames size mismatch! frames=" + 
+                                                std::to_string(batch_frames.size()) + 
+                                                ", expected=" + std::to_string(actual_batch_count) +
+                                                " (engine=" + engine_group->engine_name + ")";
+                        LOG_ERROR("Detector", error_msg);
                     }
                     if (batch_frame_numbers.size() != static_cast<size_t>(actual_batch_count)) {
-                        LOG_ERROR("Detector", "CRITICAL: batch_frame_numbers size mismatch! frame_numbers=" + 
-                                 std::to_string(batch_frame_numbers.size()) + 
-                                 ", expected=" + std::to_string(actual_batch_count) +
-                                 " (engine=" + engine_group->engine_name + ")");
+                        std::string error_msg = "CRITICAL: batch_frame_numbers size mismatch! frame_numbers=" + 
+                                                std::to_string(batch_frame_numbers.size()) + 
+                                                ", expected=" + std::to_string(actual_batch_count) +
+                                                " (engine=" + engine_group->engine_name + ")";
+                        LOG_ERROR("Detector", error_msg);
                     }
                     
                     // Only save if all sizes match
@@ -1376,10 +1385,11 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         for (int b = 0; b < actual_batch_count; ++b) {
                             // Validate frame number matches expected
                             if (b > 0 && batch_frame_numbers[b] < batch_frame_numbers[b-1]) {
-                                LOG_ERROR("Detector", "CRITICAL: Frame number out of order in batch! frame[" + 
-                                         std::to_string(b-1) + "]=" + std::to_string(batch_frame_numbers[b-1]) +
-                                         ", frame[" + std::to_string(b) + "]=" + std::to_string(batch_frame_numbers[b]) +
-                                         " (engine=" + engine_group->engine_name + ")");
+                                std::string error_msg = "CRITICAL: Frame number out of order in batch! frame[" + 
+                                                        std::to_string(b-1) + "]=" + std::to_string(batch_frame_numbers[b-1]) +
+                                                        ", frame[" + std::to_string(b) + "]=" + std::to_string(batch_frame_numbers[b]) +
+                                                        " (engine=" + engine_group->engine_name + ")";
+                                LOG_ERROR("Detector", error_msg);
                             }
                             
                             cv::Mat debug_frame = engine_group->preprocessor->addPadding(batch_frames[b]);
@@ -1400,10 +1410,11 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                             std::filesystem::path image_path = debug_dir / image_filename;
                             
                             if (cv::imwrite(image_path.string(), debug_frame)) {
-                                LOG_DEBUG("Detector", "Saved debug image: frame=" + 
-                                         std::to_string(batch_frame_numbers[b]) + 
-                                         ", detections=" + std::to_string(batch_detections[b].size()) +
-                                         ", path=" + image_path.string());
+                                std::string debug_msg = "Saved debug image: frame=" + 
+                                                       std::to_string(batch_frame_numbers[b]) + 
+                                                       ", detections=" + std::to_string(batch_detections[b].size()) +
+                                                       ", path=" + image_path.string();
+                                LOG_DEBUG("Detector", debug_msg);
                             } else {
                                 LOG_ERROR("Detector", "Failed to save debug image: " + image_path.string());
                             }
