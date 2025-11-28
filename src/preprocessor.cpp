@@ -13,8 +13,8 @@ cv::Mat Preprocessor::addPadding(const cv::Mat& frame) {
     float scale = std::min(static_cast<float>(target_width_) / w,
                           static_cast<float>(target_height_) / h);
     
-    int new_w = static_cast<int>(w * scale);
-    int new_h = static_cast<int>(h * scale);
+    int new_w = std::max(1, static_cast<int>(std::round(w * scale)));
+    int new_h = std::max(1, static_cast<int>(std::round(h * scale)));
     
     // Resize maintaining aspect ratio
     cv::Mat resized;

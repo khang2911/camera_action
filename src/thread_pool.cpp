@@ -2038,20 +2038,25 @@ void ThreadPool::postprocessWorker(int worker_id) {
                 int input_w = task.detector->getInputWidth();
                 int input_h = task.detector->getInputHeight();
                 
-                // Calculate padding
+                // Calculate padding (same logic as Preprocessor::addPadding - centered)
                 int orig_w = debug_frame.cols;
                 int orig_h = debug_frame.rows;
                 float scale = std::min(static_cast<float>(input_w) / orig_w, static_cast<float>(input_h) / orig_h);
                 int new_w = static_cast<int>(orig_w * scale);
                 int new_h = static_cast<int>(orig_h * scale);
-                int pad_w = input_w - new_w;
-                int pad_h = input_h - new_h;
                 
-                // Resize and pad
+                // Calculate padding to center the image (same as Preprocessor::addPadding)
+                int pad_w = (input_w - new_w) / 2;
+                int pad_h = (input_h - new_h) / 2;
+                
+                // Resize maintaining aspect ratio
                 cv::Mat resized;
-                cv::resize(debug_frame, resized, cv::Size(new_w, new_h));
-                cv::Mat padded;
-                cv::copyMakeBorder(resized, padded, 0, pad_h, 0, pad_w, cv::BORDER_CONSTANT, cv::Scalar(114, 114, 114));
+                cv::resize(debug_frame, resized, cv::Size(new_w, new_h), 0, 0, cv::INTER_LINEAR);
+                
+                // Add padding using zeros (black) - matching Preprocessor::addPadding
+                // Create zero-padded image and copy resized image into it (centered)
+                cv::Mat padded = cv::Mat::zeros(input_h, input_w, resized.type());
+                resized.copyTo(padded(cv::Rect(pad_w, pad_h, new_w, new_h)));
                 
                 // Draw detections (they're in normalized [0,1] coordinates relative to padded frame)
                 task.detector->drawDetections(padded, detections);
