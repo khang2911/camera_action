@@ -1749,6 +1749,15 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 if (debug_mode_) {
                     // In debug mode, get detections to draw on images
                     // Note: We only process full batches, so actual_batch_count == batch_size
+                    static thread_local int batch_count = 0;
+                    batch_count++;
+                    if (batch_count % 10 == 1) {
+                        LOG_INFO("Detector", "Processing batch #" + std::to_string(batch_count) + 
+                                 " (size=" + std::to_string(actual_batch_count) + 
+                                 ", engine=" + engine_group->engine_name + 
+                                 ", detector=" + std::to_string(detector_id) + ")");
+                    }
+                    
                     success = engine_group->detectors[detector_id]->runInferenceWithDetections(
                         batch_tensors,
                         batch_output_paths, batch_frame_numbers,
@@ -1761,7 +1770,19 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     if (!success) {
                         LOG_ERROR("Detector", "runInferenceWithDetections failed for batch_size=" + 
                                  std::to_string(actual_batch_count) + 
-                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + 
+                                 ", batch_count=" + std::to_string(batch_count) + ")");
+                    } else {
+                        // Log successful batch processing
+                        int total_detections = 0;
+                        for (const auto& dets : batch_detections) {
+                            total_detections += static_cast<int>(dets.size());
+                        }
+                        if (batch_count % 10 == 1) {
+                            LOG_INFO("Detector", "Batch #" + std::to_string(batch_count) + " processed successfully: " +
+                                     std::to_string(total_detections) + " total detections across " +
+                                     std::to_string(actual_batch_count) + " frames");
+                        }
                     }
                     
                     // Validate detections array size matches batch size
@@ -2025,17 +2046,24 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     
                     // CRITICAL: Mark ALL frames as processed after debug image saving attempt
                     // This ensures frames are marked even if debug image saving was skipped or some frames were skipped in the loop
-                    if (use_redis_queue_ && success) {
+                    // IMPORTANT: Mark frames even if success is false, to avoid blocking message push
+                    if (use_redis_queue_) {
                         int marked_count = 0;
                         for (size_t b = 0; b < batch_message_keys.size() && b < batch_video_indices.size() && b < batch_output_paths.size(); ++b) {
+                            // Use output_path only if success, otherwise use empty string
+                            std::string output_path = success ? batch_output_paths[b] : "";
                             markFrameProcessed(batch_message_keys[b], engine_group->engine_name, 
-                                              batch_output_paths[b], batch_video_indices[b]);
+                                              output_path, batch_video_indices[b]);
                             marked_count++;
                         }
                         if (marked_count != actual_batch_count) {
                             LOG_WARNING("Detector", "Marked " + std::to_string(marked_count) + 
                                        " frames as processed, but batch size is " + std::to_string(actual_batch_count) +
-                                       " (engine=" + engine_group->engine_name + ")");
+                                       " (engine=" + engine_group->engine_name + ", success=" + (success ? "true" : "false") + ")");
+                        } else if (!success) {
+                            LOG_WARNING("Detector", "Marked " + std::to_string(marked_count) + 
+                                       " frames as processed despite runInferenceWithDetections failure " +
+                                       "(engine=" + engine_group->engine_name + ")");
                         }
                     }
                 }
