@@ -882,6 +882,10 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
     cv::Mat frame;
     int frame_count = 0;
     int global_frame_number = frame_start_offset;  // Keep for internal tracking if needed
+    // Store previous frame for validation (only in debug mode to avoid overhead)
+    cv::Mat prev_frame_for_validation;
+    int prev_frame_number = -1;
+    
     while (!stop_flag_ && reader.readFrame(frame)) {
             // Check debug mode limit first (takes priority over global limit)
             // frame_count is the number of frames already processed, so check BEFORE processing this one
@@ -899,6 +903,33 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
             // Note: getActualFramePosition() is fast (just returns cached value from readFrame)
             int actual_frame_position = reader.getActualFramePosition();
             
+            // CRITICAL: Validate that consecutive frames are actually different
+            // This helps catch bugs in the video reader or frame tracking
+            if (debug_mode_ && !prev_frame_for_validation.empty() && !frame.empty() &&
+                prev_frame_number >= 0 && actual_frame_position == prev_frame_number + 1) {
+                // Check if this frame is identical to the previous frame
+                if (prev_frame_for_validation.size() == frame.size() &&
+                    prev_frame_for_validation.type() == frame.type()) {
+                    cv::Mat diff;
+                    cv::absdiff(prev_frame_for_validation, frame, diff);
+                    cv::Mat diff_gray;
+                    if (diff.channels() > 1) {
+                        cv::cvtColor(diff, diff_gray, cv::COLOR_BGR2GRAY);
+                    } else {
+                        diff_gray = diff;
+                    }
+                    int non_zero = cv::countNonZero(diff_gray);
+                    if (non_zero == 0) {
+                        std::string error_msg = std::string("CRITICAL: Video reader returned identical frames! ") +
+                                               "frame_number=" + std::to_string(actual_frame_position) +
+                                               ", previous_frame_number=" + std::to_string(prev_frame_number) +
+                                               " (video=" + video_key + ")";
+                        LOG_ERROR("Reader", error_msg);
+                        // Still process the frame, but log the error
+                    }
+                }
+            }
+            
             // Use actual_frame_position (actual frame number in video) for bin file output
             // CRITICAL: Clone the frame to ensure each FrameData has an independent copy
             // The 'frame' variable is reused in the loop, so we must clone it to prevent
@@ -906,7 +937,18 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
             // Pre-compute dimensions to avoid repeated frame.cols/rows access
             int frame_width = frame.cols;
             int frame_height = frame.rows;
-            cv::Mat frame_clone = frame.clone();  // Create independent copy
+            cv::Mat frame_clone;
+            if (!frame.empty()) {
+                frame.copyTo(frame_clone);  // Use copyTo() for explicit deep copy
+            }
+            
+            // Store current frame for next iteration validation
+            if (debug_mode_) {
+                if (!frame_clone.empty()) {
+                    frame_clone.copyTo(prev_frame_for_validation);
+                }
+                prev_frame_number = actual_frame_position;
+            }
             FrameData frame_data(frame_clone, video_id, actual_frame_position, clip.path, 
                                 clip.record_id, clip.record_date, clip.serial,
                                 message_key, video_key, clip.video_index,
@@ -1861,6 +1903,16 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                             
                             // Validate frame dimensions are reasonable (not all zeros or same)
                             if (b > 0) {
+                                // Validate both frames are valid before comparison
+                                if (batch_frames[b].empty() || batch_frames[b-1].empty()) {
+                                    LOG_ERROR("Detector", "CRITICAL: Empty frame detected in batch! batch_idx=" + 
+                                             std::to_string(b) + ", frame[" + std::to_string(b-1) + "] empty=" + 
+                                             (batch_frames[b-1].empty() ? "YES" : "NO") +
+                                             ", frame[" + std::to_string(b) + "] empty=" + 
+                                             (batch_frames[b].empty() ? "YES" : "NO"));
+                                    continue;  // Skip this frame
+                                }
+                                
                                 // Check if this frame is different from previous frame
                                 // Convert to grayscale first since countNonZero requires single channel
                                 cv::Mat diff;
@@ -1876,11 +1928,22 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                                 
                                 int non_zero = cv::countNonZero(diff_gray);
                                 if (non_zero == 0 && batch_frame_numbers[b] != batch_frame_numbers[b-1]) {
+                                    // Additional validation: Check if frame data pointers are the same
+                                    // (This would indicate they're sharing the same underlying buffer)
+                                    bool same_data_ptr = (batch_frames[b].data == batch_frames[b-1].data);
                                     std::string error_msg = std::string("CRITICAL: Same frame data for different frame numbers! ") +
                                                            "batch_idx=" + std::to_string(b) +
                                                            ", frame[" + std::to_string(b-1) + "]=" + std::to_string(batch_frame_numbers[b-1]) +
-                                                           ", frame[" + std::to_string(b) + "]=" + std::to_string(batch_frame_numbers[b]);
+                                                           ", frame[" + std::to_string(b) + "]=" + std::to_string(batch_frame_numbers[b]) +
+                                                           ", same_data_ptr=" + (same_data_ptr ? "YES" : "NO") +
+                                                           ", frame_size=[" + std::to_string(batch_frames[b].cols) + "x" + std::to_string(batch_frames[b].rows) + "]" +
+                                                           " (engine=" + engine_group->engine_name + ")";
                                     LOG_ERROR("Detector", error_msg);
+                                    
+                                    // If data pointers are the same, this is a serious bug - frames are sharing buffers
+                                    if (same_data_ptr) {
+                                        LOG_ERROR("Detector", "CRITICAL: Frame data pointers are identical! This indicates frames are sharing the same buffer despite cloning!");
+                                    }
                                 }
                             }
                             
