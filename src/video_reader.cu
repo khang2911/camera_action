@@ -685,6 +685,7 @@ bool VideoReader::receiveFrame(cv::Mat& out) {
         
         // Frame format check - verify CUVID decoder is working
         static thread_local int frame_count = 0;
+        static thread_local int64_t last_pts = AV_NOPTS_VALUE;
         if (frame_count++ < 3) {
             std::string decoder_info = "format: " + std::to_string(frame_->format);
             if (use_hw_decode_) {
@@ -697,6 +698,24 @@ bool VideoReader::receiveFrame(cv::Mat& out) {
             LOG_INFO("VideoReader", std::string("Frame ") + std::to_string(frame_count) + ": " + decoder_info);
         }
         
+        // Check if this frame has the same PTS as the previous frame (indicates duplicate frame from decoder)
+        // Note: Some video encodings have duplicate frames for timing purposes
+        // We'll log this but still process the frame, as the validation in the reader will catch if pixel data is identical
+        int64_t current_pts = frame_->pts;
+        static thread_local int duplicate_pts_count = 0;
+        if (current_pts != AV_NOPTS_VALUE && last_pts != AV_NOPTS_VALUE && current_pts == last_pts) {
+            duplicate_pts_count++;
+            if (duplicate_pts_count <= 5) {
+                LOG_DEBUG("VideoReader", "Frame with duplicate PTS detected (PTS=" + std::to_string(current_pts) + 
+                         "). This may indicate duplicate frames in the video encoding.");
+            }
+        } else {
+            duplicate_pts_count = 0;  // Reset counter if PTS is different
+        }
+        last_pts = current_pts;
+        
+        // CRITICAL: Convert frame immediately to ensure we copy the data before
+        // the next call to avcodec_receive_frame potentially overwrites frame_
         if (convertFrameToMat(frame_, out)) {
             return true;
         }
@@ -841,8 +860,9 @@ bool VideoReader::convertFrameToMatGPU(AVFrame* src, cv::Mat& out) {
         return false;
     }
 
-    // Assign the new frame to output after copy completes
-    out = new_frame;
+    // CRITICAL: Clone to ensure complete independence (even though new_frame is local,
+    // we want to guarantee out has its own data buffer)
+    out = new_frame.clone();
     return true;
 }
 
@@ -873,8 +893,9 @@ bool VideoReader::convertFrameToMatCPU(AVFrame* src, cv::Mat& out) {
     
     sws_scale(sws_ctx_, src->data, src->linesize, 0, src->height, dst_data, dst_linesize);
     
-    // Assign the new frame to output
-    out = new_frame;
+    // CRITICAL: Clone to ensure complete independence (even though new_frame is local,
+    // we want to guarantee out has its own data buffer)
+    out = new_frame.clone();
     return true;
 }
 
