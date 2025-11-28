@@ -1227,9 +1227,21 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 batch_roi_offset_y.push_back(frame_data.roi_offset_y);
                 
                 // Store frame and video_id for debug mode
+                // CRITICAL: Clone the frame to ensure it matches the tensor used for inference
+                // frame_data.frame is the preprocessed frame (after ROI cropping if applicable)
+                // This should match the tensor which was created from the same preprocessed frame
                 if (debug_mode_) {
                     batch_frames.push_back(frame_data.frame.clone());
                     batch_video_ids.push_back(frame_data.video_id);
+                    
+                    // Validate frame number is consistent
+                    if (batch_frame_numbers.size() > 0 && 
+                        frame_data.frame_number < batch_frame_numbers.back()) {
+                        LOG_ERROR("Detector", "CRITICAL: Frame number out of order when collecting batch! " +
+                                 "previous=" + std::to_string(batch_frame_numbers.back()) +
+                                 ", current=" + std::to_string(frame_data.frame_number) +
+                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                    }
                 }
                 batch_message_keys.push_back(frame_data.message_key);
                 batch_video_indices.push_back(frame_data.video_index);
@@ -1392,8 +1404,31 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                                 LOG_ERROR("Detector", error_msg);
                             }
                             
+                            // Validate batch index is within bounds
+                            if (b >= static_cast<int>(batch_detections.size()) || 
+                                b >= static_cast<int>(batch_frames.size()) ||
+                                b >= static_cast<int>(batch_frame_numbers.size())) {
+                                std::string error_msg = "CRITICAL: Batch index out of bounds! b=" + std::to_string(b) +
+                                                        ", detections_size=" + std::to_string(batch_detections.size()) +
+                                                        ", frames_size=" + std::to_string(batch_frames.size()) +
+                                                        ", frame_numbers_size=" + std::to_string(batch_frame_numbers.size()) +
+                                                        " (engine=" + engine_group->engine_name + ")";
+                                LOG_ERROR("Detector", error_msg);
+                                continue;  // Skip this frame
+                            }
+                            
+                            // Validate frame and detection are aligned
+                            int frame_num = batch_frame_numbers[b];
+                            int detection_count = static_cast<int>(batch_detections[b].size());
+                            
                             cv::Mat debug_frame = engine_group->preprocessor->addPadding(batch_frames[b]);
                             engine_group->detectors[detector_id]->drawDetections(debug_frame, batch_detections[b]);
+                            
+                            // Log frame-detection alignment for debugging
+                            LOG_DEBUG("Detector", "Debug image: frame=" + std::to_string(frame_num) +
+                                     ", detections=" + std::to_string(detection_count) +
+                                     ", batch_idx=" + std::to_string(b) +
+                                     ", engine=" + engine_group->engine_name);
                             
                             std::string serial_part = serialPart(batch_serials[b], batch_message_keys[b], batch_video_ids[b]);
                             std::string record_part = recordPart(batch_record_ids[b], batch_message_keys[b], batch_video_ids[b]);

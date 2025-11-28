@@ -502,11 +502,7 @@ bool VideoReader::readFrame(cv::Mat& frame) {
     while (true) {
         // Try to receive a frame first
         if (receiveFrame(frame)) {
-            // Successfully received a frame - process it
-            ++frame_number_;
-            ++total_frames_read_;
-            actual_frame_position_ = static_cast<int>(total_frames_read_ - 1);
-            
+            // Successfully received a frame
             original_width_ = frame.cols;
             original_height_ = frame.rows;
             
@@ -520,16 +516,22 @@ bool VideoReader::readFrame(cv::Mat& frame) {
                 clip_.roi_offset_y = 0;
             }
             
+            // Increment total_frames_read_ for ALL frames (for timestamp calculation)
+            // This tracks the actual position in the video file
+            ++total_frames_read_;
+            
+            // Check time window
             if (has_clip_metadata_ && clip_.has_time_window) {
                 double effective_fps = (fps_ > 0.0) ? fps_ : 30.0;
-                // Use (total_frames_read_ - 1) because we already incremented it above
-                // This gives us the timestamp of the CURRENT frame, not the next one
+                // Calculate timestamp based on total_frames_read_ (after increment)
+                // total_frames_read_ represents the actual frame number in the video
                 double current_ts = clip_.moment_time + static_cast<double>(total_frames_read_ - 1) / effective_fps;
                 
                 // Debug logging for first few frames to verify time filtering
                 static thread_local int time_filter_log_count = 0;
                 if (time_filter_log_count < 5) {
-                    LOG_DEBUG("VideoReader", "Time filter: frame=" + std::to_string(total_frames_read_ - 1) +
+                    LOG_DEBUG("VideoReader", "Time filter: total_read=" + std::to_string(total_frames_read_ - 1) +
+                             ", actual_pos=" + std::to_string(actual_frame_position_) +
                              ", current_ts=" + std::to_string(current_ts) +
                              ", start_ts=" + std::to_string(clip_.start_timestamp) +
                              ", end_ts=" + std::to_string(clip_.end_timestamp) +
@@ -539,16 +541,24 @@ bool VideoReader::readFrame(cv::Mat& frame) {
                 }
                 
                 if (current_ts < clip_.start_timestamp) {
-                    continue;  // Skip this frame, try next one
+                    // Frame is before start time - skip it
+                    // total_frames_read_ already incremented (for next frame's timestamp calculation)
+                    // actual_frame_position_ NOT incremented (this frame won't be in bin file)
+                    continue;  // Try next frame
                 }
                 if (current_ts > clip_.end_timestamp) {
-                    LOG_DEBUG("VideoReader", "Reached end of time window at frame " + 
+                    LOG_DEBUG("VideoReader", "Reached end of time window at total_read=" + 
                              std::to_string(total_frames_read_ - 1) + 
+                             ", actual_pos=" + std::to_string(actual_frame_position_) +
                              ", current_ts=" + std::to_string(current_ts) +
                              ", end_ts=" + std::to_string(clip_.end_timestamp));
                     return false;  // Past end time, done with this clip
                 }
             }
+            
+            // Frame is in time window (or no time window) - increment frame counters
+            ++frame_number_;
+            actual_frame_position_ = static_cast<int>(actual_frame_position_ + 1);  // Only count frames in time window
             
             return true;  // Frame is ready
         }
@@ -877,8 +887,12 @@ void VideoReader::initializeMetadata() {
             int64_t target = static_cast<int64_t>(offset_seconds / av_q2d(video_stream_->time_base));
             av_seek_frame(fmt_ctx_, video_stream_->index, target, AVSEEK_FLAG_BACKWARD);
             avcodec_flush_buffers(codec_ctx_);
-            total_frames_read_ = static_cast<long long>(std::max(0.0, std::floor(offset_seconds * fps_)));
-            actual_frame_position_ = static_cast<int>(total_frames_read_);
+            // Estimate the frame number at the seek position for timestamp calculation
+            // total_frames_read_ will be incremented for ALL frames read (including skipped ones)
+            // actual_frame_position_ will only count frames in the time window
+            long long estimated_frame = static_cast<long long>(std::max(0.0, std::floor(offset_seconds * fps_)));
+            total_frames_read_ = estimated_frame;  // Start from estimated position for timestamp calculation
+            actual_frame_position_ = 0;  // Will count only frames in time window
         }
     }
 }
