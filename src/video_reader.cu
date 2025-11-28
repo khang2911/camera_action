@@ -317,9 +317,9 @@ bool VideoReader::setupDecoder() {
     // Fall back to generic decoder if CUVID not found
     if (!decoder) {
         decoder = avcodec_find_decoder(codec_id);
-        if (!decoder) {
-            LOG_ERROR("VideoReader", "Failed to find decoder");
-            return false;
+    if (!decoder) {
+        LOG_ERROR("VideoReader", "Failed to find decoder");
+        return false;
         }
         LOG_INFO("VideoReader", std::string("Using generic decoder: ") + decoder->name);
     }
@@ -503,26 +503,26 @@ bool VideoReader::readFrame(cv::Mat& frame) {
         // Try to receive a frame first
         if (receiveFrame(frame)) {
             // Successfully received a frame
-            original_width_ = frame.cols;
-            original_height_ = frame.rows;
-            
-            if (has_clip_metadata_ && clip_.has_roi && !frame.empty()) {
-                int x1 = static_cast<int>(clip_.roi_x1 * original_width_);
-                int y1 = static_cast<int>(clip_.roi_y1 * original_height_);
-                clip_.roi_offset_x = std::max(0, std::min(x1, original_width_ - 1));
-                clip_.roi_offset_y = std::max(0, std::min(y1, original_height_ - 1));
-            } else if (has_clip_metadata_) {
-                clip_.roi_offset_x = 0;
-                clip_.roi_offset_y = 0;
-            }
-            
+        original_width_ = frame.cols;
+        original_height_ = frame.rows;
+        
+        if (has_clip_metadata_ && clip_.has_roi && !frame.empty()) {
+            int x1 = static_cast<int>(clip_.roi_x1 * original_width_);
+            int y1 = static_cast<int>(clip_.roi_y1 * original_height_);
+            clip_.roi_offset_x = std::max(0, std::min(x1, original_width_ - 1));
+            clip_.roi_offset_y = std::max(0, std::min(y1, original_height_ - 1));
+        } else if (has_clip_metadata_) {
+            clip_.roi_offset_x = 0;
+            clip_.roi_offset_y = 0;
+        }
+        
             // Increment total_frames_read_ for ALL frames (for timestamp calculation)
             // This tracks the actual position in the video file
             ++total_frames_read_;
             
             // Check time window
-            if (has_clip_metadata_ && clip_.has_time_window) {
-                double effective_fps = (fps_ > 0.0) ? fps_ : 30.0;
+        if (has_clip_metadata_ && clip_.has_time_window) {
+            double effective_fps = (fps_ > 0.0) ? fps_ : 30.0;
                 // Calculate timestamp based on total_frames_read_ (after increment)
                 // total_frames_read_ represents the actual frame number in the video
                 double current_ts = clip_.moment_time + static_cast<double>(total_frames_read_ - 1) / effective_fps;
@@ -540,7 +540,7 @@ bool VideoReader::readFrame(cv::Mat& frame) {
                     time_filter_log_count++;
                 }
                 
-                if (current_ts < clip_.start_timestamp) {
+            if (current_ts < clip_.start_timestamp) {
                     // Frame is before start time - skip it
                     // total_frames_read_ already incremented (for next frame's timestamp calculation)
                     // actual_frame_position_ NOT incremented (this frame won't be in bin file)
@@ -787,16 +787,16 @@ bool VideoReader::convertFrameToMatGPU(AVFrame* src, cv::Mat& out) {
     if (!ensureCudaBuffer(src->width, src->height)) {
         return false;
     }
-
+    
     const uint8_t* y_plane = src->data[0];
     const uint8_t* uv_plane = src->data[1];
     int y_pitch = src->linesize[0];
     int uv_pitch = src->linesize[1];
-
+    
     dim3 block(32, 8);
     dim3 grid((src->width + block.x - 1) / block.x,
               (src->height + block.y - 1) / block.y);
-
+    
     nv12ToBgrKernel<<<grid, block, 0, cuda_stream_>>>(
         y_plane,
         uv_plane,
@@ -811,7 +811,10 @@ bool VideoReader::convertFrameToMatGPU(AVFrame* src, cv::Mat& out) {
         LOG_ERROR("VideoReader", std::string("nv12ToBgrKernel launch failed: ") + cudaGetErrorString(err));
         return false;
     }
-
+    
+    // CRITICAL: Release any existing data to ensure we get a fresh buffer
+    // This prevents reusing the same buffer if the Mat already has the correct size
+    out.release();
     out.create(src->height, src->width, CV_8UC3);
     err = cudaMemcpy2DAsync(out.data,
                             out.step,
@@ -829,11 +832,11 @@ bool VideoReader::convertFrameToMatGPU(AVFrame* src, cv::Mat& out) {
     cudaError_t query_err = cudaStreamQuery(cuda_stream_);
     if (query_err == cudaErrorNotReady) {
         // Stream is still running, must sync
-        err = cudaStreamSynchronize(cuda_stream_);
-        if (err != cudaSuccess) {
-            LOG_ERROR("VideoReader", std::string("cudaStreamSynchronize failed: ") + cudaGetErrorString(err));
-            return false;
-        }
+    err = cudaStreamSynchronize(cuda_stream_);
+    if (err != cudaSuccess) {
+        LOG_ERROR("VideoReader", std::string("cudaStreamSynchronize failed: ") + cudaGetErrorString(err));
+        return false;
+    }
     } else if (query_err != cudaSuccess) {
         LOG_ERROR("VideoReader", std::string("cudaStreamQuery failed: ") + cudaGetErrorString(err));
         return false;
@@ -861,6 +864,9 @@ bool VideoReader::convertFrameToMatCPU(AVFrame* src, cv::Mat& out) {
         return false;
     }
     
+    // CRITICAL: Release any existing data to ensure we get a fresh buffer
+    // This prevents reusing the same buffer if the Mat already has the correct size
+    out.release();
     out.create(src->height, src->width, CV_8UC3);
     uint8_t* dst_data[4] = { out.data, nullptr, nullptr, nullptr };
     int dst_linesize[4] = { static_cast<int>(out.step), 0, 0, 0 };
