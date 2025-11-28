@@ -1311,8 +1311,68 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             
             // CRITICAL: Only process full batches (exactly batch_size frames)
             // This ensures consistency between debug and non-debug modes
-            // Partial batches will be skipped (some frames may be lost at the end, but system will work correctly)
+            // Exception: If we have a partial batch and stop_flag_ is set (processing ending),
+            // we should clear it to avoid memory leaks, but we won't process it
             bool should_process = (static_cast<int>(batch_tensors.size()) == batch_size);
+            
+            // Handle partial batches:
+            // - If stopping: clear to avoid memory leaks (frames will be lost)
+            // - If switching videos: clear partial batch (frames from previous video are lost)
+            // - Otherwise: keep waiting for more frames (loop will continue)
+            if (!should_process && !batch_tensors.empty()) {
+                if (stop_flag_) {
+                    // System is stopping - clear partial batch
+                    LOG_WARNING("Detector", "Skipping partial batch of " + std::to_string(batch_tensors.size()) + 
+                               " frames (system stopping) - " + 
+                               std::to_string(batch_tensors.size()) + " frames will be lost");
+                    batch_tensors.clear();
+                    batch_output_paths.clear();
+                    batch_frame_numbers.clear();
+                    batch_original_widths.clear();
+                    batch_original_heights.clear();
+                    batch_true_original_widths.clear();
+                    batch_true_original_heights.clear();
+                    batch_roi_offset_x.clear();
+                    batch_roi_offset_y.clear();
+                    batch_message_keys.clear();
+                    batch_video_indices.clear();
+                    batch_serials.clear();
+                    batch_record_ids.clear();
+                    batch_record_dates.clear();
+                    if (debug_mode_) {
+                        batch_frames.clear();
+                        batch_video_ids.clear();
+                    }
+                    continue;  // Skip to next iteration
+                } else if (pending_frame.has_value()) {
+                    // Switching videos - clear partial batch from previous video
+                    LOG_DEBUG("Detector", "Skipping partial batch of " + std::to_string(batch_tensors.size()) + 
+                             " frames (switching videos) - " + 
+                             std::to_string(batch_tensors.size()) + " frames from previous video will be lost");
+                    batch_tensors.clear();
+                    batch_output_paths.clear();
+                    batch_frame_numbers.clear();
+                    batch_original_widths.clear();
+                    batch_original_heights.clear();
+                    batch_true_original_widths.clear();
+                    batch_true_original_heights.clear();
+                    batch_roi_offset_x.clear();
+                    batch_roi_offset_y.clear();
+                    batch_message_keys.clear();
+                    batch_video_indices.clear();
+                    batch_serials.clear();
+                    batch_record_ids.clear();
+                    batch_record_dates.clear();
+                    batch_video_key.clear();  // Reset video key for new video
+                    if (debug_mode_) {
+                        batch_frames.clear();
+                        batch_video_ids.clear();
+                    }
+                    continue;  // Start fresh batch for new video
+                }
+                // Otherwise, keep the partial batch and continue waiting for more frames
+                // (The loop will continue on next iteration)
+            }
             
             if (should_process && !batch_tensors.empty()) {
                 int actual_batch_count = static_cast<int>(batch_tensors.size());
@@ -1377,9 +1437,18 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                             
                             // CRITICAL: Ensure batch_frames and batch_video_ids are sorted in the same order
                             // They should have the same size as other batch vectors if in debug mode
+                            // IMPORTANT: Clone frames during sorting to ensure each frame is independent
                             if (debug_mode_) {
                                 if (src_idx < batch_frames.size() && src_idx < batch_video_ids.size()) {
-                                    sorted_frames.push_back(batch_frames[src_idx]);
+                                    // Clone the frame to ensure it's independent (cv::Mat uses reference counting)
+                                    if (!batch_frames[src_idx].empty()) {
+                                        sorted_frames.push_back(batch_frames[src_idx].clone());
+                                    } else {
+                                        LOG_ERROR("Detector", "CRITICAL: Empty frame at src_idx=" + std::to_string(src_idx) + 
+                                                 " during sorting (engine=" + engine_group->engine_name + 
+                                                 ", detector=" + std::to_string(detector_id) + ")");
+                                        sorted_frames.push_back(cv::Mat());
+                                    }
                                     sorted_video_ids.push_back(batch_video_ids[src_idx]);
                                 } else {
                                     // Size mismatch - this shouldn't happen, but handle gracefully
@@ -1709,6 +1778,28 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                             int frame_num = batch_frame_numbers[b];
                             int detection_count = static_cast<int>(batch_detections[b].size());
                             
+                            // CRITICAL: Validate that we're using the correct frame
+                            // Check if frame is empty or if we're accidentally reusing the same frame
+                            if (batch_frames[b].empty()) {
+                                LOG_ERROR("Detector", "CRITICAL: Empty frame at batch index " + std::to_string(b) + 
+                                         ", frame_number=" + std::to_string(frame_num));
+                                continue;  // Skip this frame
+                            }
+                            
+                            // Validate frame dimensions are reasonable (not all zeros or same)
+                            if (b > 0) {
+                                // Check if this frame is different from previous frame
+                                cv::Mat diff;
+                                cv::absdiff(batch_frames[b], batch_frames[b-1], diff);
+                                int non_zero = cv::countNonZero(diff);
+                                if (non_zero == 0 && batch_frame_numbers[b] != batch_frame_numbers[b-1]) {
+                                    LOG_ERROR("Detector", "CRITICAL: Same frame data for different frame numbers! " +
+                                             "batch_idx=" + std::to_string(b) +
+                                             ", frame[" + std::to_string(b-1) + "]=" + std::to_string(batch_frame_numbers[b-1]) +
+                                             ", frame[" + std::to_string(b) + "]=" + std::to_string(batch_frame_numbers[b]));
+                                }
+                            }
+                            
                             cv::Mat debug_frame = engine_group->preprocessor->addPadding(batch_frames[b]);
                             engine_group->detectors[detector_id]->drawDetections(debug_frame, batch_detections[b]);
                             
@@ -1716,6 +1807,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                             std::string debug_msg = "Debug image: frame=" + std::to_string(frame_num) +
                                                     ", detections=" + std::to_string(detection_count) +
                                                     ", batch_idx=" + std::to_string(b) +
+                                                    ", frame_size=" + std::to_string(batch_frames[b].cols) + "x" + std::to_string(batch_frames[b].rows) +
                                                     ", engine=" + engine_group->engine_name;
                             LOG_DEBUG("Detector", debug_msg);
                             
