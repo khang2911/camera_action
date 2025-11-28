@@ -1397,12 +1397,13 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                                     sorted_video_ids.push_back(batch_video_ids[src_idx]);
                                 } else {
                                     // Size mismatch - this shouldn't happen, but handle gracefully
-                                    LOG_ERROR("Detector", "CRITICAL: batch_frames size mismatch during sorting! " +
-                                             "src_idx=" + std::to_string(src_idx) +
-                                             ", batch_frames.size()=" + std::to_string(batch_frames.size()) +
-                                             ", batch_video_ids.size()=" + std::to_string(batch_video_ids.size()) +
-                                             ", actual_batch_count=" + std::to_string(actual_batch_count) +
-                                             " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                                    std::string error_msg = std::string("CRITICAL: batch_frames size mismatch during sorting! ") +
+                                                           "src_idx=" + std::to_string(src_idx) +
+                                                           ", batch_frames.size()=" + std::to_string(batch_frames.size()) +
+                                                           ", batch_video_ids.size()=" + std::to_string(batch_video_ids.size()) +
+                                                           ", actual_batch_count=" + std::to_string(actual_batch_count) +
+                                                           " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")";
+                                    LOG_ERROR("Detector", error_msg);
                                     // Push empty frame to maintain alignment (will cause issues but prevent crash)
                                     sorted_frames.push_back(cv::Mat());
                                     sorted_video_ids.push_back(-1);
@@ -1430,14 +1431,15 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                             batch_video_ids = std::move(sorted_video_ids);
                         }
                         
-                        LOG_DEBUG("Detector", "Sorted batch by frame number (engine=" + 
-                                 engine_group->engine_name + ", detector=" + std::to_string(detector_id) + 
-                                 ", frames=[" + std::to_string(batch_frame_numbers[0]));
+                        std::string sort_msg = std::string("Sorted batch by frame number (engine=") +
+                                               engine_group->engine_name + ", detector=" + std::to_string(detector_id) + 
+                                               ", frames=[" + std::to_string(batch_frame_numbers[0]);
                         if (actual_batch_count > 1) {
-                            LOG_DEBUG("Detector", ".." + std::to_string(batch_frame_numbers[actual_batch_count-1]) + "])");
+                            sort_msg += ".." + std::to_string(batch_frame_numbers[actual_batch_count-1]) + "])";
                         } else {
-                            LOG_DEBUG("Detector", "])");
+                            sort_msg += "])";
                         }
+                        LOG_DEBUG("Detector", sort_msg);
                         
                         // CRITICAL: Validate that sorted vectors have correct sizes
                         if (sorted_tensors.size() != static_cast<size_t>(actual_batch_count) ||
