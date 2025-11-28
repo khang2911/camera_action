@@ -1289,15 +1289,17 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     batch_frames.push_back(frame_data.frame.clone());
                     batch_video_ids.push_back(frame_data.video_id);
                     
-                    // Validate frame number is consistent (should always be increasing now)
+                    // Note: Frames may arrive out of order due to multiple detectors pulling from the same queue.
+                    // This is expected and will be fixed by sorting the batch before processing.
+                    // Only log at debug level since sorting will correct the order.
                     if (batch_frame_numbers.size() > 1 && 
                         frame_data.frame_number < batch_frame_numbers[batch_frame_numbers.size() - 2]) {
-                        std::string error_msg = std::string("CRITICAL: Frame number out of order when collecting batch! ") +
+                        std::string debug_msg = std::string("Frame number out of order when collecting batch (will be sorted): ") +
                                                 "previous=" + std::to_string(batch_frame_numbers[batch_frame_numbers.size() - 2]) +
                                                 ", current=" + std::to_string(frame_data.frame_number) +
                                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + 
                                                 ", video_key=" + current_video_key + ")";
-                        LOG_ERROR("Detector", error_msg);
+                        LOG_DEBUG("Detector", debug_msg);
                     }
                 }
                 batch_message_keys.push_back(frame_data.message_key);
