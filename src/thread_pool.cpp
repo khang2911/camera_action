@@ -1353,7 +1353,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 
                 // Save debug images for batch
                 // CRITICAL: Use actual batch size, not batch_size, to handle partial batches
-                int actual_batch_count = static_cast<int>(batch_tensors.size());
+                // actual_batch_count is already declared above
                 if (debug_mode_ && success) {
                     // Validate sizes match
                     if (batch_detections.size() != static_cast<size_t>(actual_batch_count)) {
