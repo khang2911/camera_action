@@ -1584,7 +1584,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         batch_frame_numbers.size() == static_cast<size_t>(actual_batch_count)) {
                         // Log alignment info for first and last frame to verify sorting worked
                         if (actual_batch_count > 0) {
-                            std::string align_info = "Frame-detection alignment after sorting: " +
+                            std::string align_info = std::string("Frame-detection alignment after sorting: ") +
                                                     "frame[0]=" + std::to_string(batch_frame_numbers[0]) +
                                                     " (detections=" + std::to_string(batch_detections[0].size()) + ")";
                             if (actual_batch_count > 1) {
