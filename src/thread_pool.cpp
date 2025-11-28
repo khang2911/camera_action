@@ -1309,8 +1309,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 batch_record_dates.push_back(frame_data.record_date);
             }
             
-            // CRITICAL: Only process full batches to avoid partial batch handling complexity
-            // This ensures runInferenceWithDetections receives exactly batch_size_ inputs
+            // CRITICAL: Only process full batches (exactly batch_size frames)
+            // This ensures consistency between debug and non-debug modes
             // Partial batches will be skipped (some frames may be lost at the end, but system will work correctly)
             bool should_process = (static_cast<int>(batch_tensors.size()) == batch_size);
             
