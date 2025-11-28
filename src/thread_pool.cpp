@@ -1309,24 +1309,10 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 batch_record_dates.push_back(frame_data.record_date);
             }
             
-            // Process batch if we have enough frames OR if queue is getting full (partial batch)
-            // This prevents GPU idle time when queues are full but we don't have a full batch yet
-            // CRITICAL: More aggressive partial batch processing for better GPU utilization
-            bool should_process = false;
-            size_t current_queue_size = engine_group->frame_queue->size();
-            
-            if (static_cast<int>(batch_tensors.size()) == batch_size) {
-                should_process = true;
-            } else if (static_cast<int>(batch_tensors.size()) >= batch_size / 4 && 
-                       current_queue_size > engine_group->queue_size * 0.5) {
-                // Process partial batch if queue is >50% full and we have at least batch_size/4 frames
-                // This is more aggressive than before (was 80% and batch_size/2) to keep GPU busy
-                should_process = true;
-            } else if (static_cast<int>(batch_tensors.size()) >= batch_size / 2) {
-                // Process if we have at least half batch, regardless of queue size
-                // This prevents waiting too long when queue is not full
-                should_process = true;
-            }
+            // CRITICAL: Only process full batches to avoid partial batch handling complexity
+            // This ensures runInferenceWithDetections receives exactly batch_size_ inputs
+            // Partial batches will be skipped (some frames may be lost at the end, but system will work correctly)
+            bool should_process = (static_cast<int>(batch_tensors.size()) == batch_size);
             
             if (should_process && !batch_tensors.empty()) {
                 int actual_batch_count = static_cast<int>(batch_tensors.size());
@@ -1570,6 +1556,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 
                 if (debug_mode_) {
                     // In debug mode, get detections to draw on images
+                    // Note: We only process full batches, so actual_batch_count == batch_size
                     success = engine_group->detectors[detector_id]->runInferenceWithDetections(
                         batch_tensors,
                         batch_output_paths, batch_frame_numbers,
@@ -1666,8 +1653,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 auto batch_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(batch_end - batch_start).count();
                 
                 // Save debug images for batch
-                // CRITICAL: Use actual batch size, not batch_size, to handle partial batches
-                // actual_batch_count is already declared above
+                // Note: We only process full batches, so actual_batch_count == batch_size
                 if (debug_mode_ && success) {
                     // Validate sizes match
                     if (batch_detections.size() != static_cast<size_t>(actual_batch_count)) {
