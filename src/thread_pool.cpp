@@ -1389,9 +1389,24 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                             sorted_record_ids[i] = batch_record_ids[src_idx];
                             sorted_record_dates[i] = batch_record_dates[src_idx];
                             
-                            if (debug_mode_ && src_idx < batch_frames.size()) {
-                                sorted_frames.push_back(batch_frames[src_idx]);
-                                sorted_video_ids.push_back(batch_video_ids[src_idx]);
+                            // CRITICAL: Ensure batch_frames and batch_video_ids are sorted in the same order
+                            // They should have the same size as other batch vectors if in debug mode
+                            if (debug_mode_) {
+                                if (src_idx < batch_frames.size() && src_idx < batch_video_ids.size()) {
+                                    sorted_frames.push_back(batch_frames[src_idx]);
+                                    sorted_video_ids.push_back(batch_video_ids[src_idx]);
+                                } else {
+                                    // Size mismatch - this shouldn't happen, but handle gracefully
+                                    LOG_ERROR("Detector", "CRITICAL: batch_frames size mismatch during sorting! " +
+                                             "src_idx=" + std::to_string(src_idx) +
+                                             ", batch_frames.size()=" + std::to_string(batch_frames.size()) +
+                                             ", batch_video_ids.size()=" + std::to_string(batch_video_ids.size()) +
+                                             ", actual_batch_count=" + std::to_string(actual_batch_count) +
+                                             " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                                    // Push empty frame to maintain alignment (will cause issues but prevent crash)
+                                    sorted_frames.push_back(cv::Mat());
+                                    sorted_video_ids.push_back(-1);
+                                }
                             }
                         }
                         
@@ -1416,7 +1431,23 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         }
                         
                         LOG_DEBUG("Detector", "Sorted batch by frame number (engine=" + 
-                                 engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                                 engine_group->engine_name + ", detector=" + std::to_string(detector_id) + 
+                                 ", frames=[" + std::to_string(batch_frame_numbers[0]));
+                        if (actual_batch_count > 1) {
+                            LOG_DEBUG("Detector", ".." + std::to_string(batch_frame_numbers[actual_batch_count-1]) + "])");
+                        } else {
+                            LOG_DEBUG("Detector", "])");
+                        }
+                        
+                        // CRITICAL: Validate that sorted vectors have correct sizes
+                        if (sorted_tensors.size() != static_cast<size_t>(actual_batch_count) ||
+                            sorted_frames.size() != (debug_mode_ ? static_cast<size_t>(actual_batch_count) : 0)) {
+                            LOG_ERROR("Detector", "CRITICAL: Sorted vector size mismatch! " +
+                                     "tensors=" + std::to_string(sorted_tensors.size()) +
+                                     ", frames=" + std::to_string(sorted_frames.size()) +
+                                     ", expected=" + std::to_string(actual_batch_count) +
+                                     " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                        }
                     }
                 }
                 
@@ -1527,6 +1558,12 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         batch_true_original_widths, batch_true_original_heights
                     );
                     
+                    if (!success) {
+                        LOG_ERROR("Detector", "runInferenceWithDetections failed for batch_size=" + 
+                                 std::to_string(actual_batch_count) + 
+                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                    }
+                    
                     // Validate detections array size matches batch size
                     if (success && batch_detections.size() != static_cast<size_t>(actual_batch_count)) {
                         std::string error_msg = std::string("CRITICAL: runInferenceWithDetections returned wrong size! ") +
@@ -1535,6 +1572,26 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")";
                         LOG_ERROR("Detector", error_msg);
                         success = false;  // Mark as failed to prevent saving wrong debug images
+                    }
+                    
+                    // CRITICAL: Validate that detections align with frames after sorting
+                    // After sorting, batch_detections[i] should correspond to batch_frames[i] and batch_frame_numbers[i]
+                    if (success && batch_detections.size() == static_cast<size_t>(actual_batch_count) &&
+                        batch_frames.size() == static_cast<size_t>(actual_batch_count) &&
+                        batch_frame_numbers.size() == static_cast<size_t>(actual_batch_count)) {
+                        // Log alignment info for first and last frame to verify sorting worked
+                        if (actual_batch_count > 0) {
+                            std::string align_info = "Frame-detection alignment after sorting: " +
+                                                    "frame[0]=" + std::to_string(batch_frame_numbers[0]) +
+                                                    " (detections=" + std::to_string(batch_detections[0].size()) + ")";
+                            if (actual_batch_count > 1) {
+                                align_info += ", frame[" + std::to_string(actual_batch_count-1) + "]=" +
+                                            std::to_string(batch_frame_numbers[actual_batch_count-1]) +
+                                            " (detections=" + std::to_string(batch_detections[actual_batch_count-1].size()) + ")";
+                            }
+                            align_info += " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")";
+                            LOG_DEBUG("Detector", align_info);
+                        }
                     }
                 } else {
                     // Get raw inference output and push to post-processing queue
