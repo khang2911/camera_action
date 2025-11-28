@@ -1098,7 +1098,10 @@ void ThreadPool::enginePreprocessWorker(int worker_id) {
         for (auto* engine_group : target_group->engines) {
             FrameData processed = frame_data;
             processed.preprocessed_data = tensor;
-            processed.frame = frame_to_process;
+            // CRITICAL: Clone the frame to ensure each engine gets an independent copy
+            // cv::Mat uses reference counting, so assignment creates a shallow copy
+            // We need a deep copy to prevent all engines from sharing the same frame data
+            processed.frame = frame_to_process.clone();
             processed.original_width = cropped_width;
             processed.original_height = cropped_height;
             processed.true_original_width = true_original_width;
@@ -1285,8 +1288,46 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 // CRITICAL: Clone the frame to ensure it matches the tensor used for inference
                 // frame_data.frame is the preprocessed frame (after ROI cropping if applicable)
                 // This should match the tensor which was created from the same preprocessed frame
+                // IMPORTANT: Ensure we create a deep copy that's independent of the source
                 if (debug_mode_) {
-                    batch_frames.push_back(frame_data.frame.clone());
+                    // Create a deep copy of the frame to ensure it's independent
+                    // Use clone() which creates a full deep copy of the Mat data
+                    cv::Mat frame_copy = frame_data.frame.clone();
+                    
+                    // Validate frame is not empty
+                    if (frame_copy.empty()) {
+                        LOG_ERROR("Detector", "CRITICAL: Empty frame at frame_number=" + 
+                                 std::to_string(frame_data.frame_number) + 
+                                 " (engine=" + engine_group->engine_name + 
+                                 ", detector=" + std::to_string(detector_id) + ")");
+                    }
+                    
+                    // Validate this frame is different from the previous frame in the batch
+                    if (!batch_frames.empty()) {
+                        cv::Mat prev_frame = batch_frames.back();
+                        if (!prev_frame.empty() && !frame_copy.empty() && 
+                            prev_frame.size() == frame_copy.size() && 
+                            prev_frame.type() == frame_copy.type()) {
+                            cv::Mat diff;
+                            cv::absdiff(prev_frame, frame_copy, diff);
+                            cv::Mat diff_gray;
+                            if (diff.channels() > 1) {
+                                cv::cvtColor(diff, diff_gray, cv::COLOR_BGR2GRAY);
+                            } else {
+                                diff_gray = diff;
+                            }
+                            int non_zero = cv::countNonZero(diff_gray);
+                            if (non_zero == 0 && frame_data.frame_number != batch_frame_numbers.back()) {
+                                LOG_ERROR("Detector", "CRITICAL: Duplicate frame detected when adding to batch! " +
+                                         "frame_number=" + std::to_string(frame_data.frame_number) +
+                                         ", previous_frame_number=" + std::to_string(batch_frame_numbers.back()) +
+                                         " (engine=" + engine_group->engine_name + 
+                                         ", detector=" + std::to_string(detector_id) + ")");
+                            }
+                        }
+                    }
+                    
+                    batch_frames.push_back(frame_copy);
                     batch_video_ids.push_back(frame_data.video_id);
                     
                     // Note: Frames may arrive out of order due to multiple detectors pulling from the same queue.
