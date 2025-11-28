@@ -2001,10 +2001,27 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                             } else {
                                 LOG_ERROR("Detector", "Failed to save debug image: " + image_path.string());
                             }
+                            
+                            // CRITICAL: Mark frame as processed for Redis message tracking
+                            // In debug mode, we process frames directly (not through postprocess queue),
+                            // so we need to call markFrameProcessed here
+                            if (use_redis_queue_ && b < batch_message_keys.size() && b < batch_video_indices.size()) {
+                                // In debug mode, detections are written by runInferenceWithDetections,
+                                // so we use the output_path for tracking
+                                markFrameProcessed(batch_message_keys[b], engine_group->engine_name, 
+                                                  batch_output_paths[b], batch_video_indices[b]);
+                            }
                         }
                     } else {
                         LOG_ERROR("Detector", "Skipping debug image save due to size mismatch (engine=" + 
                                  engine_group->engine_name + ")");
+                        // Still mark frames as processed even if debug image save failed
+                        if (use_redis_queue_ && success) {
+                            for (size_t b = 0; b < batch_message_keys.size() && b < batch_video_indices.size(); ++b) {
+                                markFrameProcessed(batch_message_keys[b], engine_group->engine_name, 
+                                                  batch_output_paths[b], batch_video_indices[b]);
+                            }
+                        }
                     }
                 }
                 
@@ -2026,9 +2043,13 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     }
                     LOG_ERROR("Detector", "Batch detection failed for " + std::to_string(actual_batch_count) + " frames " +
                              "(engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                    // Mark failed frames as processed to avoid blocking message push
+                    if (use_redis_queue_) {
+                        for (size_t b = 0; b < batch_message_keys.size() && b < batch_video_indices.size(); ++b) {
+                            markFrameProcessed(batch_message_keys[b], engine_group->engine_name, "", batch_video_indices[b]);
+                        }
+                    }
                 }
-
-                // Note: markFrameProcessed is now called in postprocessWorker after file writing
             }
         } else {
             // batch_size = 1: process frames one at a time (original behavior)
@@ -2147,6 +2168,14 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 } else {
                     LOG_ERROR("Detector", "Failed to save debug image: " + image_path.string());
                 }
+                
+                // CRITICAL: Mark frame as processed for Redis message tracking
+                // In debug mode, we process frames directly (not through postprocess queue),
+                // so we need to call markFrameProcessed here
+                if (use_redis_queue_ && !frame_data.message_key.empty()) {
+                    markFrameProcessed(frame_data.message_key, engine_group->engine_name, 
+                                     output_path, frame_data.video_index);
+                }
             }
             
             if (success) {
@@ -2160,6 +2189,10 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 
                 // Removed expensive logging - string operations accumulate overhead over time
             } else {
+                // Mark failed frame as processed to avoid blocking message push
+                if (use_redis_queue_ && !frame_data.message_key.empty()) {
+                    markFrameProcessed(frame_data.message_key, engine_group->engine_name, "", frame_data.video_index);
+                }
                 {
                     std::lock_guard<std::mutex> lock(stats_.stats_mutex);
                     stats_.frames_failed[engine_id]++;
