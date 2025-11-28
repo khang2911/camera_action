@@ -812,12 +812,11 @@ bool VideoReader::convertFrameToMatGPU(AVFrame* src, cv::Mat& out) {
         return false;
     }
     
-    // CRITICAL: Release any existing data to ensure we get a fresh buffer
-    // This prevents reusing the same buffer if the Mat already has the correct size
-    out.release();
-    out.create(src->height, src->width, CV_8UC3);
-    err = cudaMemcpy2DAsync(out.data,
-                            out.step,
+    // CRITICAL: Create a completely new Mat to ensure independence
+    // Don't reuse the existing Mat object - create a fresh one each time
+    cv::Mat new_frame(src->height, src->width, CV_8UC3);
+    err = cudaMemcpy2DAsync(new_frame.data,
+                            new_frame.step,
                             gpu_bgr_buffer_,
                             gpu_bgr_pitch_,
                             static_cast<size_t>(src->width) * 3,
@@ -842,6 +841,8 @@ bool VideoReader::convertFrameToMatGPU(AVFrame* src, cv::Mat& out) {
         return false;
     }
 
+    // Assign the new frame to output after copy completes
+    out = new_frame;
     return true;
 }
 
@@ -864,14 +865,16 @@ bool VideoReader::convertFrameToMatCPU(AVFrame* src, cv::Mat& out) {
         return false;
     }
     
-    // CRITICAL: Release any existing data to ensure we get a fresh buffer
-    // This prevents reusing the same buffer if the Mat already has the correct size
-    out.release();
-    out.create(src->height, src->width, CV_8UC3);
-    uint8_t* dst_data[4] = { out.data, nullptr, nullptr, nullptr };
-    int dst_linesize[4] = { static_cast<int>(out.step), 0, 0, 0 };
+    // CRITICAL: Create a completely new Mat to ensure independence
+    // Don't reuse the existing Mat object - create a fresh one each time
+    cv::Mat new_frame(src->height, src->width, CV_8UC3);
+    uint8_t* dst_data[4] = { new_frame.data, nullptr, nullptr, nullptr };
+    int dst_linesize[4] = { static_cast<int>(new_frame.step), 0, 0, 0 };
     
     sws_scale(sws_ctx_, src->data, src->linesize, 0, src->height, dst_data, dst_linesize);
+    
+    // Assign the new frame to output
+    out = new_frame;
     return true;
 }
 
