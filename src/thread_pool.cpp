@@ -1237,10 +1237,11 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     // Validate frame number is consistent
                     if (batch_frame_numbers.size() > 0 && 
                         frame_data.frame_number < batch_frame_numbers.back()) {
-                        LOG_ERROR("Detector", "CRITICAL: Frame number out of order when collecting batch! " +
-                                 "previous=" + std::to_string(batch_frame_numbers.back()) +
-                                 ", current=" + std::to_string(frame_data.frame_number) +
-                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                        std::string error_msg = std::string("CRITICAL: Frame number out of order when collecting batch! ") +
+                                                "previous=" + std::to_string(batch_frame_numbers.back()) +
+                                                ", current=" + std::to_string(frame_data.frame_number) +
+                                                " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")";
+                        LOG_ERROR("Detector", error_msg);
                     }
                 }
                 batch_message_keys.push_back(frame_data.message_key);
@@ -1425,10 +1426,11 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                             engine_group->detectors[detector_id]->drawDetections(debug_frame, batch_detections[b]);
                             
                             // Log frame-detection alignment for debugging
-                            LOG_DEBUG("Detector", "Debug image: frame=" + std::to_string(frame_num) +
-                                     ", detections=" + std::to_string(detection_count) +
-                                     ", batch_idx=" + std::to_string(b) +
-                                     ", engine=" + engine_group->engine_name);
+                            std::string debug_msg = "Debug image: frame=" + std::to_string(frame_num) +
+                                                    ", detections=" + std::to_string(detection_count) +
+                                                    ", batch_idx=" + std::to_string(b) +
+                                                    ", engine=" + engine_group->engine_name;
+                            LOG_DEBUG("Detector", debug_msg);
                             
                             std::string serial_part = serialPart(batch_serials[b], batch_message_keys[b], batch_video_ids[b]);
                             std::string record_part = recordPart(batch_record_ids[b], batch_message_keys[b], batch_video_ids[b]);
