@@ -1458,6 +1458,64 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 bool success = false;
                 std::vector<std::vector<Detection>> batch_detections;
                 
+                // CRITICAL: Validate all batch vectors have the same size after sorting
+                bool batch_valid = true;
+                if (actual_batch_count > 0) {
+                    size_t expected_size = static_cast<size_t>(actual_batch_count);
+                    if (batch_tensors.size() != expected_size ||
+                        batch_output_paths.size() != expected_size ||
+                        batch_frame_numbers.size() != expected_size ||
+                        batch_original_widths.size() != expected_size ||
+                        batch_original_heights.size() != expected_size ||
+                        batch_true_original_widths.size() != expected_size ||
+                        batch_true_original_heights.size() != expected_size ||
+                        batch_roi_offset_x.size() != expected_size ||
+                        batch_roi_offset_y.size() != expected_size ||
+                        batch_message_keys.size() != expected_size ||
+                        batch_video_indices.size() != expected_size ||
+                        batch_serials.size() != expected_size ||
+                        batch_record_ids.size() != expected_size ||
+                        batch_record_dates.size() != expected_size) {
+                        std::string error_msg = "CRITICAL: Batch vector size mismatch after sorting! expected=" + 
+                                                std::to_string(expected_size) +
+                                                ", tensors=" + std::to_string(batch_tensors.size()) +
+                                                ", paths=" + std::to_string(batch_output_paths.size()) +
+                                                ", frames=" + std::to_string(batch_frame_numbers.size()) +
+                                                " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")";
+                        LOG_ERROR("Detector", error_msg);
+                        batch_valid = false;
+                    }
+                }
+                
+                if (!batch_valid) {
+                    // Skip processing this invalid batch
+                    {
+                        std::lock_guard<std::mutex> lock(stats_.stats_mutex);
+                        stats_.frames_failed[engine_id] += actual_batch_count;
+                    }
+                    LOG_ERROR("Detector", "Skipping invalid batch (size mismatch) for " + std::to_string(actual_batch_count) + " frames");
+                    // Clear batch vectors and continue to next iteration
+                    batch_tensors.clear();
+                    batch_output_paths.clear();
+                    batch_frame_numbers.clear();
+                    batch_original_widths.clear();
+                    batch_original_heights.clear();
+                    batch_true_original_widths.clear();
+                    batch_true_original_heights.clear();
+                    batch_roi_offset_x.clear();
+                    batch_roi_offset_y.clear();
+                    batch_message_keys.clear();
+                    batch_video_indices.clear();
+                    batch_serials.clear();
+                    batch_record_ids.clear();
+                    batch_record_dates.clear();
+                    if (debug_mode_) {
+                        batch_frames.clear();
+                        batch_video_ids.clear();
+                    }
+                    continue;  // Continue to next batch collection
+                }
+                
                 if (debug_mode_) {
                     // In debug mode, get detections to draw on images
                     success = engine_group->detectors[detector_id]->runInferenceWithDetections(
@@ -1484,6 +1542,17 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     success = engine_group->detectors[detector_id]->getRawInferenceOutput(
                         batch_tensors, raw_outputs
                     );
+                    
+                    if (!success) {
+                        LOG_ERROR("Detector", "getRawInferenceOutput failed for batch_size=" + 
+                                 std::to_string(actual_batch_count) + 
+                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                    } else if (raw_outputs.empty()) {
+                        LOG_ERROR("Detector", "getRawInferenceOutput returned empty raw_outputs for batch_size=" + 
+                                 std::to_string(actual_batch_count) + 
+                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                        success = false;
+                    }
                     
                     if (success && !raw_outputs.empty()) {
                         // Create post-processing task
@@ -1630,9 +1699,10 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 } else {
                     {
                         std::lock_guard<std::mutex> lock(stats_.stats_mutex);
-                        stats_.frames_failed[engine_id] += batch_size;
+                        stats_.frames_failed[engine_id] += actual_batch_count;
                     }
-                    LOG_ERROR("Detector", "Batch detection failed for " + std::to_string(batch_size) + " frames");
+                    LOG_ERROR("Detector", "Batch detection failed for " + std::to_string(actual_batch_count) + " frames " +
+                             "(engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
                 }
 
                 // Note: markFrameProcessed is now called in postprocessWorker after file writing
