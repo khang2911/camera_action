@@ -24,6 +24,29 @@
 #include <cuda_runtime_api.h>
 #include "nlohmann/json.hpp"
 
+// Helper functions for path generation
+static std::string formatDate(const std::string& record_date) {
+    if (record_date.length() >= 10 && record_date.find('-') != std::string::npos) {
+        std::string year = record_date.substr(0, 4);
+        std::string month = record_date.substr(5, 2);
+        std::string day = record_date.substr(8, 2);
+        return day + "-" + month + "-" + year.substr(2, 2);
+    }
+    return std::string("unknown-date");
+}
+
+static std::string serialPart(const std::string& serial, const std::string& fallback_key, int video_id) {
+    if (!serial.empty()) return serial;
+    if (!fallback_key.empty()) return fallback_key;
+    return std::string("video_") + std::to_string(video_id);
+}
+
+static std::string recordPart(const std::string& record_id, const std::string& fallback_key, int video_id) {
+    if (!record_id.empty()) return record_id;
+    if (!fallback_key.empty()) return fallback_key;
+    return std::string("video_") + std::to_string(video_id);
+}
+
 SharedPreprocessGroup::SharedPreprocessGroup(int id, int in_w, int in_h, bool roi, size_t queue_cap)
     : group_id(id),
       input_width(in_w),
@@ -1216,28 +1239,6 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
     
     // Get batch size for this detector
     int batch_size = engine_group->detectors[detector_id]->getBatchSize();
-
-    auto formatDate = [](const std::string& record_date) {
-        if (record_date.length() >= 10 && record_date.find('-') != std::string::npos) {
-            std::string year = record_date.substr(0, 4);
-            std::string month = record_date.substr(5, 2);
-            std::string day = record_date.substr(8, 2);
-            return day + "-" + month + "-" + year.substr(2, 2);
-        }
-        return std::string("unknown-date");
-    };
-
-    auto serialPart = [](const std::string& serial, const std::string& fallback_key, int video_id) {
-        if (!serial.empty()) return serial;
-        if (!fallback_key.empty()) return fallback_key;
-        return std::string("video_") + std::to_string(video_id);
-    };
-
-    auto recordPart = [](const std::string& record_id, const std::string& fallback_key, int video_id) {
-        if (!record_id.empty()) return record_id;
-        if (!fallback_key.empty()) return fallback_key;
-        return std::string("video_") + std::to_string(video_id);
-    };
     
     // CRITICAL: Pending frame to handle frames from different videos
     // When we get a frame from a different video, we save it here and process current batch first
@@ -1653,10 +1654,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 }
                 
                 // Validate frame numbers are in order (should always be true after sorting)
-                bool frame_order_valid = true;
                 for (size_t i = 1; i < batch_frame_numbers.size(); ++i) {
                     if (batch_frame_numbers[i] < batch_frame_numbers[i-1]) {
-                        frame_order_valid = false;
                         std::string error_msg = "Frame order violation in batch after sorting: frame[" + 
                                                 std::to_string(i-1) + "]=" + std::to_string(batch_frame_numbers[i-1]) +
                                                 ", frame[" + std::to_string(i) + "]=" + std::to_string(batch_frame_numbers[i]) +
