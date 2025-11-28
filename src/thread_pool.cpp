@@ -1258,6 +1258,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             }
             
             if (should_process && !batch_tensors.empty()) {
+                int actual_batch_count = static_cast<int>(batch_tensors.size());
+                
                 // Validate frame numbers are in order (for debugging frame-detection mismatch)
                 bool frame_order_valid = true;
                 for (size_t i = 1; i < batch_frame_numbers.size(); ++i) {
@@ -1266,9 +1268,18 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         LOG_ERROR("Detector", "Frame order violation in batch: frame[" + 
                                  std::to_string(i-1) + "]=" + std::to_string(batch_frame_numbers[i-1]) +
                                  ", frame[" + std::to_string(i) + "]=" + std::to_string(batch_frame_numbers[i]) +
-                                 " (engine=" + engine_group->engine_name + ")");
+                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
                         break;
                     }
+                }
+                
+                // Log batch info for debugging
+                if (debug_mode_ && actual_batch_count > 0) {
+                    LOG_DEBUG("Detector", "Processing batch: engine=" + engine_group->engine_name + 
+                             ", detector=" + std::to_string(detector_id) +
+                             ", batch_size=" + std::to_string(actual_batch_count) +
+                             ", frames=[" + std::to_string(batch_frame_numbers[0]) + 
+                             (actual_batch_count > 1 ? ".." + std::to_string(batch_frame_numbers[actual_batch_count-1]) : "") + "]");
                 }
                 
                 auto batch_start = std::chrono::steady_clock::now();
@@ -1285,6 +1296,15 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         batch_roi_offset_x, batch_roi_offset_y,
                         batch_true_original_widths, batch_true_original_heights
                     );
+                    
+                    // Validate detections array size matches batch size
+                    if (success && batch_detections.size() != static_cast<size_t>(actual_batch_count)) {
+                        LOG_ERROR("Detector", "CRITICAL: runInferenceWithDetections returned wrong size! " +
+                                 "expected=" + std::to_string(actual_batch_count) +
+                                 ", got=" + std::to_string(batch_detections.size()) +
+                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                        success = false;  // Mark as failed to prevent saving wrong debug images
+                    }
                 } else {
                     // Get raw inference output and push to post-processing queue
                     std::vector<std::vector<float>> raw_outputs;
@@ -1326,31 +1346,71 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 auto batch_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(batch_end - batch_start).count();
                 
                 // Save debug images for batch
-                if (debug_mode_ && success && batch_detections.size() == static_cast<size_t>(batch_size) &&
-                    batch_frames.size() == static_cast<size_t>(batch_size)) {
-                    for (int b = 0; b < batch_size; ++b) {
-                        cv::Mat debug_frame = engine_group->preprocessor->addPadding(batch_frames[b]);
-                        engine_group->detectors[detector_id]->drawDetections(debug_frame, batch_detections[b]);
-                        
-                        std::string serial_part = serialPart(batch_serials[b], batch_message_keys[b], batch_video_ids[b]);
-                        std::string record_part = recordPart(batch_record_ids[b], batch_message_keys[b], batch_video_ids[b]);
-                        std::string date_part = formatDate(batch_record_dates[b]);
-                        
-                        std::filesystem::path debug_dir = std::filesystem::path(output_dir_) / "debug_images" /
-                                                           engine_group->engine_name / date_part /
-                                                           (serial_part + "_" + record_part + "_v" + std::to_string(batch_video_indices[b]));
-                        std::filesystem::create_directories(debug_dir);
-                        
-                        std::string image_filename = "frame_" + 
-                            std::to_string(batch_frame_numbers[b]) + "_" + 
-                            engine_group->engine_name + ".jpg";
-                        std::filesystem::path image_path = debug_dir / image_filename;
-                        
-                        if (cv::imwrite(image_path.string(), debug_frame)) {
-                            LOG_DEBUG("Detector", "Saved debug image: " + image_path.string());
-                        } else {
-                            LOG_ERROR("Detector", "Failed to save debug image: " + image_path.string());
+                // CRITICAL: Use actual batch size, not batch_size, to handle partial batches
+                int actual_batch_count = static_cast<int>(batch_tensors.size());
+                if (debug_mode_ && success) {
+                    // Validate sizes match
+                    if (batch_detections.size() != static_cast<size_t>(actual_batch_count)) {
+                        LOG_ERROR("Detector", "CRITICAL: batch_detections size mismatch! detections=" + 
+                                 std::to_string(batch_detections.size()) + 
+                                 ", expected=" + std::to_string(actual_batch_count) +
+                                 " (engine=" + engine_group->engine_name + ")");
+                    }
+                    if (batch_frames.size() != static_cast<size_t>(actual_batch_count)) {
+                        LOG_ERROR("Detector", "CRITICAL: batch_frames size mismatch! frames=" + 
+                                 std::to_string(batch_frames.size()) + 
+                                 ", expected=" + std::to_string(actual_batch_count) +
+                                 " (engine=" + engine_group->engine_name + ")");
+                    }
+                    if (batch_frame_numbers.size() != static_cast<size_t>(actual_batch_count)) {
+                        LOG_ERROR("Detector", "CRITICAL: batch_frame_numbers size mismatch! frame_numbers=" + 
+                                 std::to_string(batch_frame_numbers.size()) + 
+                                 ", expected=" + std::to_string(actual_batch_count) +
+                                 " (engine=" + engine_group->engine_name + ")");
+                    }
+                    
+                    // Only save if all sizes match
+                    if (batch_detections.size() == static_cast<size_t>(actual_batch_count) &&
+                        batch_frames.size() == static_cast<size_t>(actual_batch_count) &&
+                        batch_frame_numbers.size() == static_cast<size_t>(actual_batch_count)) {
+                        for (int b = 0; b < actual_batch_count; ++b) {
+                            // Validate frame number matches expected
+                            if (b > 0 && batch_frame_numbers[b] < batch_frame_numbers[b-1]) {
+                                LOG_ERROR("Detector", "CRITICAL: Frame number out of order in batch! frame[" + 
+                                         std::to_string(b-1) + "]=" + std::to_string(batch_frame_numbers[b-1]) +
+                                         ", frame[" + std::to_string(b) + "]=" + std::to_string(batch_frame_numbers[b]) +
+                                         " (engine=" + engine_group->engine_name + ")");
+                            }
+                            
+                            cv::Mat debug_frame = engine_group->preprocessor->addPadding(batch_frames[b]);
+                            engine_group->detectors[detector_id]->drawDetections(debug_frame, batch_detections[b]);
+                            
+                            std::string serial_part = serialPart(batch_serials[b], batch_message_keys[b], batch_video_ids[b]);
+                            std::string record_part = recordPart(batch_record_ids[b], batch_message_keys[b], batch_video_ids[b]);
+                            std::string date_part = formatDate(batch_record_dates[b]);
+                            
+                            std::filesystem::path debug_dir = std::filesystem::path(output_dir_) / "debug_images" /
+                                                               engine_group->engine_name / date_part /
+                                                               (serial_part + "_" + record_part + "_v" + std::to_string(batch_video_indices[b]));
+                            std::filesystem::create_directories(debug_dir);
+                            
+                            std::string image_filename = "frame_" + 
+                                std::to_string(batch_frame_numbers[b]) + "_" + 
+                                engine_group->engine_name + ".jpg";
+                            std::filesystem::path image_path = debug_dir / image_filename;
+                            
+                            if (cv::imwrite(image_path.string(), debug_frame)) {
+                                LOG_DEBUG("Detector", "Saved debug image: frame=" + 
+                                         std::to_string(batch_frame_numbers[b]) + 
+                                         ", detections=" + std::to_string(batch_detections[b].size()) +
+                                         ", path=" + image_path.string());
+                            } else {
+                                LOG_ERROR("Detector", "Failed to save debug image: " + image_path.string());
+                            }
                         }
+                    } else {
+                        LOG_ERROR("Detector", "Skipping debug image save due to size mismatch (engine=" + 
+                                 engine_group->engine_name + ")");
                     }
                 }
                 
