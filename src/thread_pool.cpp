@@ -16,6 +16,7 @@
 #include <fstream>
 #include <atomic>
 #include <deque>
+#include <optional>
 #include <yaml-cpp/yaml.h>
 #include <cuda_runtime_api.h>
 #include "nlohmann/json.hpp"
@@ -1166,6 +1167,10 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
         return std::string("video_") + std::to_string(video_id);
     };
     
+    // CRITICAL: Pending frame to handle frames from different videos
+    // When we get a frame from a different video, we save it here and process current batch first
+    std::optional<FrameData> pending_frame;
+    
     while (!stop_flag_) {
             // For batch_size > 1, accumulate frames into a batch
         if (batch_size > 1) {
@@ -1186,13 +1191,43 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             std::vector<std::string> batch_record_ids;
             std::vector<std::string> batch_record_dates;
             
-            // Collect batch_size frames
+            // CRITICAL: Track video_key to ensure all frames in a batch are from the same video
+            // This prevents frame order violations when multiple videos are processed concurrently
+            std::string batch_video_key;  // Empty means no frames in batch yet
+            
+            // Collect batch_size frames from the SAME video
             while (static_cast<int>(batch_tensors.size()) < batch_size && !stop_flag_) {
-                if (!engine_group->frame_queue->pop(frame_data, 100)) {
-                    if (stop_flag_) break;
+                // First, check if we have a pending frame from previous iteration
+                if (pending_frame.has_value()) {
+                    frame_data = pending_frame.value();
+                    pending_frame.reset();
+                } else {
+                    if (!engine_group->frame_queue->pop(frame_data, 100)) {
+                        if (stop_flag_) break;
+                        
+                        // Removed waiting log - too expensive, queue size check involves mutex
+                        continue;
+                    }
+                }
+                
+                // Build video_key: message_key + video_index uniquely identifies a video
+                std::string current_video_key = frame_data.message_key + "_v" + std::to_string(frame_data.video_index);
+                
+                // If this is the first frame, set the batch video_key
+                if (batch_video_key.empty()) {
+                    batch_video_key = current_video_key;
+                }
+                // If this frame is from a different video, save it for next batch and process current batch
+                else if (current_video_key != batch_video_key) {
+                    // If we already have frames in the batch, save this frame and process current batch
+                    if (batch_tensors.size() > 0) {
+                        pending_frame = frame_data;
+                        break;  // Exit loop to process current batch
+                    }
                     
-                    // Removed waiting log - too expensive, queue size check involves mutex
-                    continue;
+                    // If batch was empty, just start new batch with this frame
+                    batch_video_key = current_video_key;
+                    // Continue to process this frame (it's already in frame_data)
                 }
                 
                 // Generate output path with engine name
@@ -1234,13 +1269,14 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     batch_frames.push_back(frame_data.frame.clone());
                     batch_video_ids.push_back(frame_data.video_id);
                     
-                    // Validate frame number is consistent
-                    if (batch_frame_numbers.size() > 0 && 
-                        frame_data.frame_number < batch_frame_numbers.back()) {
+                    // Validate frame number is consistent (should always be increasing now)
+                    if (batch_frame_numbers.size() > 1 && 
+                        frame_data.frame_number < batch_frame_numbers[batch_frame_numbers.size() - 2]) {
                         std::string error_msg = std::string("CRITICAL: Frame number out of order when collecting batch! ") +
-                                                "previous=" + std::to_string(batch_frame_numbers.back()) +
+                                                "previous=" + std::to_string(batch_frame_numbers[batch_frame_numbers.size() - 2]) +
                                                 ", current=" + std::to_string(frame_data.frame_number) +
-                                                " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")";
+                                                " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + 
+                                                ", video_key=" + current_video_key + ")";
                         LOG_ERROR("Detector", error_msg);
                     }
                 }
