@@ -566,7 +566,7 @@ void ThreadPool::waitForCompletion() {
                 }
             }
             // Also check postprocessor queue
-            if (postprocess_queue_ && !postprocess_queue_->empty()) {
+            if (postprocess_queue_ && postprocess_queue_->size() > 0) {
                 all_queues_empty = false;
             }
             
