@@ -5,3 +5,32 @@ new_track_thresh: 0.25 # (float) Start a new track if no match ≥ this; higher 
 track_buffer: 30 # (int) Frames to keep lost tracks alive; higher handles occlusion, increases ID switches risk
 match_thresh: 0.8 # (float) Association similarity threshold (IoU/cost); tune with detector quality
 fuse_score: True # (bool) Fuse detection score with motion/IoU for matching; stabilizes weak detections
+
+
+# tracker_type: bytetrack
+
+# # Stage 1: High-score matching
+# track_high_thresh: 0.5        # tăng từ 0.25 → 0.5
+# # Giữ track sạch hơn, hạn chế bắt nhầm những detection rác.
+
+# # Stage 2: Low-score matching (recovery)
+# track_low_thresh: 0.1         # giữ nguyên
+# # Vẫn cho phép hồi track khi detection yếu.
+
+# # New track creation
+# new_track_thresh: 0.5         # tăng từ 0.25 → 0.5
+# # >> Giảm mạnh việc tạo track mới trong trường hợp duplicate detection.
+# # >> Đây là key fix tránh tạo track 2 cho cùng 1 người.
+
+# # Track buffer (lost track lifetime)
+# track_buffer: 20              # giảm từ 30 → 20
+# # Giảm ID-switch do track cũ sống quá lâu.
+# # Track nằm “lơ lửng” lâu quá dễ sinh ID switch khi match lại.
+
+# # Association threshold
+# match_thresh: 0.7             # giảm từ 0.8 → 0.7
+# # Cho phép match detection rộng hơn (IoU thấp hơn vẫn match).
+# # Giúp track bám người tốt hơn khi box jitter.
+
+# fuse_score: True              # giữ nguyên
+# # Score fusion giúp giảm pick nhầm duplicate detection.

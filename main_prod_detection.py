@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 import pytz
 
-from python_app.utils.utils import getConfig, unscale_box
+from python_app.utils.utils import get_fps_ffprobe, getConfig, unscale_box
 
 hanoi_tz = pytz.timezone("Asia/Ho_Chi_Minh")
 
@@ -242,16 +242,16 @@ class RedisQueueConsumer:
                     "monitor_invalid_format", True)
                 return False
 
-            if is_cam_complete(serial):
-                ml_results = self.get_result(parsed_message)
-                result_msg = parsed_message.copy()
+            # if is_cam_complete(serial):
+            #     ml_results = self.get_result(parsed_message)
+            #     result_msg = parsed_message.copy()
 
-                result_msg['ml_results'] = ml_results
-                result_msg['root_fields'] = {'config': result_msg['config']}
-                self.log_to_file(result_msg, "temp")
-                self.log_to_file(result_msg, "monitor_all_result")
-                self.push_to_queue(result_msg)
-                return False
+            #     result_msg['ml_results'] = ml_results
+            #     result_msg['root_fields'] = {'config': result_msg['config']}
+            #     # self.log_to_file(result_msg, "temp")
+            #     self.log_to_file(result_msg, "monitor_all_result")
+            #     self.push_to_queue(result_msg)
+            #     return False
 
             image_w, image_h = parsed_message['video_resolution']['width'], parsed_message['video_resolution']['height']
             if image_w < 1920 or image_h < 1080:
@@ -259,6 +259,17 @@ class RedisQueueConsumer:
                     {"error": "video resolution is invalid", "message": parsed_message},
                     "monitor_invalid_format", True)
                 return False
+
+            video_path = parsed_message['playback_location'][0]
+            fps_video = get_fps_ffprobe(video_path=video_path)
+
+            if fps_video > 13.5 or fps_video < 12.5:
+                self.log_to_file(
+                    {"error": "video fps is invalid", "message": parsed_message},
+                    "monitor_invalid_format", True)
+                return False
+            
+            parsed_message['fps'] = fps_video
 
             ### check frame problem
             # #=====================================

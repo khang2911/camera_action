@@ -80,6 +80,39 @@ class Frame:
             'detections': detections_dict
         }
 
+def expand_bbox(x1, y1, x2, y2, scale=1.2):
+    w = x2 - x1
+    h = y2 - y1
+    
+    cx = (x1 + x2) / 2
+    cy = (y1 + y2) / 2
+
+    new_w = w * scale
+    new_h = h * scale
+
+    nx1 = int(cx - new_w / 2)
+    ny1 = int(cy - new_h / 2)
+    nx2 = int(cx + new_w / 2)
+    ny2 = int(cy + new_h / 2)
+
+    return nx1, ny1, nx2, ny2
+
+def pose_to_bbox(keypoints, score_thresh=0.2):
+    xs, ys = [], []
+    for (x, y) in keypoints:
+        xs.append(x)
+        ys.append(y)
+
+    if len(xs) == 0:
+        return None  # không có bbox
+
+    x_min, x_max = min(xs), max(xs)
+    y_min, y_max = min(ys), max(ys)
+
+    return expand_bbox(int(x_min), int(y_min), int(x_max), int(y_max))
+
+
+
 
 class BinFileReader:
     """Reads multiple binary detection files and returns structured frame/detection data."""
@@ -122,7 +155,6 @@ class BinFileReader:
                 # Skip header for next files
                 f.seek(4)
             
-            prev_frame = None
             # Read frames
             while True:
                 frame_data = f.read(4)
@@ -130,12 +162,6 @@ class BinFileReader:
                     break
 
                 frame_number = struct.unpack('i', frame_data)[0]
-
-                # print(frame_number)
-                # if prev_frame:
-                #     if frame_number - prev_frame > 2:
-                
-                # prev_frame = frame_number
 
                 num_detections_data = f.read(4)
                 if len(num_detections_data) < 4:
@@ -169,15 +195,17 @@ class BinFileReader:
 
                     if num_keypoints > 0:
                         kp = Keypoints(xy=keypoint_xy, conf=keypoint_conf)
+                        # if bbox[2]/bbox[3] < 1.5:
+                        # if confidence > 0.6:
+                        # bbox = pose_to_bbox(keypoint_xy)
                         detections.append(
                             PoseOutput(bbox=self.xywh2xyxy(bbox), keypoints=kp, conf=confidence, class_id=class_id, id=None)
                         )
                     else:
-
                         detections.append(
                             DetectionsOutput(bbox=self.xywh2xyxy(bbox), conf=confidence, class_id=class_id, id=None)
                         )
-
+                # print(frame_number)
                 self.frames.append(Frame(frame_number=frame_number, detections=detections, video_index=video_index))
 
     def read(self) -> List[Frame]:
@@ -257,8 +285,8 @@ if __name__ == "__main__":
     #     sys.exit(1)
     
     filepaths = [
-    "/age_gender/detection/camera_action/storage/test/hand/19-11-25/c03o25010005575_74dc169f-9c6d-4ea2-8be0-7d50734f9bf7.bin",
-    "/age_gender/detection/camera_action/storage/test/hand/19-11-25/c03o25010005575_74dc169f-9c6d-4ea2-8be0-7d50734f9bf7_v1.bin"
+    "/age_gender/detection/camera_action/camera_action/test/alcohol/25-11-25/c03o25010003774_6fba14bc-b693-49ed-90fd-8ba74430176a.bin",
+    "/age_gender/detection/camera_action/camera_action/test/alcohol/25-11-25/c03o25010003774_6fba14bc-b693-49ed-90fd-8ba74430176a_v1.bin"
   ]
     
     try:

@@ -15,7 +15,7 @@ from python_app.module.alcohol_tensorrt import AlcoholBottleTracker
 from python_app.module.hand_manager import HandManager, HandTrack
 from collections import Counter
 
-from python_app.module.bin_file_reader_skip import BinFileReader
+from python_app.module.bin_file_reader import BinFileReader
 import pytz
 hanoi_tz = pytz.timezone("Asia/Ho_Chi_Minh")
 
@@ -190,8 +190,8 @@ class ShakingDetector:
         return outputs
 
 class Processor(object):
-    def __init__(self, serial):
-        self.fps = 13
+    def __init__(self, serial, fps = 13):
+        self.fps = round(fps)
         self.hand_manager = HandManager(max_history_frames=self.fps, inactive_frame_threshold=self.fps * 2)
         self.hand_mapper = HandPersonMapper()
 
@@ -313,7 +313,7 @@ class Processor(object):
                             time_out=self.fps * 5
                         )
                         # reset trạng thái
-                        print(f"person id {person_id} touched in second", int(frame_id/13))
+                        print(f"person id {person_id} touched in second", int(frame_id/self.fps))
                         touchs_event.append(touch_event)
 
                     self.is_touching[roi_idx] = False
@@ -443,7 +443,7 @@ class Processor(object):
             # Has touch event -> running check washing
             for touch_event in touchs:
                 # set timeout/add to queue for touching/washing event
-                self.timeout_washing[touch_event.id] = self.fps * 5
+                self.timeout_washing[touch_event.id] = round(self.fps) * 5
                 self.touchs_events[touch_event.id] = touch_event
 
         # washing check: mỗi lần có sự kiện chạm cồn thì bắt đầu check.
@@ -474,14 +474,14 @@ class Processor(object):
 
                 self.shaking_interval[hand_id] -= 1
     
-    def postprocess(self, fps):
+    def postprocess(self):
         results = []
         for touch_id, washing_action in self.washing_count.items():
             result = {}
             one_hand_count = washing_action.get_one_hand()
             overlap_count = washing_action.get_overlap()
             print(f"Frame ID: {int(touch_id.split('_')[-1]):04d}",f"| Overlap: {overlap_count:02d}", f"| One Hand: {one_hand_count:02d}")
-            total_time = max((one_hand_count + overlap_count + self.min_overlap_frames + 2)/fps, 1)
+            total_time = max((one_hand_count + overlap_count + self.min_overlap_frames + 2)/self.fps, 1)
 
             start_frame_id = washing_action.frame_id - self.min_overlap_frames - 2
 
@@ -497,7 +497,7 @@ class Processor(object):
 
             if is_action_valid:
                 # Calculate the start time in seconds
-                start_time_seconds = start_frame_id / fps
+                start_time_seconds = start_frame_id / self.fps
                 
                 # Populate the result dictionary
                 result["start_time"] = start_time_seconds
@@ -505,16 +505,17 @@ class Processor(object):
                 
                 # Add the result to the list
                 results.append(result)
+        
         return results
 
 
 class Runner:
-    def __init__(self, serial, alcohol_paths, hand_paths, pose_paths, debug = False):
-        self.processor = Processor(serial)
-        self.shaking_detector = ShakingDetector()
+    def __init__(self, serial, alcohol_paths, hand_paths, pose_paths, fps, debug = False):
+        self.processor = Processor(serial, fps)
+        self.shaking_detector = ShakingDetector(fps=fps)
         self.format = "%Y-%m-%dT%H:%M:%S.%fZ"
 
-        self.expand_shaking = 1
+        self.expand_shaking = 2
         self.expand_washing = 1
         self.debug = debug
 
@@ -528,13 +529,10 @@ class Runner:
 
         self.fake = False
 
-
     def run(self, start_video_time, end_video_time):
         actions = []
-        process_frame = 0
         start_time_expand, end_time_expand = get_expand_timestamp(start_video_time, end_video_time)
         start_timestamp, end_timestamp = get_timestamp(start_video_time, end_video_time)
-        
 
         for (hand_frame, pose_frame, alcohol_frame) in zip(self.hand_frames, self.pose_frames, self.alcohol_frames):
             self.processor.process_frame(hand_results=hand_frame.detections,
@@ -550,7 +548,7 @@ class Runner:
             start_time = action['start_time'] + start_time_expand
 
             if start_time - start_time_expand < 30:
-                if start_time + duration - (start_timestamp) > 13:
+                if start_time + duration - (start_timestamp) > 7:
                     if self.fake:
                         start_timestamp += random.randint(-20, 20)
                     start_datetime = datetime.fromtimestamp(start_timestamp, hanoi_tz).isoformat(timespec="seconds")
@@ -581,13 +579,13 @@ class Runner:
             
             actions.append(action_dict)
 
-        washing_results = self.processor.postprocess(13)
+        washing_results = self.processor.postprocess()
         # print(washing_results, start_timestamp, start_time_expand)
         for action in washing_results:
             start_time = action['start_time'] + start_time_expand
             duration = action['duration']
 
-            if (start_time < start_timestamp) or start_time > end_timestamp:
+            if (start_time < start_timestamp - 2) or start_time >= end_timestamp:
                 continue
 
             if self.fake:
@@ -607,7 +605,6 @@ if __name__ == "__main__":
     import os
     import json
     
-
     with open("run.log") as f:
         for line in f:
             if not line:
@@ -629,7 +626,7 @@ if __name__ == "__main__":
             hand_path = message['hand']
             pose_path = message['pose']
             
-            runner = Runner(serial, alcohol_path, hand_path, pose_path)
+            runner = Runner(serial, alcohol_path, hand_path, pose_path, 13)
 
             actions = runner.run(video_start_time, video_end_time)
 

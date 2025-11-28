@@ -77,8 +77,23 @@ class ExtraInfoProcessor:
         """
         extra_data = []
         if len(actions) == 0:
-            return []
-        
+            return [
+                        {
+                            "action_id": "2",
+                            "action_name": "Sát khuẩn tay",
+                            "error_id": [
+                            "4"
+                            ]
+                        },
+                        {
+                            "action_id": "1",
+                            "action_name": "Lắc vaccine",
+                            "error_id": [
+                            "2"
+                            ]
+                        }
+                    ]
+                            
         vaccine_list = vaccine_info['Indication']
         num_vaccine = len(vaccine_list)
 

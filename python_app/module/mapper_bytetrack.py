@@ -11,9 +11,11 @@ import os
 import pytz
 import cv2
 from datetime import datetime
+import sys
+sys.path.append("/age_gender/detection/camera_action")
+
 
 from python_app.tracker.byte_tracker import BYTETracker
-from python_app.utils.video_reader import VideoReader
 
 pose_score = 0.2
 hand_score = 0.2
@@ -54,7 +56,7 @@ class HandPersonMapper:
         self.LEFT_SHOULDER_IDX = 5
         self.RIGHT_SHOULDER_IDX = 6
 
-        self.tracker = BYTETracker(config_path="/age_gender/detection/tracker/bytetrack.yaml")
+        self.tracker = BYTETracker(config_path="/age_gender/detection/camera_action/python_app/tracker/bytetrack.yaml")
         
         # Distance threshold for hand-wrist association (in pixels)
         self.distance_threshold = 100
@@ -415,10 +417,11 @@ class HandPersonMapper:
 
             person_track_ids = [x.id for x in pose_results]
             person_track_bboxes = [x.bbox for x in pose_results]
+            person_track_confs = [x.conf for x in pose_results]
             
-            for kpts, confs, pid, bbox in zip(keypoints, confidences, person_track_ids, person_track_bboxes):
-                cv2.putText(annotated_frame, str(pid), (int(bbox[0]), int(bbox[1])+5), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (128, 128, 128), 2)
-
+            for kpts, confs, pid, bbox, conf_p in zip(keypoints, confidences, person_track_ids, person_track_bboxes, person_track_confs):
+                cv2.putText(annotated_frame, f"{str(pid)} - {round(conf_p, 2)}", (int(bbox[0]), int(bbox[1])-5), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 123, 22), 2)
+                cv2.rectangle(annotated_frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (255, 123, 22), 3)
                 # Draw arm trajectories
                 for side, (shoulder_idx, elbow_idx, wrist_idx) in [
                     ('left', (self.LEFT_SHOULDER_IDX, self.LEFT_ELBOW_IDX, self.LEFT_WRIST_IDX)),
@@ -592,9 +595,9 @@ def get_expand_timestamp(start: str, end: str):
 if __name__ == "__main__":
     import json
     # import pycuda.autoinit 
+    from python_app.module.bin_file_reader import BinFileReader
 
-    mapper = HandPersonMapper(hand_model_path="/age_gender/detection/weights/hand/2025-10-30.engine",
-                              pose_model_path="/age_gender/detection/weights/pose/2025-10-30.engine")
+    mapper = HandPersonMapper()
     # mapper = HandPersonMapper()
     
     with open("run.log") as f:
@@ -613,9 +616,19 @@ if __name__ == "__main__":
             durations = [float(rec['duration']) for rec in raw_alarm['record_list']]
             video_paths = message['playback_location']
 
+            width_frame = message['video_resolution']['width']
+            height_frame = message['video_resolution']['height']
+
             os.makedirs(f"outputs/mapping/{serial}", exist_ok=True)
             output_path = f"outputs/mapping/{serial}/{os.path.basename(video_paths[0])}"
             # output_path = f"outputs/mapping/{datetime.now().strftime('%YY-%mm-%dd')}/mapping_{moment_times}.mp4"
+            alcohol_path = message['alcohol']
+            hand_path = message['hand']
+            pose_path = message['pose']
+
+            pose_reader = BinFileReader(pose_path)
+            hand_reader = BinFileReader(hand_path)
+            alcohol_reader = BinFileReader(alcohol_path)
             
             start_timestamp, end_timestamp = get_expand_timestamp(video_start_time, video_end_time)
             
@@ -625,21 +638,26 @@ if __name__ == "__main__":
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                 writer = cv2.VideoWriter(output_path, fourcc, 13, (width, height))
             
-            video_reader = VideoReader(video_paths, moment_times, durations, serial)
+            # video_reader = VideoReader(video_paths, moment_times, durations, serial)
+            pose = pose_reader.read()
+            alcohol = alcohol_reader.read()
 
-            while True:
-                ret, frame, frame_index, ts = video_reader.read_range(start_timestamp, end_timestamp)
-                if not ret:
-                    break
+            hand = hand_reader.read()
+            # print(len(pose))
+            # print(len(hand))
 
-                hand_tracks, poses_result = mapper.process_frame(frame, frame_index)
-
+            for hand_results, pose_results, alcohol_results in zip(hand, pose, alcohol):
+                frame = np.zeros((height_frame, width_frame, 3), dtype=np.uint8)
+                frame_id = hand_results.frame_index
+                hand_tracks, poses_result = mapper.process_frame(frame_id, hand_results.detections, pose_results.detections)
                 if writer:
                     annotated_frame = mapper.visualize_results(frame, hand_tracks, poses_result)
+                    for det in alcohol_results.detections:
+                        cv2.rectangle(annotated_frame, (int(det.bbox[0]), int(det.bbox[1])), (int(det.bbox[2]), int(det.bbox[3])), (0, 255, 0), 3)
                     annotated_frame_resized = cv2.resize(annotated_frame, (width, height))
                     writer.write(annotated_frame_resized)
-                    
-            video_reader.release()
+                        
+            # video_reader.release()
             writer.release()
             print(output_path)
 

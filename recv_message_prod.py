@@ -7,7 +7,7 @@ import time
 rc = redis.Redis("172.24.178.105", 6379, db = 0)
 
 def log_to_file(message_data, file):
-    os.makedirs(f"logs_prod/{file}", exist_ok=True)
+    os.makedirs(f"logs/prod/{file}", exist_ok=True)
     try:
         if 'message' in message_data:
             dt_utc = datetime.strptime(message_data['message']['member']['alarm']['raw_alarm']['send_at'], '%Y%m%d%H%M%S')
@@ -17,12 +17,12 @@ def log_to_file(message_data, file):
         # dt_hcm = dt_utc.astimezone(timezone(timedelta(hours=7)))
         dt_string = dt_utc.strftime('%Y-%m-%d')
         print(f"--> INFO: Log to {file} ...")
-        with open(f'logs_prod/{file}/{dt_string}.log', 'a+', encoding='utf-8') as f:
+        with open(f'logs/prod/{file}/{dt_string}.log', 'a+', encoding='utf-8') as f:
             f.write(json.dumps(message_data, ensure_ascii=False) + '\n')
     
     except Exception as e:
         print(f"INFO: Log to error_message ...")
-        with open(f'logs_prod/error_message.log', 'a+', encoding='utf-8') as f:
+        with open(f'logs/prod/error_message.log', 'a+', encoding='utf-8') as f:
             f.write(f"{message_data}" + '\n')
 
 while True:
@@ -45,11 +45,17 @@ while True:
 
         
         config = data['config']
-        actions_config = config['external_data']['actions']
+        try:
+            actions_config = config['external_data']['actions']
+        except:
+            log_to_file(message_data, "unknown_alarm_msg")
+            continue
+        
         actions = []
         for action in actions_config:
             actions.append(action['id'])
         
+
         # Process message based on actions
         if "1" in actions or "2" in actions:
             rc.lpush('ml#vaccine_monitor_prod', json.dumps(data))

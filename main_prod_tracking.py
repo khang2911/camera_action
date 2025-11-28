@@ -118,9 +118,10 @@ class RedisQueueConsumer:
         data['home_id'] = raw_msg['alarm']['raw_alarm']['home_id']
         data['url_video'] = raw_msg['alarm']['record_url']
 
-        h = random.randint(2, 6)
+        h = random.randint(2, 12)
         dt_utc = datetime.strptime(raw_msg['alarm']['raw_alarm']['send_at'], '%Y%m%d%H%M%S') + timedelta(hours=h)
-        data['timestamp'] = int(time.time())
+
+        data['timestamp'] = int(dt_utc.timestamp())
         
         data['config'] = {}
 
@@ -162,6 +163,12 @@ class RedisQueueConsumer:
             alcohol_path = parsed_message['alcohol']
             hand_path = parsed_message['hand']
             pose_path = parsed_message['pose']
+            
+            try:
+                fps = parsed_message['fps']
+            except:
+                fps = 13
+            
 
             try:
                 target_action = raw_alarm['target_action']
@@ -174,7 +181,7 @@ class RedisQueueConsumer:
             
             runner = Runner(serial, alcohol_paths=alcohol_path,
                             hand_paths=hand_path,
-                            pose_paths=pose_path)
+                            pose_paths=pose_path, fps = fps)
             
             print(f"==>> Start processing message: {serial}, video_start_time: {video_start_time}, video_end_time: {video_end_time}")
             
@@ -196,15 +203,13 @@ class RedisQueueConsumer:
             # # process
             # ======================================================
             actions = runner.run(video_start_time, video_end_time)
-            print(raw_alarm['serial'], raw_alarm['send_at'], json.dumps(actions, ensure_ascii=False).encode('utf8').decode())
+            print(raw_alarm['serial'], raw_alarm['send_at'], json.dumps(actions, ensure_ascii=False, indent=2).encode('utf8').decode())
             
             result_msg['ml_results']['actions'] = actions
             self.log_to_file(result_msg, "monitor_wo_extra")
 
             extra_info = self.extra_processor.process(actions, target_action, vaccine_info)
             result_msg['ml_results']['extra_info'] = extra_info
-            
-
 
             keep = False
             if self.debug:

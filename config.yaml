@@ -4,7 +4,7 @@
 # Multiple engines can be configured, each frame will go through all engines
 models:
   - path: "/age_gender/detection/weights/alcohol/2025-11-24_batch_64_640x640_fp16.engine"   # Path to TensorRT engine file
-    num_detectors: 2                      # Number of detector threads for this engine
+    num_detectors: 1                      # Number of detector threads for this engine
     name: "alcohol"                        # Optional: name identifier for output files
     type: "detection"                     # Model type: "detection" or "pose"
     batch_size: 64                         # Batch size for inference (must match engine batch size)
@@ -15,7 +15,7 @@ models:
     gpu_id: 0                             # GPU device ID (0, 1, 2, etc.)
     roi_cropping: true                   # Enable ROI cropping for this engine (uses config.box from video_list.jsonl)
   - path: "/age_gender/detection/weights/hand/2025-11-06_batch_64_864x864_fp16.engine"   # Path to TensorRT engine file
-    num_detectors: 2                      # Number of detector threads for this engine
+    num_detectors: 1                      # Number of detector threads for this engine
     name: "hand"                        # Optional: name identifier for output files
     type: "detection"                     # Model type: "detection" or "pose"
     batch_size: 64                         # Batch size for inference (must match engine batch size)
@@ -26,14 +26,14 @@ models:
     gpu_id: 0                             # GPU device ID (0, 1, 2, etc.)
     roi_cropping: false                   # Enable ROI cropping for this engine (uses config.box from video_list.jsonl)
   - path: "/age_gender/detection/weights/pose/2025-11-06_batch_64_640x640_fp16.engine"   # Path to TensorRT engine file
-    num_detectors: 2                      # Number of detector threads for this engine
+    num_detectors: 1                      # Number of detector threads for this engine
     name: "pose"                        # Optional: name identifier for output files
     type: "pose"                     # Model type: "detection" or "pose"
     batch_size: 64                         # Batch size for inference (must match engine batch size)
     input_width: 640                      # Input image width
     input_height: 640                     # Input image height
     conf_threshold: 0.4                  # Confidence threshold (0.0-1.0)
-    nms_threshold: 0.55                  # NMS IoU threshold (0.0-1.0)
+    nms_threshold: 0.45                  # NMS IoU threshold (0.0-1.0)
     gpu_id: 0                             # GPU device ID (0, 1, 2, etc.)
     roi_cropping: false                   # Enable ROI cropping for this engine (uses config.box from video_list.jsonl)
 
@@ -56,8 +56,8 @@ videos:
 
 # Thread Configuration
 threads:
-  num_readers: 15      # Number of reader/preprocessor threads (CPU)
-  num_preprocessors: 30  # Number of preprocessing workers (CPU)
+  num_readers: 7      # Number of reader/preprocessor threads (CPU)
+  num_preprocessors: 9  # Number of preprocessing workers (CPU)
 
 # Output Configuration
 output:

@@ -1,4 +1,5 @@
 import json
+import subprocess
 import requests
 import copy
 from datetime import datetime
@@ -126,7 +127,24 @@ def get_expand_timestamp(start: str, end: str):
 
     return start_time.timestamp() - 30 , end_time.timestamp() + 5
 
-
+def get_fps_ffprobe(video_path):
+    cmd = [
+        "ffprobe", "-v", "quiet", "-print_format", "json",
+        "-show_streams", video_path
+    ]
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    info = json.loads(result.stdout)
+    for stream in info["streams"]:
+        try:
+            if stream["codec_type"] == "video":
+                nb_frame = int(stream.get("nb_frames"))
+                duration = float(stream.get('duration'))
+                
+                fps = nb_frame/duration
+                return fps
+        except:
+            return 0
+    return 0
 
 if __name__ == "__main__":
     import os
