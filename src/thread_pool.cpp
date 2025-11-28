@@ -1196,11 +1196,30 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             std::string batch_video_key;  // Empty means no frames in batch yet
             
             // Collect batch_size frames from the SAME video
+            // CRITICAL: We need to ensure we don't lose frames when switching between videos
+            // If we encounter a frame from a different video, we save it as pending_frame
+            // and process the current batch. On the next iteration, we'll use the pending_frame first.
             while (static_cast<int>(batch_tensors.size()) < batch_size && !stop_flag_) {
                 // First, check if we have a pending frame from previous iteration
+                // This ensures we don't lose frames when switching between videos
                 if (pending_frame.has_value()) {
                     frame_data = pending_frame.value();
                     pending_frame.reset();
+                    
+                    // Build video_key for pending frame
+                    std::string pending_video_key = frame_data.message_key + "_v" + std::to_string(frame_data.video_index);
+                    
+                    // If we already have a batch from a different video, process it first
+                    if (!batch_video_key.empty() && pending_video_key != batch_video_key && batch_tensors.size() > 0) {
+                        // Put pending frame back and process current batch
+                        pending_frame = frame_data;
+                        break;
+                    }
+                    
+                    // Use the pending frame (either starting new batch or continuing current batch)
+                    if (batch_video_key.empty()) {
+                        batch_video_key = pending_video_key;
+                    }
                 } else {
                     if (!engine_group->frame_queue->pop(frame_data, 100)) {
                         if (stop_flag_) break;
@@ -1323,17 +1342,24 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     }
                 }
                 
-                // Log batch info for debugging
-                if (debug_mode_ && actual_batch_count > 0) {
+                // Log batch info for debugging (including video_key to track frame gaps)
+                if (actual_batch_count > 0) {
+                    std::string video_key_str = batch_video_key.empty() ? "unknown" : batch_video_key;
                     std::string batch_info = "Processing batch: engine=" + engine_group->engine_name + 
                                             ", detector=" + std::to_string(detector_id) +
                                             ", batch_size=" + std::to_string(actual_batch_count) +
+                                            ", video_key=" + video_key_str +
                                             ", frames=[" + std::to_string(batch_frame_numbers[0]);
                     if (actual_batch_count > 1) {
                         batch_info += ".." + std::to_string(batch_frame_numbers[actual_batch_count-1]);
                     }
                     batch_info += "]";
-                    LOG_DEBUG("Detector", batch_info);
+                    if (debug_mode_) {
+                        LOG_DEBUG("Detector", batch_info);
+                    } else {
+                        // In non-debug mode, log at INFO level to track frame gaps
+                        LOG_INFO("Detector", batch_info);
+                    }
                 }
                 
                 auto batch_start = std::chrono::steady_clock::now();
