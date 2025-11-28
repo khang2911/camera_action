@@ -1236,6 +1236,12 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     }
                 }
                 
+                // CRITICAL: Clone the frame immediately after popping to ensure independence
+                // Even though frame_data is copied from the queue, cv::Mat uses reference counting
+                // We need to ensure the frame is completely independent before using it
+                cv::Mat frame_clone = frame_data.frame.clone();
+                frame_data.frame = frame_clone;  // Replace with independent copy
+                
                 // Build video_key: message_key + video_index uniquely identifies a video
                 std::string current_video_key = frame_data.message_key + "_v" + std::to_string(frame_data.video_index);
                 
@@ -1293,12 +1299,13 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 // This should match the tensor which was created from the same preprocessed frame
                 // IMPORTANT: Ensure we create a deep copy that's independent of the source
                 if (debug_mode_) {
-                    // Create a deep copy of the frame to ensure it's independent
-                    // Use clone() which creates a full deep copy of the Mat data
-                    cv::Mat frame_copy = frame_data.frame.clone();
-                    
-                    // Validate frame is not empty
-                    if (frame_copy.empty()) {
+                    // CRITICAL: Create a truly independent deep copy of the frame
+                    // Use copyTo() to ensure we get a completely independent Mat with its own data buffer
+                    cv::Mat frame_copy;
+                    if (!frame_data.frame.empty()) {
+                        frame_data.frame.copyTo(frame_copy);
+                    } else {
+                        frame_copy = cv::Mat();
                         LOG_ERROR("Detector", "CRITICAL: Empty frame at frame_number=" + 
                                  std::to_string(frame_data.frame_number) + 
                                  " (engine=" + engine_group->engine_name + 
@@ -1306,9 +1313,9 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     }
                     
                     // Validate this frame is different from the previous frame in the batch
-                    if (!batch_frames.empty()) {
+                    if (!batch_frames.empty() && !frame_copy.empty()) {
                         cv::Mat prev_frame = batch_frames.back();
-                        if (!prev_frame.empty() && !frame_copy.empty() && 
+                        if (!prev_frame.empty() && 
                             prev_frame.size() == frame_copy.size() && 
                             prev_frame.type() == frame_copy.type()) {
                             cv::Mat diff;
@@ -1327,6 +1334,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                                                        " (engine=" + engine_group->engine_name + 
                                                        ", detector=" + std::to_string(detector_id) + ")";
                                 LOG_ERROR("Detector", error_msg);
+                                // Still add the frame (even if duplicate) to maintain batch alignment
+                                // The issue will be caught later during debug image saving
                             }
                         }
                     }
@@ -1482,18 +1491,19 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                             
                             // CRITICAL: Ensure batch_frames and batch_video_ids are sorted in the same order
                             // They should have the same size as other batch vectors if in debug mode
-                            // IMPORTANT: Clone frames during sorting to ensure each frame is independent
+                            // IMPORTANT: Use copyTo() during sorting to ensure each frame is truly independent
                             if (debug_mode_) {
                                 if (src_idx < batch_frames.size() && src_idx < batch_video_ids.size()) {
-                                    // Clone the frame to ensure it's independent (cv::Mat uses reference counting)
+                                    // Use copyTo() to create a truly independent copy (more explicit than clone())
+                                    cv::Mat frame_copy;
                                     if (!batch_frames[src_idx].empty()) {
-                                        sorted_frames.push_back(batch_frames[src_idx].clone());
+                                        batch_frames[src_idx].copyTo(frame_copy);
                                     } else {
                                         LOG_ERROR("Detector", "CRITICAL: Empty frame at src_idx=" + std::to_string(src_idx) + 
                                                  " during sorting (engine=" + engine_group->engine_name + 
                                                  ", detector=" + std::to_string(detector_id) + ")");
-                                        sorted_frames.push_back(cv::Mat());
                                     }
+                                    sorted_frames.push_back(frame_copy);
                                     sorted_video_ids.push_back(batch_video_ids[src_idx]);
                                 } else {
                                     // Size mismatch - this shouldn't happen, but handle gracefully
