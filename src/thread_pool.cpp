@@ -900,11 +900,14 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
             int actual_frame_position = reader.getActualFramePosition();
             
             // Use actual_frame_position (actual frame number in video) for bin file output
-            // OPTIMIZATION: Construct FrameData efficiently - cv::Mat uses reference counting
+            // CRITICAL: Clone the frame to ensure each FrameData has an independent copy
+            // The 'frame' variable is reused in the loop, so we must clone it to prevent
+            // all FrameData objects from sharing the same frame data
             // Pre-compute dimensions to avoid repeated frame.cols/rows access
             int frame_width = frame.cols;
             int frame_height = frame.rows;
-            FrameData frame_data(frame, video_id, actual_frame_position, clip.path, 
+            cv::Mat frame_clone = frame.clone();  // Create independent copy
+            FrameData frame_data(frame_clone, video_id, actual_frame_position, clip.path, 
                                 clip.record_id, clip.record_date, clip.serial,
                                 message_key, video_key, clip.video_index,
                                 clip.has_roi, clip.roi_x1, clip.roi_y1, clip.roi_x2, clip.roi_y2);
