@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <filesystem>
 #include <algorithm>
+#include <numeric>
 #include <cstdlib>
 #include <chrono>
 #include <thread>
@@ -1328,12 +1329,101 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             if (should_process && !batch_tensors.empty()) {
                 int actual_batch_count = static_cast<int>(batch_tensors.size());
                 
-                // Validate frame numbers are in order (for debugging frame-detection mismatch)
+                // CRITICAL: Sort batch by frame number to ensure frames are processed in order
+                // This fixes the issue where multiple detectors pull frames from the same queue
+                // and frames arrive out of order due to parallel processing
+                if (actual_batch_count > 1) {
+                    // Create index vector and sort by frame number
+                    std::vector<size_t> indices(actual_batch_count);
+                    std::iota(indices.begin(), indices.end(), 0);
+                    std::sort(indices.begin(), indices.end(), 
+                        [&batch_frame_numbers](size_t a, size_t b) {
+                            return batch_frame_numbers[a] < batch_frame_numbers[b];
+                        });
+                    
+                    // Check if sorting was needed
+                    bool needs_sorting = false;
+                    for (size_t i = 0; i < indices.size(); ++i) {
+                        if (indices[i] != i) {
+                            needs_sorting = true;
+                            break;
+                        }
+                    }
+                    
+                    // Reorder all batch vectors according to sorted indices
+                    if (needs_sorting) {
+                        // Create temporary vectors
+                        std::vector<std::shared_ptr<std::vector<float>>> sorted_tensors(actual_batch_count);
+                        std::vector<std::string> sorted_output_paths(actual_batch_count);
+                        std::vector<int> sorted_frame_numbers(actual_batch_count);
+                        std::vector<int> sorted_original_widths(actual_batch_count);
+                        std::vector<int> sorted_original_heights(actual_batch_count);
+                        std::vector<int> sorted_true_original_widths(actual_batch_count);
+                        std::vector<int> sorted_true_original_heights(actual_batch_count);
+                        std::vector<int> sorted_roi_offset_x(actual_batch_count);
+                        std::vector<int> sorted_roi_offset_y(actual_batch_count);
+                        std::vector<std::string> sorted_message_keys(actual_batch_count);
+                        std::vector<int> sorted_video_indices(actual_batch_count);
+                        std::vector<std::string> sorted_serials(actual_batch_count);
+                        std::vector<std::string> sorted_record_ids(actual_batch_count);
+                        std::vector<std::string> sorted_record_dates(actual_batch_count);
+                        std::vector<cv::Mat> sorted_frames;
+                        std::vector<int> sorted_video_ids;
+                        
+                        for (int i = 0; i < actual_batch_count; ++i) {
+                            size_t src_idx = indices[i];
+                            sorted_tensors[i] = batch_tensors[src_idx];
+                            sorted_output_paths[i] = batch_output_paths[src_idx];
+                            sorted_frame_numbers[i] = batch_frame_numbers[src_idx];
+                            sorted_original_widths[i] = batch_original_widths[src_idx];
+                            sorted_original_heights[i] = batch_original_heights[src_idx];
+                            sorted_true_original_widths[i] = batch_true_original_widths[src_idx];
+                            sorted_true_original_heights[i] = batch_true_original_heights[src_idx];
+                            sorted_roi_offset_x[i] = batch_roi_offset_x[src_idx];
+                            sorted_roi_offset_y[i] = batch_roi_offset_y[src_idx];
+                            sorted_message_keys[i] = batch_message_keys[src_idx];
+                            sorted_video_indices[i] = batch_video_indices[src_idx];
+                            sorted_serials[i] = batch_serials[src_idx];
+                            sorted_record_ids[i] = batch_record_ids[src_idx];
+                            sorted_record_dates[i] = batch_record_dates[src_idx];
+                            
+                            if (debug_mode_ && src_idx < batch_frames.size()) {
+                                sorted_frames.push_back(batch_frames[src_idx]);
+                                sorted_video_ids.push_back(batch_video_ids[src_idx]);
+                            }
+                        }
+                        
+                        // Replace original vectors with sorted ones
+                        batch_tensors = std::move(sorted_tensors);
+                        batch_output_paths = std::move(sorted_output_paths);
+                        batch_frame_numbers = std::move(sorted_frame_numbers);
+                        batch_original_widths = std::move(sorted_original_widths);
+                        batch_original_heights = std::move(sorted_original_heights);
+                        batch_true_original_widths = std::move(sorted_true_original_widths);
+                        batch_true_original_heights = std::move(sorted_true_original_heights);
+                        batch_roi_offset_x = std::move(sorted_roi_offset_x);
+                        batch_roi_offset_y = std::move(sorted_roi_offset_y);
+                        batch_message_keys = std::move(sorted_message_keys);
+                        batch_video_indices = std::move(sorted_video_indices);
+                        batch_serials = std::move(sorted_serials);
+                        batch_record_ids = std::move(sorted_record_ids);
+                        batch_record_dates = std::move(sorted_record_dates);
+                        if (debug_mode_) {
+                            batch_frames = std::move(sorted_frames);
+                            batch_video_ids = std::move(sorted_video_ids);
+                        }
+                        
+                        LOG_DEBUG("Detector", "Sorted batch by frame number (engine=" + 
+                                 engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                    }
+                }
+                
+                // Validate frame numbers are in order (should always be true after sorting)
                 bool frame_order_valid = true;
                 for (size_t i = 1; i < batch_frame_numbers.size(); ++i) {
                     if (batch_frame_numbers[i] < batch_frame_numbers[i-1]) {
                         frame_order_valid = false;
-                        std::string error_msg = "Frame order violation in batch: frame[" + 
+                        std::string error_msg = "Frame order violation in batch after sorting: frame[" + 
                                                 std::to_string(i-1) + "]=" + std::to_string(batch_frame_numbers[i-1]) +
                                                 ", frame[" + std::to_string(i) + "]=" + std::to_string(batch_frame_numbers[i]) +
                                                 " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")";
