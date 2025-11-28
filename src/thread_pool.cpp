@@ -2724,17 +2724,6 @@ std::string ThreadPool::tryPushOutputLocked(const std::string& message_key, Vide
                      "' cannot push: " + reason.str());
         }
         
-        // Check pending counts (simplified logging)
-        int total_pending = 0;
-                for (const auto& kv : status.pending_counts) {
-                    total_pending += kv.second;
-                }
-                if (total_pending > 0) {
-                    LOG_DEBUG("RedisOutput", "tryPushOutputLocked: message '" + message_key + 
-                             "' still has " + std::to_string(total_pending) + " pending frames");
-                }
-            }
-        }
         return "";
     }
     if (status.original_message.empty()) {
