@@ -1444,11 +1444,12 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         // CRITICAL: Validate that sorted vectors have correct sizes
                         if (sorted_tensors.size() != static_cast<size_t>(actual_batch_count) ||
                             sorted_frames.size() != (debug_mode_ ? static_cast<size_t>(actual_batch_count) : 0)) {
-                            LOG_ERROR("Detector", "CRITICAL: Sorted vector size mismatch! " +
-                                     "tensors=" + std::to_string(sorted_tensors.size()) +
-                                     ", frames=" + std::to_string(sorted_frames.size()) +
-                                     ", expected=" + std::to_string(actual_batch_count) +
-                                     " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                            std::string error_msg = std::string("CRITICAL: Sorted vector size mismatch! ") +
+                                                   "tensors=" + std::to_string(sorted_tensors.size()) +
+                                                   ", frames=" + std::to_string(sorted_frames.size()) +
+                                                   ", expected=" + std::to_string(actual_batch_count) +
+                                                   " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")";
+                            LOG_ERROR("Detector", error_msg);
                         }
                     }
                 }
