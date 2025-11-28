@@ -974,44 +974,11 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
 void ThreadPool::preprocessorWorker(int worker_id) {
     LOG_INFO("Preprocessor", "Preprocess dispatcher thread " + std::to_string(worker_id) + " started");
     
-    // Each dispatcher has its own pending queue per group to avoid blocking other groups
-    struct PendingFrame {
-        SharedPreprocessGroup* group;
-        FrameData frame;
-    };
-    std::vector<std::deque<PendingFrame>> pending_per_group;
-    pending_per_group.resize(preprocess_groups_.size());
-    
-    const size_t max_pending_per_group = 50;  // Limit pending frames per group
+    // REMOVED pending buffer to ensure strict FIFO ordering
+    // Frames must be pushed in order to maintain frame-detection matching
+    // If a queue is full, we block (with timeout) rather than buffering out of order
     
     while (!stop_flag_) {
-        // First, try to drain pending frames for each group (non-blocking)
-        for (size_t g = 0; g < preprocess_groups_.size(); ++g) {
-            auto& pending = pending_per_group[g];
-            while (!pending.empty()) {
-                auto& pf = pending.front();
-                if (pf.group && pf.group->queue && pf.group->queue->push(pf.frame, 1)) {
-                    pending.pop_front();
-                } else {
-                    break;  // Queue still full, try later
-                }
-            }
-        }
-        
-        // Check if any group has too many pending frames - if so, wait a bit
-        bool any_backpressure = false;
-        for (size_t g = 0; g < preprocess_groups_.size(); ++g) {
-            if (pending_per_group[g].size() >= max_pending_per_group) {
-                any_backpressure = true;
-                break;
-            }
-        }
-        
-        if (any_backpressure) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-            continue;  // Don't pop new frame, drain pending first
-        }
-        
         // Pop a new frame from raw queue
         FrameData raw_frame;
         if (!raw_frame_queue_ || !raw_frame_queue_->pop(raw_frame, 50)) {
@@ -1019,7 +986,8 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             continue;
         }
         
-        // Try to push to each group's queue, queue failures go to pending
+        // Push to each group's queue in order - use blocking push to maintain FIFO
+        // If one queue is full, we wait (with timeout) rather than skipping or buffering
         for (size_t g = 0; g < preprocess_groups_.size(); ++g) {
             auto& shared_group_ptr = preprocess_groups_[g];
             if (!shared_group_ptr || !shared_group_ptr->queue) {
@@ -1029,26 +997,19 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             
             FrameData frame_copy = raw_frame;  // cv::Mat uses reference counting
             
-            // Try quick push (1ms timeout)
-            if (!shared_group->queue->push(frame_copy, 1)) {
-                // Queue full - add to this group's pending list
-                PendingFrame pf;
-                pf.group = shared_group;
-                pf.frame = std::move(frame_copy);
-                pending_per_group[g].push_back(std::move(pf));
-            }
-        }
-    }
-    
-    // Drain remaining pending frames on shutdown
-    for (size_t g = 0; g < preprocess_groups_.size(); ++g) {
-        auto& pending = pending_per_group[g];
-        while (!pending.empty() && !stop_flag_) {
-            auto& pf = pending.front();
-            if (pf.group && pf.group->queue && pf.group->queue->push(pf.frame, 10)) {
-                pending.pop_front();
-            } else {
-                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            // Use blocking push (500ms timeout) to maintain strict FIFO order
+            // If queue is full, we wait rather than buffering out of order
+            if (!shared_group->queue->push(frame_copy, 500)) {
+                // Queue still full after timeout - log warning but continue
+                // This indicates a serious bottleneck, but we don't want to lose frames
+                static thread_local int slow_push_count = 0;
+                if (++slow_push_count % 100 == 0) {
+                    LOG_WARNING("Preprocessor", "Dispatcher " + std::to_string(worker_id) + 
+                               " queue push slow for group " + std::to_string(g) + 
+                               " (" + std::to_string(slow_push_count) + " times)");
+                }
+                // Final blocking push to ensure frame is not lost
+                shared_group->queue->push(frame_copy);
             }
         }
     }
@@ -1297,6 +1258,19 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             }
             
             if (should_process && !batch_tensors.empty()) {
+                // Validate frame numbers are in order (for debugging frame-detection mismatch)
+                bool frame_order_valid = true;
+                for (size_t i = 1; i < batch_frame_numbers.size(); ++i) {
+                    if (batch_frame_numbers[i] < batch_frame_numbers[i-1]) {
+                        frame_order_valid = false;
+                        LOG_ERROR("Detector", "Frame order violation in batch: frame[" + 
+                                 std::to_string(i-1) + "]=" + std::to_string(batch_frame_numbers[i-1]) +
+                                 ", frame[" + std::to_string(i) + "]=" + std::to_string(batch_frame_numbers[i]) +
+                                 " (engine=" + engine_group->engine_name + ")");
+                        break;
+                    }
+                }
+                
                 auto batch_start = std::chrono::steady_clock::now();
                 bool success = false;
                 std::vector<std::vector<Detection>> batch_detections;
