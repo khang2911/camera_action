@@ -1436,7 +1436,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         
                         // Only replace original vectors with sorted ones if validation passed
                         if (!sorting_valid) {
-                            LOG_WARN("Detector", "Skipping sorted batch due to validation failure, using original batch order");
+                            LOG_WARNING("Detector", "Skipping sorted batch due to validation failure, using original batch order");
                             // Don't move sorted vectors, keep original batch
                         } else {
                             // Replace original vectors with sorted ones
