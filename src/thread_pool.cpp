@@ -1268,16 +1268,34 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             // This prevents frame order violations when multiple videos are processed concurrently
             std::string batch_video_key;  // Empty means no frames in batch yet
             
+            // Track when last frame was added to detect if queue is empty
+            auto last_frame_time = std::chrono::steady_clock::now();
+            const auto partial_batch_timeout = std::chrono::milliseconds(500);  // Process partial batch after 500ms of no new frames
+            
             // Collect batch_size frames from the SAME video
             // CRITICAL: We need to ensure we don't lose frames when switching between videos
             // If we encounter a frame from a different video, we save it as pending_frame
             // and process the current batch. On the next iteration, we'll use the pending_frame first.
             while (static_cast<int>(batch_tensors.size()) < batch_size && !stop_flag_) {
+                // Check if we should process partial batch (queue empty for too long)
+                if (!batch_tensors.empty()) {
+                    auto now = std::chrono::steady_clock::now();
+                    auto time_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time);
+                    if (time_since_last_frame >= partial_batch_timeout) {
+                        // Queue has been empty for too long - process partial batch
+                        LOG_DEBUG("Detector", "Processing partial batch of " + std::to_string(batch_tensors.size()) + 
+                                 " frames after " + std::to_string(time_since_last_frame.count()) + "ms timeout " +
+                                 "(engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                        break;  // Exit loop to process partial batch
+                    }
+                }
                 // First, check if we have a pending frame from previous iteration
                 // This ensures we don't lose frames when switching between videos
                 if (pending_frame.has_value()) {
                     frame_data = pending_frame.value();
                     pending_frame.reset();
+                    // Update timestamp when we use pending frame
+                    last_frame_time = std::chrono::steady_clock::now();
                     
                     // Build video_key for pending frame
                     std::string pending_video_key = frame_data.message_key + "_v" + std::to_string(frame_data.video_index);
@@ -1297,9 +1315,24 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     if (!engine_group->frame_queue->pop(frame_data, 100)) {
                         if (stop_flag_) break;
                         
+                        // Check if we should process partial batch (queue empty)
+                        if (!batch_tensors.empty()) {
+                            auto now = std::chrono::steady_clock::now();
+                            auto time_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time);
+                            if (time_since_last_frame >= partial_batch_timeout) {
+                                // Queue has been empty for too long - process partial batch
+                                LOG_DEBUG("Detector", "Processing partial batch of " + std::to_string(batch_tensors.size()) + 
+                                         " frames after " + std::to_string(time_since_last_frame.count()) + "ms timeout " +
+                                         "(engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                                break;  // Exit loop to process partial batch
+                            }
+                        }
+                        
                         // Removed waiting log - too expensive, queue size check involves mutex
                         continue;
                     }
+                    // Update timestamp when we successfully pop a frame
+                    last_frame_time = std::chrono::steady_clock::now();
                 }
                 
                 // CRITICAL: Clone the frame immediately after popping to ensure independence
@@ -1434,15 +1467,22 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 batch_record_dates.push_back(frame_data.record_date);
             }
             
-            // CRITICAL: Only process full batches (exactly batch_size frames)
-            // This ensures consistency between debug and non-debug modes
-            // Exception: If we have a partial batch and stop_flag_ is set (processing ending),
-            // we should clear it to avoid memory leaks, but we won't process it
-            bool should_process = (static_cast<int>(batch_tensors.size()) == batch_size);
+            // Process batches:
+            // - Full batches (exactly batch_size frames): always process
+            // - Partial batches: process if timeout reached (queue is likely empty or very slow)
+            bool is_full_batch = (static_cast<int>(batch_tensors.size()) == batch_size);
+            bool is_partial_batch_timeout = false;
+            if (!batch_tensors.empty() && !is_full_batch) {
+                auto now = std::chrono::steady_clock::now();
+                auto time_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time);
+                is_partial_batch_timeout = (time_since_last_frame >= partial_batch_timeout);
+            }
+            bool should_process = is_full_batch || is_partial_batch_timeout;
             
             // Handle partial batches:
             // - If stopping: clear to avoid memory leaks (frames will be lost)
             // - If switching videos: clear partial batch (frames from previous video are lost)
+            // - If timeout: process the partial batch (queue is empty)
             // - Otherwise: keep waiting for more frames (loop will continue)
             if (!should_process && !batch_tensors.empty()) {
                 if (stop_flag_) {
@@ -1501,6 +1541,13 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             
             if (should_process && !batch_tensors.empty()) {
                 int actual_batch_count = static_cast<int>(batch_tensors.size());
+                
+                // Log if processing partial batch
+                if (!is_full_batch && is_partial_batch_timeout) {
+                    LOG_INFO("Detector", "Processing partial batch of " + std::to_string(actual_batch_count) + 
+                             " frames (expected " + std::to_string(batch_size) + ") after timeout " +
+                             "(engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                }
                 
                 // CRITICAL: Sort batch by frame number to ensure frames are processed in order
                 // This fixes the issue where multiple detectors pull frames from the same queue
