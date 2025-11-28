@@ -1871,9 +1871,20 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     }
                     
                     // Only save if all sizes match
-                    if (batch_detections.size() == static_cast<size_t>(actual_batch_count) &&
-                        batch_frames.size() == static_cast<size_t>(actual_batch_count) &&
-                        batch_frame_numbers.size() == static_cast<size_t>(actual_batch_count)) {
+                    bool sizes_match = (batch_detections.size() == static_cast<size_t>(actual_batch_count) &&
+                                       batch_frames.size() == static_cast<size_t>(actual_batch_count) &&
+                                       batch_frame_numbers.size() == static_cast<size_t>(actual_batch_count));
+                    
+                    if (!sizes_match) {
+                        LOG_WARNING("Detector", "Debug image save skipped - size mismatch (engine=" + 
+                                   engine_group->engine_name + 
+                                   "): detections=" + std::to_string(batch_detections.size()) +
+                                   ", frames=" + std::to_string(batch_frames.size()) +
+                                   ", frame_numbers=" + std::to_string(batch_frame_numbers.size()) +
+                                   ", expected=" + std::to_string(actual_batch_count));
+                    }
+                    
+                    if (sizes_match) {
                         for (int b = 0; b < actual_batch_count; ++b) {
                             // Validate frame number matches expected
                             if (b > 0 && batch_frame_numbers[b] < batch_frame_numbers[b-1]) {
@@ -2001,26 +2012,30 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                             } else {
                                 LOG_ERROR("Detector", "Failed to save debug image: " + image_path.string());
                             }
-                            
-                            // CRITICAL: Mark frame as processed for Redis message tracking
-                            // In debug mode, we process frames directly (not through postprocess queue),
-                            // so we need to call markFrameProcessed here
-                            if (use_redis_queue_ && b < batch_message_keys.size() && b < batch_video_indices.size()) {
-                                // In debug mode, detections are written by runInferenceWithDetections,
-                                // so we use the output_path for tracking
-                                markFrameProcessed(batch_message_keys[b], engine_group->engine_name, 
-                                                  batch_output_paths[b], batch_video_indices[b]);
-                            }
+                            // Note: markFrameProcessed will be called after the loop for all frames
                         }
                     } else {
                         LOG_ERROR("Detector", "Skipping debug image save due to size mismatch (engine=" + 
-                                 engine_group->engine_name + ")");
-                        // Still mark frames as processed even if debug image save failed
-                        if (use_redis_queue_ && success) {
-                            for (size_t b = 0; b < batch_message_keys.size() && b < batch_video_indices.size(); ++b) {
-                                markFrameProcessed(batch_message_keys[b], engine_group->engine_name, 
-                                                  batch_output_paths[b], batch_video_indices[b]);
-                            }
+                                 engine_group->engine_name + 
+                                 "): detections=" + std::to_string(batch_detections.size()) +
+                                 ", frames=" + std::to_string(batch_frames.size()) +
+                                 ", frame_numbers=" + std::to_string(batch_frame_numbers.size()) +
+                                 ", expected=" + std::to_string(actual_batch_count));
+                    }
+                    
+                    // CRITICAL: Mark ALL frames as processed after debug image saving attempt
+                    // This ensures frames are marked even if debug image saving was skipped or some frames were skipped in the loop
+                    if (use_redis_queue_ && success) {
+                        int marked_count = 0;
+                        for (size_t b = 0; b < batch_message_keys.size() && b < batch_video_indices.size() && b < batch_output_paths.size(); ++b) {
+                            markFrameProcessed(batch_message_keys[b], engine_group->engine_name, 
+                                              batch_output_paths[b], batch_video_indices[b]);
+                            marked_count++;
+                        }
+                        if (marked_count != actual_batch_count) {
+                            LOG_WARNING("Detector", "Marked " + std::to_string(marked_count) + 
+                                       " frames as processed, but batch size is " + std::to_string(actual_batch_count) +
+                                       " (engine=" + engine_group->engine_name + ")");
                         }
                     }
                 }
