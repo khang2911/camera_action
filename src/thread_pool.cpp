@@ -1411,45 +1411,63 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                             }
                         }
                         
-                        // Replace original vectors with sorted ones
-                        batch_tensors = std::move(sorted_tensors);
-                        batch_output_paths = std::move(sorted_output_paths);
-                        batch_frame_numbers = std::move(sorted_frame_numbers);
-                        batch_original_widths = std::move(sorted_original_widths);
-                        batch_original_heights = std::move(sorted_original_heights);
-                        batch_true_original_widths = std::move(sorted_true_original_widths);
-                        batch_true_original_heights = std::move(sorted_true_original_heights);
-                        batch_roi_offset_x = std::move(sorted_roi_offset_x);
-                        batch_roi_offset_y = std::move(sorted_roi_offset_y);
-                        batch_message_keys = std::move(sorted_message_keys);
-                        batch_video_indices = std::move(sorted_video_indices);
-                        batch_serials = std::move(sorted_serials);
-                        batch_record_ids = std::move(sorted_record_ids);
-                        batch_record_dates = std::move(sorted_record_dates);
-                        if (debug_mode_) {
-                            batch_frames = std::move(sorted_frames);
-                            batch_video_ids = std::move(sorted_video_ids);
-                        }
-                        
-                        std::string sort_msg = std::string("Sorted batch by frame number (engine=") +
-                                               engine_group->engine_name + ", detector=" + std::to_string(detector_id) + 
-                                               ", frames=[" + std::to_string(batch_frame_numbers[0]);
-                        if (actual_batch_count > 1) {
-                            sort_msg += ".." + std::to_string(batch_frame_numbers[actual_batch_count-1]) + "])";
-                        } else {
-                            sort_msg += "])";
-                        }
-                        LOG_DEBUG("Detector", sort_msg);
-                        
-                        // CRITICAL: Validate that sorted vectors have correct sizes
-                        if (sorted_tensors.size() != static_cast<size_t>(actual_batch_count) ||
-                            sorted_frames.size() != (debug_mode_ ? static_cast<size_t>(actual_batch_count) : 0)) {
-                            std::string error_msg = std::string("CRITICAL: Sorted vector size mismatch! ") +
-                                                   "tensors=" + std::to_string(sorted_tensors.size()) +
-                                                   ", frames=" + std::to_string(sorted_frames.size()) +
+                        // CRITICAL: Validate that sorted vectors have correct sizes BEFORE moving
+                        // If validation fails, skip sorting and use original batch
+                        bool sorting_valid = true;
+                        if (sorted_tensors.size() != static_cast<size_t>(actual_batch_count)) {
+                            std::string error_msg = std::string("CRITICAL: sorted_tensors size mismatch! ") +
+                                                   "size=" + std::to_string(sorted_tensors.size()) +
                                                    ", expected=" + std::to_string(actual_batch_count) +
                                                    " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")";
                             LOG_ERROR("Detector", error_msg);
+                            sorting_valid = false;
+                        }
+                        
+                        size_t expected_frames = debug_mode_ ? static_cast<size_t>(actual_batch_count) : 0;
+                        if (sorted_frames.size() != expected_frames) {
+                            std::string error_msg = std::string("CRITICAL: sorted_frames size mismatch! ") +
+                                                   "size=" + std::to_string(sorted_frames.size()) +
+                                                   ", expected=" + std::to_string(expected_frames) +
+                                                   ", debug_mode=" + std::to_string(debug_mode_) +
+                                                   " (engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")";
+                            LOG_ERROR("Detector", error_msg);
+                            sorting_valid = false;
+                        }
+                        
+                        // Only replace original vectors with sorted ones if validation passed
+                        if (!sorting_valid) {
+                            LOG_WARN("Detector", "Skipping sorted batch due to validation failure, using original batch order");
+                            // Don't move sorted vectors, keep original batch
+                        } else {
+                            // Replace original vectors with sorted ones
+                            batch_tensors = std::move(sorted_tensors);
+                            batch_output_paths = std::move(sorted_output_paths);
+                            batch_frame_numbers = std::move(sorted_frame_numbers);
+                            batch_original_widths = std::move(sorted_original_widths);
+                            batch_original_heights = std::move(sorted_original_heights);
+                            batch_true_original_widths = std::move(sorted_true_original_widths);
+                            batch_true_original_heights = std::move(sorted_true_original_heights);
+                            batch_roi_offset_x = std::move(sorted_roi_offset_x);
+                            batch_roi_offset_y = std::move(sorted_roi_offset_y);
+                            batch_message_keys = std::move(sorted_message_keys);
+                            batch_video_indices = std::move(sorted_video_indices);
+                            batch_serials = std::move(sorted_serials);
+                            batch_record_ids = std::move(sorted_record_ids);
+                            batch_record_dates = std::move(sorted_record_dates);
+                            if (debug_mode_) {
+                                batch_frames = std::move(sorted_frames);
+                                batch_video_ids = std::move(sorted_video_ids);
+                            }
+                            
+                            std::string sort_msg = std::string("Sorted batch by frame number (engine=") +
+                                                   engine_group->engine_name + ", detector=" + std::to_string(detector_id) + 
+                                                   ", frames=[" + std::to_string(batch_frame_numbers[0]);
+                            if (actual_batch_count > 1) {
+                                sort_msg += ".." + std::to_string(batch_frame_numbers[actual_batch_count-1]) + "])";
+                            } else {
+                                sort_msg += "])";
+                            }
+                            LOG_DEBUG("Detector", sort_msg);
                         }
                     }
                 }
