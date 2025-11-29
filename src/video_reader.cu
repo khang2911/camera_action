@@ -227,28 +227,42 @@ bool VideoReader::initialize(const VideoClip* clip) {
     
     // Log time window information for debugging
     if (has_clip_metadata_ && clip_.has_time_window) {
-        // CRITICAL FIX: Calculate expected frames correctly
-        // expected_frames = (end_ts - start_ts) * fps, but this is the total in the time window
-        // The actual frames we'll read depends on where we start (seek_to_frame)
-        // If we seek to frame N, we'll read frames from N to the end of the time window
+        // Calculate expected frames in the time window
         double time_window_duration = clip_.end_timestamp - clip_.start_timestamp;
         double total_expected_frames = time_window_duration * fps_;
-        // Frames remaining after seek: total_expected - frames_already_read (if seek happened)
-        // But seek_to_frame is the frame number we seeked to, not frames already read
-        // So we need to calculate: frames from seek position to end of time window
-        double seek_offset_seconds = (clip_.start_timestamp - clip_.moment_time);
-        long long seek_frame = (seek_offset_seconds > 0) ? static_cast<long long>(seek_offset_seconds * fps_) : 0;
-        double remaining_frames = std::max(0.0, total_expected_frames - seek_frame);
+        
+        // Calculate video's actual time range
+        double video_start_time = clip_.moment_time;
+        double video_end_time = clip_.moment_time + clip_.duration_seconds;
+        
+        // Calculate actual available duration (clipped to video's actual range)
+        double actual_start_ts = std::max(clip_.start_timestamp, video_start_time);
+        double actual_end_ts = std::min(clip_.end_timestamp, video_end_time);
+        double actual_available_duration = std::max(0.0, actual_end_ts - actual_start_ts);
+        double actual_expected_frames = actual_available_duration * fps_;
+        
+        // Calculate frames from seek position to end of time window
+        // seek_to_frame (total_frames_read_) is the frame number in video file where we seeked to
+        double seek_timestamp = clip_.moment_time + static_cast<double>(total_frames_read_) / fps_;
+        double remaining_duration = std::max(0.0, actual_end_ts - seek_timestamp);
+        double remaining_frames = remaining_duration * fps_;
         
         LOG_INFO("VideoReader", "Time window: start_ts=" + std::to_string(clip_.start_timestamp) +
                  ", end_ts=" + std::to_string(clip_.end_timestamp) +
                  ", moment_time=" + std::to_string(clip_.moment_time) +
                  ", duration=" + std::to_string(clip_.duration_seconds) +
+                 ", video_range=[" + std::to_string(video_start_time) + ", " + std::to_string(video_end_time) + "]" +
+                 ", actual_range=[" + std::to_string(actual_start_ts) + ", " + std::to_string(actual_end_ts) + "]" +
                  ", fps=" + std::to_string(fps_) +
                  ", time_window_duration=" + std::to_string(time_window_duration) +
+                 ", actual_available_duration=" + std::to_string(actual_available_duration) +
                  ", total_expected_frames~" + std::to_string(static_cast<int>(total_expected_frames)) +
+                 ", actual_expected_frames~" + std::to_string(static_cast<int>(actual_expected_frames)) +
                  ", seek_to_frame=" + std::to_string(total_frames_read_) +
-                 ", remaining_frames~" + std::to_string(static_cast<int>(remaining_frames)));
+                 ", seek_timestamp=" + std::to_string(seek_timestamp) +
+                 ", remaining_duration=" + std::to_string(remaining_duration) +
+                 ", remaining_frames~" + std::to_string(static_cast<int>(remaining_frames)) +
+                 " (note: actual frames_read may be less if frames are filtered or video ends early)");
     }
     
     if (options_.enable_prefetch) {
