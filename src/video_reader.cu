@@ -570,14 +570,19 @@ bool VideoReader::readFrame(cv::Mat& frame) {
             // Check time window
         if (has_clip_metadata_ && clip_.has_time_window) {
             double effective_fps = (fps_ > 0.0) ? fps_ : 30.0;
-                // Calculate timestamp based on total_frames_read_ (after increment)
-                // total_frames_read_ represents the actual frame number in the video
-                double current_ts = clip_.moment_time + static_cast<double>(total_frames_read_ - 1) / effective_fps;
-                
-                // Calculate actual timestamp from frame PTS if available
+                // Calculate timestamp from frame PTS if available (most accurate)
+                // Fall back to calculated timestamp based on total_frames_read_ if PTS unavailable
+                double current_ts;
                 double actual_ts_from_pts = -1.0;
+                double calc_ts_from_frame_count = clip_.moment_time + static_cast<double>(total_frames_read_ - 1) / effective_fps;
+                
                 if (frame_pts_seconds >= 0.0) {
+                    // Use actual PTS from frame (most accurate)
                     actual_ts_from_pts = clip_.moment_time + frame_pts_seconds;
+                    current_ts = actual_ts_from_pts;
+                } else {
+                    // Fall back to calculated timestamp (less accurate, but better than nothing)
+                    current_ts = calc_ts_from_frame_count;
                 }
                 
                 // Detailed logging for first 10 frames and every 1000th frame
@@ -589,13 +594,17 @@ bool VideoReader::readFrame(cv::Mat& frame) {
                     std::string log_msg = "Frame " + std::to_string(time_filter_log_count) + 
                                          ": total_read=" + std::to_string(total_frames_read_ - 1) +
                                          ", actual_pos=" + std::to_string(actual_frame_position_) +
-                                         ", calc_ts=" + std::to_string(current_ts) +
+                                         ", current_ts=" + std::to_string(current_ts) +
                                          ", start_ts=" + std::to_string(clip_.start_timestamp) +
                                          ", end_ts=" + std::to_string(clip_.end_timestamp);
                     if (frame_pts_seconds >= 0.0) {
                         log_msg += ", frame_pts=" + std::to_string(frame_pts_seconds) +
                                   ", actual_ts_from_pts=" + std::to_string(actual_ts_from_pts) +
-                                  ", ts_diff=" + std::to_string(current_ts - actual_ts_from_pts);
+                                  ", calc_ts=" + std::to_string(calc_ts_from_frame_count) +
+                                  ", ts_diff=" + std::to_string(calc_ts_from_frame_count - actual_ts_from_pts);
+                    } else {
+                        log_msg += ", calc_ts=" + std::to_string(calc_ts_from_frame_count) +
+                                  " (no PTS available)";
                     }
                     log_msg += ", moment_time=" + std::to_string(clip_.moment_time) +
                               ", fps=" + std::to_string(effective_fps);
@@ -634,7 +643,8 @@ bool VideoReader::readFrame(cv::Mat& frame) {
                         std::string pts_msg = "  Frame PTS comparison: frame_pts=" + 
                                             std::to_string(frame_pts_seconds) +
                                             ", actual_ts_from_pts=" + std::to_string(actual_ts_from_pts) +
-                                            ", calc_ts_diff=" + std::to_string(current_ts - actual_ts_from_pts);
+                                            ", calc_ts=" + std::to_string(calc_ts_from_frame_count) +
+                                            ", calc_ts_diff=" + std::to_string(calc_ts_from_frame_count - actual_ts_from_pts);
                         LOG_INFO("VideoReader", pts_msg);
                     }
                     return false;  // Past end time, done with this clip
