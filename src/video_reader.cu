@@ -665,11 +665,11 @@ bool VideoReader::readFrame(cv::Mat& frame) {
                      ", actual_pos=" + std::to_string(actual_frame_position_) +
                      ", frames_in_window=" + std::to_string(actual_frame_position_));
             if (has_clip_metadata_ && clip_.has_time_window) {
+                int expected_remaining = static_cast<int>((clip_.end_timestamp - current_ts) * ((fps_ > 0.0) ? fps_ : 30.0));
                 LOG_INFO("VideoReader", "  Time window: current_ts=" + std::to_string(current_ts) +
                          ", end_ts=" + std::to_string(clip_.end_timestamp) +
                          ", remaining=" + std::to_string(clip_.end_timestamp - current_ts) + "s" +
-                         ", expected_frames_remaining=" + 
-                         std::to_string(static_cast<int>((clip_.end_timestamp - current_ts) * ((fps_ > 0.0) ? fps_ : 30.0))));
+                         ", expected_frames_remaining=" + std::to_string(expected_remaining));
             }
             return false;
         }
