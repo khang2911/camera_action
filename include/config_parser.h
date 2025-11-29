@@ -101,6 +101,7 @@ public:
     int getRedisDb() const { return redis_db_; }
     std::string getInputQueueName() const { return input_queue_name_; }
     std::string getOutputQueueName() const { return output_queue_name_; }
+    int getRedisMessageTimeout() const { return redis_message_timeout_seconds_; }
     
     // Utility helpers
     static double parseTimestamp(const std::string& iso);
@@ -125,6 +126,7 @@ private:
     int redis_db_ = 0;
     std::string input_queue_name_ = "input_queue";
     std::string output_queue_name_ = "output_queue";
+    int redis_message_timeout_seconds_ = 300;  // Default: 5 minutes
     
     void loadVideoListFromFile(const std::string& path);
     void loadPlainVideoList(std::istream& stream);

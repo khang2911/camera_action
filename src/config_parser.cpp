@@ -325,6 +325,17 @@ bool ConfigParser::loadFromFile(const std::string& config_path) {
                 if (redis["output_queue"]) {
                     output_queue_name_ = redis["output_queue"].as<std::string>();
                 }
+                if (redis["message_timeout_seconds"]) {
+                    try {
+                        redis_message_timeout_seconds_ = redis["message_timeout_seconds"].as<int>();
+                    } catch (const YAML::Exception&) {
+                        std::string timeout_str = redis["message_timeout_seconds"].as<std::string>();
+                        redis_message_timeout_seconds_ = std::stoi(timeout_str);
+                    }
+                    if (redis_message_timeout_seconds_ < 1) {
+                        redis_message_timeout_seconds_ = 300;  // Minimum 1 second, default to 5 minutes
+                    }
+                }
             }
         }
 

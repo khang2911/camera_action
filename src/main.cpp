@@ -181,7 +181,7 @@ int main(int argc, char* argv[]) {
         pool = std::make_unique<ThreadPool>(
             num_readers, num_preprocessors, engine_configs, output_dir,
             input_queue, output_queue, config.getInputQueueName(), config.getOutputQueueName(),
-            debug_mode, max_frames_per_video, reader_options);
+            debug_mode, max_frames_per_video, reader_options, config.getRedisMessageTimeout());
     } else {
         // File-based mode
         pool = std::make_unique<ThreadPool>(

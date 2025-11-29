@@ -119,6 +119,7 @@ ThreadPool::ThreadPool(int num_readers,
       max_frames_per_video_(max_frames_per_video),
       reader_options_(reader_options),
       use_redis_queue_(false),
+      redis_message_timeout_seconds_(300),  // Default timeout for file-based mode (not used)
       stop_flag_(false) {
     
     
@@ -246,7 +247,8 @@ ThreadPool::ThreadPool(int num_readers,
                        const std::string& output_queue_name,
                        bool debug_mode,
                        int max_frames_per_video,
-                       const ReaderOptions& reader_options)
+                       const ReaderOptions& reader_options,
+                       int redis_message_timeout_seconds)
     : num_readers_(num_readers),
       num_preprocessors_(num_preprocessors > 0 ? num_preprocessors : num_readers),
       output_dir_(output_dir),
@@ -258,6 +260,7 @@ ThreadPool::ThreadPool(int num_readers,
       output_queue_(output_queue),
       input_queue_name_(input_queue_name),
       output_queue_name_(output_queue_name),
+      redis_message_timeout_seconds_(redis_message_timeout_seconds),
       stop_flag_(false) {
     
     // Log debug mode status
@@ -2335,9 +2338,8 @@ void ThreadPool::monitorWorker() {
         LOG_STATS("Monitor", stats_oss.str());
         
         // Check for timed out messages (only in Redis mode)
-        // Timeout = 5 minutes (300 seconds) for a message to complete processing
         if (use_redis_queue_) {
-            const int message_timeout_seconds = 300;
+            const int message_timeout_seconds = redis_message_timeout_seconds_;
             std::lock_guard<std::mutex> lock(video_output_mutex_);
             for (auto& kv : video_output_status_) {
                 auto& status = kv.second;

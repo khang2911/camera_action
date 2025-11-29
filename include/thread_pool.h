@@ -98,7 +98,8 @@ public:
                const std::string& output_queue_name,
                bool debug_mode = false,
                int max_frames_per_video = 0,
-               const ReaderOptions& reader_options = ReaderOptions());
+               const ReaderOptions& reader_options = ReaderOptions(),
+               int redis_message_timeout_seconds = 300);
     
     ~ThreadPool();
     
@@ -235,6 +236,7 @@ private:
     std::shared_ptr<RedisQueue> output_queue_;
     std::string input_queue_name_;
     std::string output_queue_name_;
+    int redis_message_timeout_seconds_;
     
     std::vector<std::thread> reader_threads_;
     std::vector<std::thread> preprocessor_threads_;
