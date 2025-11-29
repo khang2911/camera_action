@@ -446,6 +446,15 @@ void ThreadPool::start() {
         }
     }
     int shared_workers = std::max(1, num_preprocessors_);
+    
+    // Warn if too many preprocess workers for the number of groups (causes contention)
+    if (shared_workers > static_cast<int>(preprocess_groups_.size()) * 10) {
+        LOG_WARNING("ThreadPool", "Too many preprocess workers (" + std::to_string(shared_workers) + 
+                   ") for number of preprocess groups (" + std::to_string(preprocess_groups_.size()) + 
+                   "). This may cause queue contention. Consider reducing preprocess workers to ~" + 
+                   std::to_string(preprocess_groups_.size() * 5) + " or fewer.");
+    }
+    
     for (int worker = 0; worker < shared_workers; ++worker) {
         shared_preprocess_threads_.emplace_back(&ThreadPool::enginePreprocessWorker, this, worker);
         LOG_DEBUG("ThreadPool", "Started shared preprocess thread " + std::to_string(worker));
@@ -1185,6 +1194,7 @@ void ThreadPool::enginePreprocessWorker(int worker_id) {
             continue;
         }
         
+        // OPTIMIZATION: Start timing only for actual preprocessing work, not blocking operations
         auto preprocess_start = std::chrono::steady_clock::now();
         
         int true_original_width = frame_data.true_original_width > 0 ? frame_data.true_original_width : frame_data.original_width;
@@ -1237,6 +1247,11 @@ void ThreadPool::enginePreprocessWorker(int worker_id) {
         auto tensor = target_group->acquireBuffer();
         target_group->preprocessor->preprocessToFloat(frame_to_process, *tensor);
         
+        // OPTIMIZATION: Stop timing before blocking operations (queue pushes, mutex locks)
+        // This gives accurate measurement of actual preprocessing work, not blocking time
+        auto preprocess_end = std::chrono::steady_clock::now();
+        auto preprocess_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(preprocess_end - preprocess_start).count();
+        
         // OPTIMIZATION: Batch registerPendingFrame calls to reduce mutex contention
         std::vector<std::pair<std::string, std::string>> pending_frame_registrations;
         pending_frame_registrations.reserve(target_group->engines.size());
@@ -1260,6 +1275,7 @@ void ThreadPool::enginePreprocessWorker(int worker_id) {
             processed.roi_offset_y = roi_offset_y;
             
             // OPTIMIZATION: Use non-blocking push first, only block if queue is full
+            // Note: Queue push blocking time is NOT included in timing measurement
             if (!engine_group->frame_queue->push(processed, 10)) {
                 // Queue might be full, try with longer timeout
                 if (!engine_group->frame_queue->push(processed, 50)) {
@@ -1275,6 +1291,7 @@ void ThreadPool::enginePreprocessWorker(int worker_id) {
         }
         
         // OPTIMIZATION: Batch registerPendingFrame calls in single mutex lock
+        // Note: Mutex lock time is NOT included in timing measurement
         if (!pending_frame_registrations.empty() && use_redis_queue_ && output_queue_) {
             std::lock_guard<std::mutex> lock(video_output_mutex_);
             for (const auto& reg : pending_frame_registrations) {
@@ -1284,8 +1301,7 @@ void ThreadPool::enginePreprocessWorker(int worker_id) {
             }
         }
         
-        auto preprocess_end = std::chrono::steady_clock::now();
-        auto preprocess_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(preprocess_end - preprocess_start).count();
+        // Update statistics with actual preprocessing time (excluding blocking operations)
         stats_.preprocessor_total_time_ms += preprocess_time_ms;
         stats_.frames_preprocessed += static_cast<long long>(target_group->engines.size());
     }
