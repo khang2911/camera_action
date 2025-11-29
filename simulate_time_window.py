@@ -169,15 +169,29 @@ def simulate_frame_reading(video_info: Dict, use_actual_pts: bool = False) -> Li
     frames = []
     frames_read = 0
     
+    # CRITICAL: total_frames_read_ starts at seek_to_frame (estimated_frame) after seeking
+    # Then it's incremented BEFORE timestamp calculation in readFrame()
+    # So for the first frame after seek:
+    #   total_frames_read_ = seek_to_frame (from initializeMetadata)
+    #   ++total_frames_read_ → total_frames_read_ = seek_to_frame + 1
+    #   current_ts = moment_time + (total_frames_read_ - 1) / fps = moment_time + seek_to_frame / fps
+    
     # Start from seek position
+    # frame_num represents the actual frame number in the video (0-indexed from start)
+    # But we need to simulate total_frames_read_ which starts at seek_to_frame
+    total_frames_read = seek_to_frame
+    
     for frame_num in range(seek_to_frame, total_frames_in_video):
+        # Increment total_frames_read_ FIRST (as in C++ code line 549)
+        total_frames_read += 1
+        
         # Calculate timestamp using current (buggy) method
         if use_actual_pts:
-            current_ts = simulate_frame_timestamp_using_pts(frame_num, moment_time, fps)
+            # Using actual PTS: frame_num / fps gives the frame's position in video
+            current_ts = moment_time + (frame_num / fps)
         else:
-            # Simulate the buggy calculation: total_frames_read_ is incremented BEFORE timestamp calc
-            # So we use (frame_num + 1) to simulate the increment
-            total_frames_read = frame_num + 1
+            # Current buggy method: use total_frames_read_ (which might not match frame_num!)
+            # This is the KEY BUG: total_frames_read_ is estimated, but frame_num is actual
             current_ts = moment_time + (total_frames_read - 1) / fps
         
         # Check if frame is in time window
@@ -196,7 +210,7 @@ def simulate_frame_reading(video_info: Dict, use_actual_pts: bool = False) -> Li
             should_be_read=should_be_read
         ))
         
-        # Stop if past end timestamp
+        # Stop if past end timestamp (as in C++ code line 577)
         if current_ts > end_ts:
             break
     
@@ -253,15 +267,21 @@ def analyze_simulation(video_info: Dict, reader_info: Dict, use_actual_pts: bool
                     'difference': last_frame.timestamp - video_info['end_ts'],
                 })
     
+    # Get first and last frames that should be read
+    frames_in_window = [f for f in frames if f.should_be_read]
+    
     return {
         'video_key': reader_info.get('video_key', 'unknown'),
         'frames_should_read': frames_should_read,
         'frames_actually_read': frames_actually_read,
         'expected_frames': expected_frames,
         'issues': issues,
-        'first_frame': frames[0] if frames else None,
-        'last_frame': frames[-1] if frames else None,
+        'first_frame': frames_in_window[0] if frames_in_window else (frames[0] if frames else None),
+        'last_frame': frames_in_window[-1] if frames_in_window else (frames[-1] if frames else None),
+        'first_actual_frame': frames[0] if frames else None,
+        'last_actual_frame': frames[-1] if frames else None,
         'frames': frames[:10] + frames[-10:] if len(frames) > 20 else frames,  # First 10 and last 10
+        'video_info': video_info,  # Include for debugging
     }
 
 
@@ -272,22 +292,47 @@ def print_simulation_results(results: Dict, use_actual_pts: bool = False):
     print("\n" + "="*80)
     print(f"Simulation Results: {results['video_key']} ({method})")
     print("="*80)
+    # Get time window info from video_info
+    video_info = results.get('video_info', {})
+    start_ts = video_info.get('start_ts', 0)
+    end_ts = video_info.get('end_ts', 0)
+    moment_time = video_info.get('moment_time', 0)
+    seek_to_frame = video_info.get('seek_to_frame', 0)
+    
+    print(f"\nTime Window Info:")
+    print(f"  start_timestamp: {start_ts:.6f}")
+    print(f"  end_timestamp:   {end_ts:.6f}")
+    print(f"  moment_time:     {moment_time:.6f}")
+    print(f"  seek_to_frame:   {seek_to_frame}")
+    
     print(f"\nFrame Counts:")
     print(f"  Frames Should Read (simulation): {results['frames_should_read']:,}")
     print(f"  Frames Actually Read (from log):  {results['frames_actually_read']:,}")
     print(f"  Expected Frames (from log):       {results['expected_frames']:,}")
     
-    if results['first_frame']:
-        print(f"\nFirst Frame:")
+    if results['first_actual_frame']:
+        print(f"\nFirst Frame (from seek position):")
+        print(f"  Frame Number: {results['first_actual_frame'].frame_number}")
+        print(f"  Timestamp:    {results['first_actual_frame'].timestamp:.6f}")
+        print(f"  In Window:    {results['first_actual_frame'].in_time_window}")
+    
+    if results['first_frame'] and results['first_frame'] != results['first_actual_frame']:
+        print(f"\nFirst Frame (in time window):")
         print(f"  Frame Number: {results['first_frame'].frame_number}")
         print(f"  Timestamp:    {results['first_frame'].timestamp:.6f}")
         print(f"  In Window:    {results['first_frame'].in_time_window}")
     
     if results['last_frame']:
-        print(f"\nLast Frame:")
+        print(f"\nLast Frame (in time window):")
         print(f"  Frame Number: {results['last_frame'].frame_number}")
         print(f"  Timestamp:    {results['last_frame'].timestamp:.6f}")
         print(f"  In Window:    {results['last_frame'].in_time_window}")
+    
+    if results['last_actual_frame']:
+        print(f"\nLast Frame (simulated):")
+        print(f"  Frame Number: {results['last_actual_frame'].frame_number}")
+        print(f"  Timestamp:    {results['last_actual_frame'].timestamp:.6f}")
+        print(f"  In Window:    {results['last_actual_frame'].in_time_window}")
     
     if results['issues']:
         print(f"\nIssues Found:")
