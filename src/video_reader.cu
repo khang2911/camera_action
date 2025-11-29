@@ -247,25 +247,27 @@ bool VideoReader::initialize(const VideoClip* clip) {
         double remaining_duration = std::max(0.0, actual_end_ts - seek_timestamp);
         double remaining_frames = remaining_duration * fps_;
         
-        LOG_INFO("VideoReader", "Time window: start_ts=" + std::to_string(clip_.start_timestamp) +
-                 ", end_ts=" + std::to_string(clip_.end_timestamp) +
-                 ", moment_time=" + std::to_string(clip_.moment_time) +
-                 ", duration=" + std::to_string(clip_.duration_seconds) +
-                 ", video_range=[" + std::to_string(video_start_time) + ", " + std::to_string(video_end_time) + "]" +
-                 ", actual_range=[" + std::to_string(actual_start_ts) + ", " + std::to_string(actual_end_ts) + "]" +
-                 ", fps=" + std::to_string(fps_) +
-                 ", time_window_duration=" + std::to_string(time_window_duration) +
-                 ", actual_available_duration=" + std::to_string(actual_available_duration) +
-                 ", total_expected_frames~" + std::to_string(static_cast<int>(total_expected_frames)) +
-                 ", actual_expected_frames~" + std::to_string(static_cast<int>(actual_expected_frames)) +
-                 ", seek_to_frame=" + std::to_string(total_frames_read_) +
-                 ", seek_timestamp=" + std::to_string(seek_timestamp) +
-                 ", remaining_duration=" + std::to_string(remaining_duration) +
-                 ", remaining_frames~" + std::to_string(static_cast<int>(remaining_frames));
+        std::string time_window_msg = "Time window: start_ts=" + std::to_string(clip_.start_timestamp) +
+                                     ", end_ts=" + std::to_string(clip_.end_timestamp) +
+                                     ", moment_time=" + std::to_string(clip_.moment_time) +
+                                     ", duration=" + std::to_string(clip_.duration_seconds) +
+                                     ", video_range=[" + std::to_string(video_start_time) + ", " + std::to_string(video_end_time) + "]" +
+                                     ", actual_range=[" + std::to_string(actual_start_ts) + ", " + std::to_string(actual_end_ts) + "]" +
+                                     ", fps=" + std::to_string(fps_) +
+                                     ", time_window_duration=" + std::to_string(time_window_duration) +
+                                     ", actual_available_duration=" + std::to_string(actual_available_duration) +
+                                     ", total_expected_frames~" + std::to_string(static_cast<int>(total_expected_frames)) +
+                                     ", actual_expected_frames~" + std::to_string(static_cast<int>(actual_expected_frames)) +
+                                     ", seek_to_frame=" + std::to_string(total_frames_read_) +
+                                     ", seek_timestamp=" + std::to_string(seek_timestamp) +
+                                     ", remaining_duration=" + std::to_string(remaining_duration) +
+                                     ", remaining_frames~" + std::to_string(static_cast<int>(remaining_frames));
+        LOG_INFO("VideoReader", time_window_msg);
         bool video_ends_before_end_ts = video_end_time < clip_.end_timestamp;
         if (video_ends_before_end_ts) {
-            LOG_INFO("VideoReader", "  *** WARNING: video_ends_before_end_ts=YES (video ends " + 
-                     std::to_string(clip_.end_timestamp - video_end_time) + "s before end_ts) ***");
+            std::string warning_msg = "  *** WARNING: video_ends_before_end_ts=YES (video ends " + 
+                                     std::to_string(clip_.end_timestamp - video_end_time) + "s before end_ts) ***";
+            LOG_INFO("VideoReader", warning_msg);
         }
         LOG_INFO("VideoReader", "  (note: actual frames_read may be less than expected if: 1) video file ends before end_ts, 2) frames before start_ts are skipped, 3) debug mode frame limit is reached)");
     }
@@ -378,8 +380,9 @@ bool VideoReader::setupDecoder() {
     if (is_cuvid_decoder) {
         // CUVID decoders decode directly to GPU memory (CUDA frames)
         // They use NVDEC directly and should output frames in AV_PIX_FMT_CUDA format
-        LOG_INFO("VideoReader", std::string("Using CUVID decoder: ") + decoder_name + 
-                 " (NVDEC hardware-accelerated)");
+        std::string cuvid_msg = std::string("Using CUVID decoder: ") + decoder_name + 
+                                " (NVDEC hardware-accelerated)";
+        LOG_INFO("VideoReader", cuvid_msg);
         
         // Set up get_format callback to request CUDA format
         codec_ctx_->opaque = this;
@@ -393,8 +396,10 @@ bool VideoReader::setupDecoder() {
         if (initHardwareDecoder(decoder)) {
             codec_ctx_->opaque = this;
             codec_ctx_->get_format = &VideoReader::getHWFormat;
-            LOG_INFO("VideoReader", std::string("Hardware decoder initialized successfully, hw_pix_fmt: ") + 
-                     std::to_string(hw_pix_fmt_) + ", device_ctx: " + (hw_device_ctx_ ? "OK" : "NULL"));
+            std::string hw_ctx_str = hw_device_ctx_ ? "OK" : "NULL";
+            std::string hw_init_msg = std::string("Hardware decoder initialized successfully, hw_pix_fmt: ") + 
+                                     std::to_string(hw_pix_fmt_) + ", device_ctx: " + hw_ctx_str;
+            LOG_INFO("VideoReader", hw_init_msg);
         } else {
             LOG_INFO("VideoReader", "Hardware decoder not available, using CPU decoding");
         }
@@ -458,9 +463,10 @@ bool VideoReader::setupDecoder() {
     }
     
     if (use_hw_decode_) {
-        LOG_INFO("VideoReader", std::string("Codec opened with hardware decoder, decoder: ") + 
-                 std::string(decoder->name) + ", hw_pix_fmt: " + std::to_string(hw_pix_fmt_) +
-                 ", codec_id: " + std::to_string(codec_ctx_->codec_id));
+        std::string codec_msg = std::string("Codec opened with hardware decoder, decoder: ") + 
+                               std::string(decoder->name) + ", hw_pix_fmt: " + std::to_string(hw_pix_fmt_) +
+                               ", codec_id: " + std::to_string(codec_ctx_->codec_id);
+        LOG_INFO("VideoReader", codec_msg);
     }
     
     packet_ = av_packet_alloc();
@@ -504,8 +510,9 @@ AVPixelFormat VideoReader::getHWFormat(AVCodecContext* ctx, const AVPixelFormat*
         for (const AVPixelFormat* p = pix_fmts; *p != AV_PIX_FMT_NONE; ++p) {
             formats += std::to_string(*p) + " ";
         }
-        LOG_INFO("VideoReader", std::string("getHWFormat called, available formats: ") + formats + 
-                 ", looking for: " + std::to_string(self->hw_pix_fmt_));
+        std::string hw_format_msg = std::string("getHWFormat called, available formats: ") + formats + 
+                                    ", looking for: " + std::to_string(self->hw_pix_fmt_);
+        LOG_INFO("VideoReader", hw_format_msg);
     }
     for (const AVPixelFormat* p = pix_fmts; *p != AV_PIX_FMT_NONE; ++p) {
         if (*p == self->hw_pix_fmt_) {
@@ -604,10 +611,11 @@ bool VideoReader::readFrame(cv::Mat& frame) {
                     // total_frames_read_ already incremented (for next frame's timestamp calculation)
                     // actual_frame_position_ NOT incremented (this frame won't be in bin file)
                     if (time_filter_log_count < 10) {
-                        LOG_DEBUG("VideoReader", "Skipping frame before start_ts: total_read=" + 
-                                 std::to_string(total_frames_read_ - 1) +
-                                 ", current_ts=" + std::to_string(current_ts) +
-                                 ", start_ts=" + std::to_string(clip_.start_timestamp));
+                        std::string skip_msg = "Skipping frame before start_ts: total_read=" + 
+                                             std::to_string(total_frames_read_ - 1) +
+                                             ", current_ts=" + std::to_string(current_ts) +
+                                             ", start_ts=" + std::to_string(clip_.start_timestamp);
+                        LOG_DEBUG("VideoReader", skip_msg);
                     }
                     continue;  // Try next frame
                 }
@@ -785,9 +793,10 @@ bool VideoReader::receiveFrame(cv::Mat& out) {
             return false;
         }
         if (ret == AVERROR_EOF) {
-            LOG_DEBUG("VideoReader", "receiveFrame: AVERROR_EOF detected, total_read=" + 
-                     std::to_string(total_frames_read_) +
-                     ", actual_pos=" + std::to_string(actual_frame_position_));
+            std::string eof_receive_msg = "receiveFrame: AVERROR_EOF detected, total_read=" + 
+                                         std::to_string(total_frames_read_) +
+                                         ", actual_pos=" + std::to_string(actual_frame_position_);
+            LOG_DEBUG("VideoReader", eof_receive_msg);
             return false;
         }
         if (ret < 0) {
@@ -818,8 +827,9 @@ bool VideoReader::receiveFrame(cv::Mat& out) {
         if (current_pts != AV_NOPTS_VALUE && last_pts != AV_NOPTS_VALUE && current_pts == last_pts) {
             duplicate_pts_count++;
             if (duplicate_pts_count <= 5) {
-                LOG_DEBUG("VideoReader", "Frame with duplicate PTS detected (PTS=" + std::to_string(current_pts) + 
-                         "). This may indicate duplicate frames in the video encoding.");
+                std::string duplicate_pts_msg = "Frame with duplicate PTS detected (PTS=" + std::to_string(current_pts) + 
+                                               "). This may indicate duplicate frames in the video encoding.";
+                LOG_DEBUG("VideoReader", duplicate_pts_msg);
             }
         } else {
             duplicate_pts_count = 0;  // Reset counter if PTS is different
@@ -844,9 +854,10 @@ bool VideoReader::convertFrameToMat(AVFrame* src, cv::Mat& out) {
             gpu_count++;
             // Only log every 1000 frames to reduce overhead
             if (gpu_count % 1000 == 0 && gpu_count > last_log_frame) {
-                LOG_INFO("VideoReader", std::string("GPU conversion stats - GPU: ") + std::to_string(gpu_count) + 
-                         ", CPU: " + std::to_string(cpu_count) + ", GPU%: " + 
-                         std::to_string(100.0 * gpu_count / (gpu_count + cpu_count)));
+                std::string gpu_stats_msg = std::string("GPU conversion stats - GPU: ") + std::to_string(gpu_count) + 
+                                           ", CPU: " + std::to_string(cpu_count) + ", GPU%: " + 
+                                           std::to_string(100.0 * gpu_count / (gpu_count + cpu_count));
+                LOG_INFO("VideoReader", gpu_stats_msg);
                 last_log_frame = gpu_count;
             }
             return true;
@@ -855,17 +866,19 @@ bool VideoReader::convertFrameToMat(AVFrame* src, cv::Mat& out) {
     } else {
         static thread_local int format_mismatch_count = 0;
         if (use_hw_decode_ && format_mismatch_count++ < 5) {
-            LOG_WARNING("VideoReader", std::string("Frame NOT in hardware format! hw_decode: ") + 
-                     std::to_string(use_hw_decode_) + ", format: " + std::to_string(src->format) + 
-                     ", expected: " + std::to_string(hw_pix_fmt_));
+            std::string format_warning_msg = std::string("Frame NOT in hardware format! hw_decode: ") + 
+                                            std::to_string(use_hw_decode_) + ", format: " + std::to_string(src->format) + 
+                                            ", expected: " + std::to_string(hw_pix_fmt_);
+            LOG_WARNING("VideoReader", format_warning_msg);
         }
     }
     
     cpu_count++;
     if (cpu_count % 1000 == 0 && cpu_count > last_log_frame) {
-        LOG_INFO("VideoReader", std::string("CPU conversion stats - GPU: ") + std::to_string(gpu_count) + 
-                 ", CPU: " + std::to_string(cpu_count) + ", GPU%: " + 
-                 std::to_string(100.0 * gpu_count / (gpu_count + cpu_count)));
+        std::string cpu_stats_msg = std::string("CPU conversion stats - GPU: ") + std::to_string(gpu_count) + 
+                                    ", CPU: " + std::to_string(cpu_count) + ", GPU%: " + 
+                                    std::to_string(100.0 * gpu_count / (gpu_count + cpu_count));
+        LOG_INFO("VideoReader", cpu_stats_msg);
         last_log_frame = cpu_count;
     }
     
@@ -1036,11 +1049,12 @@ void VideoReader::initializeMetadata() {
             total_frames_read_ = estimated_frame;  // Start from estimated position for timestamp calculation
             actual_frame_position_ = 0;  // Will count only frames in time window
             
-            LOG_DEBUG("VideoReader", "Seek calculation: offset_seconds=" + std::to_string(offset_seconds) +
-                     ", estimated_frame=" + std::to_string(estimated_frame) +
-                     ", start_ts=" + std::to_string(clip_.start_timestamp) +
-                     ", moment_time=" + std::to_string(clip_.moment_time) +
-                     ", fps=" + std::to_string(fps_));
+            std::string seek_calc_msg = "Seek calculation: offset_seconds=" + std::to_string(offset_seconds) +
+                                       ", estimated_frame=" + std::to_string(estimated_frame) +
+                                       ", start_ts=" + std::to_string(clip_.start_timestamp) +
+                                       ", moment_time=" + std::to_string(clip_.moment_time) +
+                                       ", fps=" + std::to_string(fps_);
+            LOG_DEBUG("VideoReader", seek_calc_msg);
         }
     }
 }
