@@ -126,7 +126,9 @@ class BinFileReader:
                 # Read number of detections
                 num_detections_data = f.read(4)
                 if len(num_detections_data) < 4:
-                    break  # End of file
+                    # CRITICAL: We've already read the frame number, so the file is in an inconsistent state
+                    # Raising an exception prevents silent corruption and makes the error clear
+                    raise ValueError(f"Incomplete frame header at frame {frame_number}: expected 4 bytes for num_detections, got {len(num_detections_data)}. File may be corrupted or truncated.")
                 
                 num_detections = struct.unpack('i', num_detections_data)[0]
                 
