@@ -431,12 +431,15 @@ void ThreadPool::start() {
         }
     }
     
-    // Start post-processing threads (2 threads per engine for parallel post-processing)
-    int num_postprocess_threads = std::max(2, static_cast<int>(engine_groups_.size()) * 2);
+    // Start post-processing threads (increase to handle debug image saving and file I/O)
+    // With debug mode, postprocessing is slower due to image saving, so we need more threads
+    // Use 4 threads per engine to handle the load better
+    int num_postprocess_threads = std::max(4, static_cast<int>(engine_groups_.size()) * 4);
     for (int i = 0; i < num_postprocess_threads; ++i) {
         postprocess_threads_.emplace_back(&ThreadPool::postprocessWorker, this, i);
         LOG_DEBUG("ThreadPool", "Started post-processing thread " + std::to_string(i));
     }
+    LOG_INFO("ThreadPool", "Started " + std::to_string(num_postprocess_threads) + " post-processing threads");
     
     // Start async Redis output thread (if using Redis)
     if (use_redis_queue_) {
@@ -565,9 +568,15 @@ void ThreadPool::waitForCompletion() {
                     break;
                 }
             }
-            // Also check postprocessor queue
+            // Also check postprocessor queue (critical - this is often the bottleneck)
             if (postprocess_queue_ && postprocess_queue_->size() > 0) {
                 all_queues_empty = false;
+                // Log periodically if postprocessor queue is backing up
+                static int postproc_warning_count = 0;
+                if (postproc_warning_count++ % 50 == 0) {
+                    LOG_INFO("ThreadPool", "Waiting for postprocessor queue to drain: " + 
+                             std::to_string(postprocess_queue_->size()) + " tasks pending");
+                }
             }
             
             if (all_videos_processed && all_queues_empty) {
@@ -2079,12 +2088,13 @@ void ThreadPool::postprocessWorker(int worker_id) {
             
             // Save debug images if in debug mode (before scaling to original coordinates)
             // Debug images should be drawn on the preprocessed frame (resized scale)
+            // OPTIMIZATION: Use faster resize and avoid unnecessary clones where possible
             if (debug_mode_ && b < task.frames.size() && !task.frames[b].empty()) {
                 // Get the preprocessor for this engine (needed for addPadding)
                 // We need to find the engine group to get the preprocessor
                 // For now, we'll use a simpler approach: just draw on the frame directly
                 // The detections are in normalized [0,1] coordinates relative to the preprocessed frame
-                cv::Mat debug_frame = task.frames[b].clone();
+                const cv::Mat& debug_frame = task.frames[b];  // Use reference to avoid clone if possible
                 
                 // Add padding to match the model input size
                 // We need to get the input size from the detector
@@ -2102,14 +2112,12 @@ void ThreadPool::postprocessWorker(int worker_id) {
                 int pad_w = (input_w - new_w) / 2;
                 int pad_h = (input_h - new_h) / 2;
                 
-                // Resize maintaining aspect ratio
-                cv::Mat resized;
-                cv::resize(debug_frame, resized, cv::Size(new_w, new_h), 0, 0, cv::INTER_LINEAR);
-                
-                // Add padding using zeros (black) - matching Preprocessor::addPadding
-                // Create zero-padded image and copy resized image into it (centered)
-                cv::Mat padded = cv::Mat::zeros(input_h, input_w, resized.type());
-                resized.copyTo(padded(cv::Rect(pad_w, pad_h, new_w, new_h)));
+                // OPTIMIZATION: Create padded image directly and resize into it (avoids intermediate Mat)
+                cv::Mat padded = cv::Mat::zeros(input_h, input_w, debug_frame.type());
+                cv::Mat roi = padded(cv::Rect(pad_w, pad_h, new_w, new_h));
+                // Use INTER_AREA for downscaling (faster) or INTER_LINEAR for upscaling
+                cv::InterpolationFlags interp = (new_w < orig_w || new_h < orig_h) ? cv::INTER_AREA : cv::INTER_LINEAR;
+                cv::resize(debug_frame, roi, cv::Size(new_w, new_h), 0, 0, interp);
                 
                 // Draw detections (they're in normalized [0,1] coordinates relative to padded frame)
                 task.detector->drawDetections(padded, detections);
@@ -2124,6 +2132,7 @@ void ThreadPool::postprocessWorker(int worker_id) {
                     std::filesystem::path debug_dir = std::filesystem::path(output_dir_) / "debug_images" /
                                                        task.engine_name / date_part /
                                                        (serial_part + "_" + record_part + "_v" + std::to_string(task.video_indices[b]));
+                    // OPTIMIZATION: create_directories is idempotent and fast if directory exists
                     std::filesystem::create_directories(debug_dir);
                     
                     std::string image_filename = "frame_" + 
@@ -2131,7 +2140,10 @@ void ThreadPool::postprocessWorker(int worker_id) {
                         task.engine_name + ".jpg";
                     std::filesystem::path image_path = debug_dir / image_filename;
                     
-                    if (cv::imwrite(image_path.string(), padded)) {
+                    // OPTIMIZATION: Use JPEG quality 95 (default) but compress more for faster writes
+                    // Use imencode + file write for better control, but for now keep imwrite for simplicity
+                    std::vector<int> compression_params = {cv::IMWRITE_JPEG_QUALITY, 90};  // Slightly lower quality for faster writes
+                    if (cv::imwrite(image_path.string(), padded, compression_params)) {
                         LOG_DEBUG("PostProcess", "Saved debug image: frame=" + 
                                  std::to_string(task.frame_numbers[b]) + 
                                  ", detections=" + std::to_string(detections.size()) +
@@ -2257,6 +2269,12 @@ void ThreadPool::monitorWorker() {
                       << (group->roi_cropping ? " [ROI]" : " [FULL]")
                       << " engines=" << group->engines.size()
                       << " queue=" << queue_size << "/" << group->queue_capacity << std::endl;
+        }
+        
+        // Show postprocessor queue size
+        if (postprocess_queue_) {
+            size_t postproc_queue_size = postprocess_queue_->size();
+            stats_oss << "PostQ: " << postproc_queue_size << " tasks pending" << std::endl;
         }
         
         // OPTIMIZATION: Removed queue size checks - they involve mutex locks which can block
