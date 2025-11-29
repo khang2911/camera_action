@@ -571,10 +571,10 @@ void ThreadPool::waitForCompletion() {
             // Also check postprocessor queue (critical - this is often the bottleneck)
             if (postprocess_queue_ && postprocess_queue_->size() > 0) {
                 all_queues_empty = false;
-                // Log periodically if postprocessor queue is backing up
+                // Log periodically if postprocessor queue is backing up (debug only)
                 static int postproc_warning_count = 0;
                 if (postproc_warning_count++ % 50 == 0) {
-                    LOG_INFO("ThreadPool", "Waiting for postprocessor queue to drain: " + 
+                    LOG_DEBUG("ThreadPool", "Waiting for postprocessor queue to drain: " + 
                              std::to_string(postprocess_queue_->size()) + " tasks pending");
                 }
             }
@@ -1502,9 +1502,6 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             if (!should_process && !batch_tensors.empty()) {
                 if (stop_flag_) {
                     // System is stopping - clear partial batch
-                    LOG_WARNING("Detector", "Skipping partial batch of " + std::to_string(batch_tensors.size()) + 
-                               " frames (system stopping) - " + 
-                               std::to_string(batch_tensors.size()) + " frames will be lost");
                     batch_tensors.clear();
                     batch_output_paths.clear();
                     batch_frame_numbers.clear();
@@ -1528,9 +1525,6 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     // CRITICAL FIX: When switching videos, PROCESS the partial batch instead of clearing it
                     // This prevents frame loss when videos finish with partial batches
                     // The partial batch contains frames from the previous video that should be processed
-                    LOG_INFO("Detector", "Switching videos - processing partial batch of " + 
-                             std::to_string(batch_tensors.size()) + " frames from previous video " +
-                             "(engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
                     // Force processing of the partial batch by setting should_process = true
                     should_process = true;
                     // Note: We don't clear batch_video_key here - it will be reset when we process the new video's frames
@@ -1542,17 +1536,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             if (should_process && !batch_tensors.empty()) {
                 int actual_batch_count = static_cast<int>(batch_tensors.size());
                 
-                // Log if processing partial batch
-                if (!is_full_batch) {
-                    if (is_partial_batch_timeout) {
-                        LOG_INFO("Detector", "Processing partial batch of " + std::to_string(actual_batch_count) + 
-                                 " frames (expected " + std::to_string(batch_size) + ") after timeout " +
-                                 "(engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
-                    } else if (pending_frame.has_value()) {
-                        // Already logged above when setting should_process = true
-                        // This is just to ensure we don't log twice
-                    }
-                }
+                // Partial batch processing is normal operation (timeout or video switch)
+                // No need to log unless in debug mode
                 
                 // CRITICAL: Sort batch by frame number to ensure frames are processed in order
                 // This fixes the issue where multiple detectors pull frames from the same queue
