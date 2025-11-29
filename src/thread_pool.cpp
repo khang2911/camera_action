@@ -1359,9 +1359,12 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             
             // Track when last frame was added to detect if queue is empty
             auto last_frame_time = std::chrono::steady_clock::now();
-            // OPTIMIZATION: Reduced timeout from 500ms to 50ms for faster partial batch processing
-            // This prevents engines from waiting too long when queues are slow
-            const auto partial_batch_timeout = std::chrono::milliseconds(50);  // Process partial batch after 50ms of no new frames
+            // OPTIMIZATION: Adaptive timeout based on batch size
+            // - Wait longer for full batches (more efficient for GPU)
+            // - Process partial batches faster if we have enough frames
+            // - For small partial batches, wait longer to avoid inefficient GPU usage
+            const auto base_timeout_ms = 200;  // Base timeout for partial batches
+            const auto min_frames_for_early_process = batch_size / 2;  // Process early if we have at least half batch
             
             // Collect batch_size frames from the SAME video
             // CRITICAL: We need to ensure we don't lose frames when switching between videos
@@ -1372,7 +1375,19 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 if (!batch_tensors.empty()) {
                     auto now = std::chrono::steady_clock::now();
                     auto time_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time);
-                    if (time_since_last_frame >= partial_batch_timeout) {
+                    
+                    // Adaptive timeout: wait longer for small batches, process faster if we have enough frames
+                    int current_batch_size = static_cast<int>(batch_tensors.size());
+                    int timeout_ms = base_timeout_ms;
+                    if (current_batch_size >= min_frames_for_early_process) {
+                        // We have at least half batch - use shorter timeout (100ms)
+                        timeout_ms = 100;
+                    } else {
+                        // Small batch - wait longer (300ms) to avoid inefficient GPU usage
+                        timeout_ms = 300;
+                    }
+                    
+                    if (time_since_last_frame.count() >= timeout_ms) {
                         // Queue has been empty for too long - process partial batch
                         LOG_DEBUG("Detector", "Processing partial batch of " + std::to_string(batch_tensors.size()) + 
                                  " frames after " + std::to_string(time_since_last_frame.count()) + "ms timeout " +
@@ -1412,7 +1427,19 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         if (!batch_tensors.empty()) {
                             auto now = std::chrono::steady_clock::now();
                             auto time_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time);
-                            if (time_since_last_frame >= partial_batch_timeout) {
+                            
+                            // Adaptive timeout: wait longer for small batches, process faster if we have enough frames
+                            int current_batch_size = static_cast<int>(batch_tensors.size());
+                            int timeout_ms = base_timeout_ms;
+                            if (current_batch_size >= min_frames_for_early_process) {
+                                // We have at least half batch - use shorter timeout (100ms)
+                                timeout_ms = 100;
+                            } else {
+                                // Small batch - wait longer (300ms) to avoid inefficient GPU usage
+                                timeout_ms = 300;
+                            }
+                            
+                            if (time_since_last_frame.count() >= timeout_ms) {
                                 // Queue has been empty for too long - process partial batch
                                 LOG_DEBUG("Detector", "Processing partial batch of " + std::to_string(batch_tensors.size()) + 
                                          " frames after " + std::to_string(time_since_last_frame.count()) + "ms timeout " +
@@ -1565,7 +1592,16 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             if (!batch_tensors.empty() && !is_full_batch) {
                 auto now = std::chrono::steady_clock::now();
                 auto time_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time);
-                is_partial_batch_timeout = (time_since_last_frame >= partial_batch_timeout);
+                
+                // Adaptive timeout check (same logic as in collection loop)
+                int current_batch_size = static_cast<int>(batch_tensors.size());
+                int timeout_ms = base_timeout_ms;
+                if (current_batch_size >= min_frames_for_early_process) {
+                    timeout_ms = 100;
+                } else {
+                    timeout_ms = 300;
+                }
+                is_partial_batch_timeout = (time_since_last_frame.count() >= timeout_ms);
             }
             bool should_process = is_full_batch || is_partial_batch_timeout;
             
