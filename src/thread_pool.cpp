@@ -139,6 +139,16 @@ ThreadPool::ThreadPool(int num_readers,
     }
     stats_.start_time = std::chrono::steady_clock::now();
     
+    // Initialize previous stats for windowed FPS calculation
+    {
+        std::lock_guard<std::mutex> lock(prev_stats_mutex_);
+        prev_monitor_time_ = stats_.start_time;
+        prev_frames_read_ = 0;
+        prev_frames_preprocessed_ = 0;
+        prev_frames_postprocessed_ = 0;
+        prev_frames_detected_.resize(engine_configs.size(), 0);
+    }
+    
     // Create output directory if it doesn't exist
     std::filesystem::create_directories(output_dir);
     // Increased queue size to reduce blocking - readers can push more frames before waiting
@@ -279,6 +289,16 @@ ThreadPool::ThreadPool(int num_readers,
     }
     stats_.start_time = std::chrono::steady_clock::now();
     
+    // Initialize previous stats for windowed FPS calculation
+    {
+        std::lock_guard<std::mutex> lock(prev_stats_mutex_);
+        prev_monitor_time_ = stats_.start_time;
+        prev_frames_read_ = 0;
+        prev_frames_preprocessed_ = 0;
+        prev_frames_postprocessed_ = 0;
+        prev_frames_detected_.resize(engine_configs.size(), 0);
+    }
+    
     // Create output directory if it doesn't exist
     std::filesystem::create_directories(output_dir);
     // Increased queue size to reduce blocking - readers can push more frames before waiting
@@ -384,6 +404,15 @@ void ThreadPool::start() {
             stats_.engine_total_time_ms[i] = 0;
             stats_.engine_frame_count[i] = 0;
         }
+    }
+    // Initialize previous stats for windowed FPS calculation
+    {
+        std::lock_guard<std::mutex> lock(prev_stats_mutex_);
+        prev_monitor_time_ = stats_.start_time;
+        prev_frames_read_ = 0;
+        prev_frames_preprocessed_ = 0;
+        prev_frames_postprocessed_ = 0;
+        prev_frames_detected_.resize(stats_.frames_detected.size(), 0);
     }
     if (raw_frame_queue_) {
         raw_frame_queue_->clear();
@@ -1161,11 +1190,15 @@ void ThreadPool::enginePreprocessWorker(int worker_id) {
         int true_original_width = frame_data.true_original_width > 0 ? frame_data.true_original_width : frame_data.original_width;
         int true_original_height = frame_data.true_original_height > 0 ? frame_data.true_original_height : frame_data.original_height;
         
-        // CRITICAL: Create a deep copy of the frame to ensure independence
-        // frame_data.frame might be shared with other FrameData objects due to cv::Mat reference counting
+        // OPTIMIZATION: Only copy/clone frame if needed (ROI cropping or debug mode)
+        // For normal operation, we only need the preprocessed tensor, not the frame
         cv::Mat frame_to_process;
-        if (!frame_data.frame.empty()) {
+        bool need_frame_copy = target_group->roi_cropping || debug_mode_;
+        if (need_frame_copy && !frame_data.frame.empty()) {
             frame_data.frame.copyTo(frame_to_process);
+        } else if (!frame_data.frame.empty()) {
+            // Use reference for preprocessing (faster, no copy needed)
+            frame_to_process = frame_data.frame;
         }
         int cropped_width = frame_data.original_width;
         int cropped_height = frame_data.original_height;
@@ -1204,13 +1237,21 @@ void ThreadPool::enginePreprocessWorker(int worker_id) {
         auto tensor = target_group->acquireBuffer();
         target_group->preprocessor->preprocessToFloat(frame_to_process, *tensor);
         
+        // OPTIMIZATION: Batch registerPendingFrame calls to reduce mutex contention
+        std::vector<std::pair<std::string, std::string>> pending_frame_registrations;
+        pending_frame_registrations.reserve(target_group->engines.size());
+        
         for (auto* engine_group : target_group->engines) {
             FrameData processed = frame_data;
             processed.preprocessed_data = tensor;
-            // CRITICAL: Clone the frame to ensure each engine gets an independent copy
-            // cv::Mat uses reference counting, so assignment creates a shallow copy
-            // We need a deep copy to prevent all engines from sharing the same frame data
-            processed.frame = frame_to_process.clone();
+            // OPTIMIZATION: Only clone frame if debug mode is enabled (frame only used for debug images)
+            // In normal operation, engines only need the preprocessed tensor
+            if (debug_mode_ && !frame_to_process.empty()) {
+                processed.frame = frame_to_process.clone();
+            } else {
+                // Clear frame to save memory - engines don't need it
+                processed.frame = cv::Mat();
+            }
             processed.original_width = cropped_width;
             processed.original_height = cropped_height;
             processed.true_original_width = true_original_width;
@@ -1218,14 +1259,28 @@ void ThreadPool::enginePreprocessWorker(int worker_id) {
             processed.roi_offset_x = roi_offset_x;
             processed.roi_offset_y = roi_offset_y;
             
-            if (!engine_group->frame_queue->push(processed, 50)) {
-                if (!engine_group->frame_queue->push(processed, 200)) {
+            // OPTIMIZATION: Use non-blocking push first, only block if queue is full
+            if (!engine_group->frame_queue->push(processed, 10)) {
+                // Queue might be full, try with longer timeout
+                if (!engine_group->frame_queue->push(processed, 50)) {
+                    // Last resort: blocking push (should be rare)
                     engine_group->frame_queue->push(processed);
                 }
             }
             
+            // Collect pending frame registrations to batch them
             if (!processed.message_key.empty()) {
-                registerPendingFrame(processed.message_key, engine_group->engine_name);
+                pending_frame_registrations.emplace_back(processed.message_key, engine_group->engine_name);
+            }
+        }
+        
+        // OPTIMIZATION: Batch registerPendingFrame calls in single mutex lock
+        if (!pending_frame_registrations.empty() && use_redis_queue_ && output_queue_) {
+            std::lock_guard<std::mutex> lock(video_output_mutex_);
+            for (const auto& reg : pending_frame_registrations) {
+                VideoOutputStatus& status = video_output_status_[reg.first];
+                status.pending_counts[reg.second]++;
+                status.registered_counts[reg.second]++;
             }
         }
         
@@ -2237,14 +2292,30 @@ void ThreadPool::monitorWorker() {
         long long total_read = stats_.frames_read.load();
         long long total_preprocessed = stats_.frames_preprocessed.load();
         
+        // Calculate windowed FPS (FPS over the last monitoring period)
+        long long window_read_fps = 0;
+        long long window_preprocess_fps = 0;
+        double window_seconds = 5.0;  // Default to 5 seconds
+        
+        {
+            std::lock_guard<std::mutex> lock(prev_stats_mutex_);
+            auto window_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - prev_monitor_time_).count();
+            if (window_duration > 0) {
+                window_seconds = window_duration / 1000.0;
+                long long read_diff = total_read - prev_frames_read_;
+                long long preprocess_diff = total_preprocessed - prev_frames_preprocessed_;
+                window_read_fps = static_cast<long long>(read_diff / window_seconds);
+                window_preprocess_fps = static_cast<long long>(preprocess_diff / window_seconds);
+            }
+        }
+        
         std::ostringstream stats_oss;
         stats_oss << "=== Statistics (Runtime: " << elapsed << "s) ===" << std::endl;
         stats_oss << "Frames Read: " << total_read 
                   << " | Preprocessed: " << total_preprocessed;
-        if (elapsed > 0) {
-            stats_oss << " | Read FPS: " << (total_read / elapsed)
-                      << " | Preprocess FPS: " << (total_preprocessed / elapsed);
-        }
+        stats_oss << " | Read FPS: " << window_read_fps
+                  << " | Preprocess FPS: " << window_preprocess_fps;
         stats_oss << std::endl;
         
         if (raw_frame_queue_) {
@@ -2272,36 +2343,53 @@ void ThreadPool::monitorWorker() {
         // that can block and degrade performance over time. These are not critical for monitoring.
         
         // Per-engine statistics
+        std::vector<long long> window_engine_fps(engine_groups_.size(), 0);
+        std::vector<long long> engine_detected;
+        std::vector<long long> engine_failed;
+        std::vector<long long> engine_total_time_ms;
+        std::vector<long long> engine_frame_count;
         {
             std::lock_guard<std::mutex> lock(stats_.stats_mutex);
+            engine_detected.resize(engine_groups_.size());
+            engine_failed.resize(engine_groups_.size());
+            engine_total_time_ms.resize(engine_groups_.size());
+            engine_frame_count.resize(engine_groups_.size());
             for (size_t i = 0; i < engine_groups_.size(); ++i) {
-                long long detected = stats_.frames_detected[i];
-                long long failed = stats_.frames_failed[i];
-                long long total_time_ms = stats_.engine_total_time_ms[i];
-                long long frame_count = stats_.engine_frame_count[i];
-                
-                stats_oss << "Engine " << engine_groups_[i]->engine_name 
-                          << ": Detected=" << detected 
-                          << " | Failed=" << failed;
-                if (elapsed > 0) {
-                    stats_oss << " | FPS=" << (detected / elapsed);
-                }
-                if (frame_count > 0) {
-                    double avg_time_ms = static_cast<double>(total_time_ms) / frame_count;
-                    stats_oss << " | AvgTime=" << std::fixed << std::setprecision(2) << avg_time_ms << "ms/frame";
-                    stats_oss << " | TotalTime=" << (total_time_ms / 1000.0) << "s";
-                }
-                stats_oss << std::endl;
+                engine_detected[i] = stats_.frames_detected[i];
+                engine_failed[i] = stats_.frames_failed[i];
+                engine_total_time_ms[i] = stats_.engine_total_time_ms[i];
+                engine_frame_count[i] = stats_.engine_frame_count[i];
             }
+        }
+        // Calculate windowed FPS
+        {
+            std::lock_guard<std::mutex> prev_lock(prev_stats_mutex_);
+            for (size_t i = 0; i < engine_groups_.size(); ++i) {
+                if (i < prev_frames_detected_.size() && window_seconds > 0) {
+                    long long detected_diff = engine_detected[i] - prev_frames_detected_[i];
+                    window_engine_fps[i] = static_cast<long long>(detected_diff / window_seconds);
+                }
+            }
+        }
+        // Output engine statistics
+        for (size_t i = 0; i < engine_groups_.size(); ++i) {
+            stats_oss << "Engine " << engine_groups_[i]->engine_name 
+                      << ": Detected=" << engine_detected[i] 
+                      << " | Failed=" << engine_failed[i];
+            stats_oss << " | FPS=" << window_engine_fps[i];
+            if (engine_frame_count[i] > 0) {
+                double avg_time_ms = static_cast<double>(engine_total_time_ms[i]) / engine_frame_count[i];
+                stats_oss << " | AvgTime=" << std::fixed << std::setprecision(2) << avg_time_ms << "ms/frame";
+                stats_oss << " | TotalTime=" << (engine_total_time_ms[i] / 1000.0) << "s";
+            }
+            stats_oss << std::endl;
         }
         
         // Reader statistics
         long long reader_time_ms = stats_.reader_total_time_ms.load();
         long long reader_frames = stats_.frames_read.load();
         stats_oss << "Reader: Frames=" << reader_frames;
-        if (elapsed > 0) {
-            stats_oss << " | FPS=" << (reader_frames / elapsed);
-        }
+        stats_oss << " | FPS=" << window_read_fps;
         if (reader_frames > 0) {
             double avg_reader_time_ms = static_cast<double>(reader_time_ms) / reader_frames;
             stats_oss << " | AvgTime=" << std::fixed << std::setprecision(2) << avg_reader_time_ms << "ms/frame";
@@ -2312,9 +2400,7 @@ void ThreadPool::monitorWorker() {
         long long preproc_time_ms = stats_.preprocessor_total_time_ms.load();
         long long preproc_frames = stats_.frames_preprocessed.load();
         stats_oss << "Preprocessor: Frames=" << preproc_frames;
-        if (elapsed > 0) {
-            stats_oss << " | FPS=" << (preproc_frames / elapsed);
-        }
+        stats_oss << " | FPS=" << window_preprocess_fps;
         if (preproc_frames > 0) {
             double avg_preproc_time_ms = static_cast<double>(preproc_time_ms) / preproc_frames;
             stats_oss << " | AvgTime=" << std::fixed << std::setprecision(2) << avg_preproc_time_ms << "ms/frame";
@@ -2324,10 +2410,16 @@ void ThreadPool::monitorWorker() {
         
         long long postproc_time_ms = stats_.postprocessor_total_time_ms.load();
         long long postproc_frames = stats_.frames_postprocessed.load();
-        stats_oss << "Postprocessor: Frames=" << postproc_frames;
-        if (elapsed > 0) {
-            stats_oss << " | FPS=" << (postproc_frames / elapsed);
+        long long window_postproc_fps = 0;
+        {
+            std::lock_guard<std::mutex> lock(prev_stats_mutex_);
+            if (window_seconds > 0) {
+                long long postproc_diff = postproc_frames - prev_frames_postprocessed_;
+                window_postproc_fps = static_cast<long long>(postproc_diff / window_seconds);
+            }
         }
+        stats_oss << "Postprocessor: Frames=" << postproc_frames;
+        stats_oss << " | FPS=" << window_postproc_fps;
         if (postproc_frames > 0) {
             double avg_postproc_time_ms = static_cast<double>(postproc_time_ms) / postproc_frames;
             stats_oss << " | AvgTime=" << std::fixed << std::setprecision(2) << avg_postproc_time_ms << "ms/frame";
@@ -2336,6 +2428,28 @@ void ThreadPool::monitorWorker() {
         stats_oss << std::endl;
         
         LOG_STATS("Monitor", stats_oss.str());
+        
+        // Update previous stats for next window calculation
+        // Read current detected frames first, then update previous stats
+        std::vector<long long> current_detected;
+        {
+            std::lock_guard<std::mutex> stats_lock(stats_.stats_mutex);
+            current_detected.resize(stats_.frames_detected.size());
+            for (size_t i = 0; i < stats_.frames_detected.size(); ++i) {
+                current_detected[i] = stats_.frames_detected[i];
+            }
+        }
+        {
+            std::lock_guard<std::mutex> lock(prev_stats_mutex_);
+            prev_monitor_time_ = now;
+            prev_frames_read_ = total_read;
+            prev_frames_preprocessed_ = total_preprocessed;
+            prev_frames_postprocessed_ = postproc_frames;
+            prev_frames_detected_.resize(current_detected.size());
+            for (size_t i = 0; i < current_detected.size(); ++i) {
+                prev_frames_detected_[i] = current_detected[i];
+            }
+        }
         
         // Check for timed out messages (only in Redis mode)
         if (use_redis_queue_) {

@@ -263,6 +263,14 @@ private:
     
     mutable Statistics stats_;
     
+    // Previous stats for windowed FPS calculation
+    std::chrono::steady_clock::time_point prev_monitor_time_;
+    long long prev_frames_read_{0};
+    long long prev_frames_preprocessed_{0};
+    long long prev_frames_postprocessed_{0};
+    std::vector<long long> prev_frames_detected_;
+    mutable std::mutex prev_stats_mutex_;
+    
     void readerWorker(int reader_id);
     void readerWorkerRedis(int reader_id);
     void preprocessorWorker(int worker_id);
