@@ -1857,6 +1857,11 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     success = false;
                 }
                 
+                // OPTIMIZATION: Stop timing before blocking operations (queue push)
+                // This gives accurate measurement of actual inference work, not blocking time
+                auto batch_end = std::chrono::steady_clock::now();
+                auto batch_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(batch_end - batch_start).count();
+                
                 if (success && !raw_outputs.empty()) {
                     // Create post-processing task
                     PostProcessTask task;
@@ -1889,14 +1894,12 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     // No need to call it again here to avoid double-counting
                     
                     // Push to post-processing queue (non-blocking)
+                    // Note: Queue push blocking time is NOT included in timing measurement
                     if (!postprocess_queue_ || !postprocess_queue_->push(task)) {
                         LOG_ERROR("Detector", "Failed to push batch to post-processing queue");
                         success = false;
                     }
                 }
-                
-                auto batch_end = std::chrono::steady_clock::now();
-                auto batch_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(batch_end - batch_start).count();
                 
                 if (success) {
                     int actual_batch_size = static_cast<int>(batch_tensors.size());
@@ -1972,6 +1975,11 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 single_input, raw_outputs
             );
             
+            // OPTIMIZATION: Stop timing before blocking operations (queue push)
+            // This gives accurate measurement of actual inference work, not blocking time
+            auto detect_end = std::chrono::steady_clock::now();
+            auto detect_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(detect_end - detect_start).count();
+            
             if (success && !raw_outputs.empty()) {
                 // Create post-processing task
                 PostProcessTask task;
@@ -2004,14 +2012,12 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 // No need to call it again here to avoid double-counting
                 
                 // Push to post-processing queue (non-blocking)
+                // Note: Queue push blocking time is NOT included in timing measurement
                 if (!postprocess_queue_ || !postprocess_queue_->push(task)) {
                     LOG_ERROR("Detector", "Failed to push frame to post-processing queue");
                     success = false;
                 }
             }
-            
-            auto detect_end = std::chrono::steady_clock::now();
-            auto detect_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(detect_end - detect_start).count();
             
             if (success) {
                 // CRITICAL: Only track inference time here, NOT frame count
