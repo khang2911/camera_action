@@ -262,7 +262,7 @@ bool VideoReader::initialize(const VideoClip* clip) {
                  ", seek_timestamp=" + std::to_string(seek_timestamp) +
                  ", remaining_duration=" + std::to_string(remaining_duration) +
                  ", remaining_frames~" + std::to_string(static_cast<int>(remaining_frames)) +
-                 " (note: actual frames_read may be less if frames are filtered or video ends early)");
+                 " (note: actual frames_read may be less than expected if: 1) video file ends before end_ts, 2) frames before start_ts are skipped, 3) debug mode frame limit is reached)");
     }
     
     if (options_.enable_prefetch) {
