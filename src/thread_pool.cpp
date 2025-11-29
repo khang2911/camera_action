@@ -1359,7 +1359,9 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             
             // Track when last frame was added to detect if queue is empty
             auto last_frame_time = std::chrono::steady_clock::now();
-            const auto partial_batch_timeout = std::chrono::milliseconds(500);  // Process partial batch after 500ms of no new frames
+            // OPTIMIZATION: Reduced timeout from 500ms to 50ms for faster partial batch processing
+            // This prevents engines from waiting too long when queues are slow
+            const auto partial_batch_timeout = std::chrono::milliseconds(50);  // Process partial batch after 50ms of no new frames
             
             // Collect batch_size frames from the SAME video
             // CRITICAL: We need to ensure we don't lose frames when switching between videos
@@ -1401,7 +1403,9 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         batch_video_key = pending_video_key;
                     }
                 } else {
-                    if (!engine_group->frame_queue->pop(frame_data, 100)) {
+                    // OPTIMIZATION: Reduced queue pop timeout from 100ms to 10ms for faster response
+                    // This prevents engines from blocking too long when queues are empty
+                    if (!engine_group->frame_queue->pop(frame_data, 10)) {
                         if (stop_flag_) break;
                         
                         // Check if we should process partial batch (queue empty)
@@ -1424,16 +1428,13 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     last_frame_time = std::chrono::steady_clock::now();
                 }
                 
-                // CRITICAL: Clone the frame immediately after popping to ensure independence
-                // Even though frame_data is copied from the queue, cv::Mat uses reference counting
-                // We need to ensure the frame is completely independent before using it
-                // Use copyTo() to create a truly independent Mat with its own data buffer
-                cv::Mat independent_frame;
-                if (!frame_data.frame.empty()) {
-                    frame_data.frame.copyTo(independent_frame);
+                // OPTIMIZATION: Don't clone frame here - it will be cloned later when adding to batch_frames if needed
+                // frame_data is already a copy from the queue, so the frame is independent
+                // We only need to clone once at the final stage (when storing in batch_frames) to avoid multiple clones
+                // Clear frame here to save memory - it will be cloned later if debug mode is enabled
+                if (!debug_mode_) {
+                    frame_data.frame = cv::Mat();
                 }
-                // Replace frame_data.frame with the independent copy
-                frame_data.frame = independent_frame;
                 
                 // Build video_key: message_key + video_index uniquely identifies a video
                 std::string current_video_key = frame_data.message_key + "_v" + std::to_string(frame_data.video_index);
@@ -1673,19 +1674,12 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                             
                             // CRITICAL: Ensure batch_frames and batch_video_ids are sorted in the same order
                             // They should have the same size as other batch vectors if in debug mode
-                            // IMPORTANT: Use copyTo() during sorting to ensure each frame is truly independent
+                            // OPTIMIZATION: Frames are already cloned when added to batch_frames (line 1500),
+                            // so we can just move them during sorting - no need to clone again
                             if (debug_mode_) {
                                 if (src_idx < batch_frames.size() && src_idx < batch_video_ids.size()) {
-                                    // Use copyTo() to create a truly independent copy (more explicit than clone())
-                                    cv::Mat frame_copy;
-                                    if (!batch_frames[src_idx].empty()) {
-                                        batch_frames[src_idx].copyTo(frame_copy);
-                                    } else {
-                                        LOG_ERROR("Detector", "CRITICAL: Empty frame at src_idx=" + std::to_string(src_idx) + 
-                                                 " during sorting (engine=" + engine_group->engine_name + 
-                                                 ", detector=" + std::to_string(detector_id) + ")");
-                                    }
-                                    sorted_frames.push_back(frame_copy);
+                                    // Move frame (already cloned, so safe to move)
+                                    sorted_frames.push_back(std::move(batch_frames[src_idx]));
                                     sorted_video_ids.push_back(batch_video_ids[src_idx]);
                                 } else {
                                     // Size mismatch - this shouldn't happen, but handle gracefully
