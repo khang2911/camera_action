@@ -149,6 +149,7 @@ VideoReader::VideoReader(const std::string& video_path, int video_id, const Read
       hw_pix_fmt_(AV_PIX_FMT_NONE),
       use_hw_decode_(false),
       end_of_stream_(false),
+      stop_reason_(VideoStopReason::UNKNOWN),
       gpu_bgr_buffer_(nullptr),
       gpu_bgr_pitch_(0),
       gpu_buffer_width_(0),
@@ -180,6 +181,7 @@ VideoReader::VideoReader(const VideoClip& clip, int video_id, const ReaderOption
       hw_pix_fmt_(AV_PIX_FMT_NONE),
       use_hw_decode_(false),
       end_of_stream_(false),
+      stop_reason_(VideoStopReason::UNKNOWN),
       gpu_bgr_buffer_(nullptr),
       gpu_bgr_pitch_(0),
       gpu_buffer_width_(0),
@@ -225,14 +227,22 @@ bool VideoReader::initialize(const VideoClip* clip) {
     std::string decoder_type = use_hw_decode_ ? " [NVDEC]" : " [CPU]";
     LOG_INFO("VideoReader", std::string("Initialized reader for ") + video_path_ + decoder_type);
     
-    // Log time window information (simplified)
+    // Log time window information
     if (has_clip_metadata_ && clip_.has_time_window) {
         double time_window_duration = clip_.end_timestamp - clip_.start_timestamp;
         double video_end_time = clip_.moment_time + clip_.duration_seconds;
+        double actual_available_duration = std::max(0.0, std::min(clip_.end_timestamp, video_end_time) - std::max(clip_.start_timestamp, clip_.moment_time));
+        double expected_frames = actual_available_duration * fps_;
+        
+        std::string time_window_msg = "Time window: start_ts=" + std::to_string(clip_.start_timestamp) +
+                                     ", end_ts=" + std::to_string(clip_.end_timestamp) +
+                                     ", expected_frames~" + std::to_string(static_cast<int>(expected_frames));
+        LOG_INFO("VideoReader", time_window_msg);
+        
         bool video_ends_before_end_ts = video_end_time < clip_.end_timestamp;
         if (video_ends_before_end_ts) {
             double time_before_end = clip_.end_timestamp - video_end_time;
-            std::string warning_msg = "Time window: video ends " + std::to_string(time_before_end) + "s before end_ts";
+            std::string warning_msg = "  Video ends " + std::to_string(time_before_end) + "s before end_ts";
             LOG_INFO("VideoReader", warning_msg);
         }
     }
@@ -557,6 +567,7 @@ bool VideoReader::readFrame(cv::Mat& frame) {
                     continue;  // Try next frame
                 }
                 if (current_ts > clip_.end_timestamp) {
+                    stop_reason_ = VideoStopReason::END_OF_TIME_WINDOW;
                     std::string stop_msg = std::string("Reached end of time window: frames_read=") +
                                          std::to_string(actual_frame_position_);
                     LOG_INFO("VideoReader", stop_msg);
@@ -591,6 +602,7 @@ bool VideoReader::readFrame(cv::Mat& frame) {
         
         // If we couldn't send any packets and we're at end of stream, we're done
         if (!sent_any && end_of_stream_) {
+            stop_reason_ = VideoStopReason::END_OF_VIDEO_FILE;
             std::string eof_stop_msg = std::string("Reached end of video file: frames_read=") +
                                       std::to_string(actual_frame_position_);
             LOG_INFO("VideoReader", eof_stop_msg);

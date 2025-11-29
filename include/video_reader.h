@@ -23,6 +23,13 @@ extern "C" {
 #include "video_clip.h"
 #include "reader_options.h"
 
+enum class VideoStopReason {
+    UNKNOWN,
+    END_OF_TIME_WINDOW,  // Reached end of time window (normal completion)
+    END_OF_VIDEO_FILE,   // Video file ended before reaching end_ts (early termination)
+    ERROR                // Error occurred
+};
+
 class VideoReader {
 public:
     VideoReader(const std::string& video_path, int video_id, const ReaderOptions& options = ReaderOptions());
@@ -33,6 +40,7 @@ public:
     bool readFrame(cv::Mat& frame);
     int getFrameNumber() const { return frame_number_; }
     int getActualFramePosition() const;  // Get actual frame position in video file
+    VideoStopReason getStopReason() const { return stop_reason_; }
     int getVideoId() const { return video_id_; }
     std::string getVideoPath() const { return video_path_; }
     int getOriginalWidth() const { return original_width_; }
@@ -69,6 +77,7 @@ private:
     AVPixelFormat hw_pix_fmt_;
     bool use_hw_decode_;
     bool end_of_stream_;
+    VideoStopReason stop_reason_;
     uint8_t* gpu_bgr_buffer_ = nullptr;
     size_t gpu_bgr_pitch_ = 0;
     int gpu_buffer_width_ = 0;

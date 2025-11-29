@@ -994,6 +994,7 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
     cv::Mat frame;
     int frame_count = 0;
     int global_frame_number = frame_start_offset;  // Keep for internal tracking if needed
+    bool debug_mode_limit_reached_ = false;
     // Store previous frame for validation (only in debug mode to avoid overhead)
     cv::Mat prev_frame_for_validation;
     int prev_frame_number = -1;
@@ -1032,6 +1033,7 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
                 LOG_INFO("Reader", "Reader " + std::to_string(reader_id) + 
                          " stopping after processing " + std::to_string(frame_count) + " frames" +
                          " (max_frames_per_video=" + std::to_string(max_frames_per_video_) + ")");
+                debug_mode_limit_reached_ = true;
                 break;
             }
             
@@ -1145,8 +1147,20 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
     
     // Log frame count for this video
     int final_actual_pos = reader.getActualFramePosition();
+    VideoStopReason stop_reason = reader.getStopReason();
+    std::string status;
+    if (debug_mode_limit_reached_) {
+        status = "debug_limit (max_frames_per_video reached)";
+    } else if (stop_reason == VideoStopReason::END_OF_TIME_WINDOW) {
+        status = "normal (reached end of time window)";
+    } else if (stop_reason == VideoStopReason::END_OF_VIDEO_FILE) {
+        status = "early (video file ended)";
+    } else {
+        status = "unknown";
+    }
     LOG_INFO("Reader", "*** Reader " + std::to_string(reader_id) + " finished video " + video_key + " ***" +
-             " frames_read=" + std::to_string(frame_count) +
+             " status=" + status +
+             ", frames_read=" + std::to_string(frame_count) +
              ", actual_frame_position=" + std::to_string(final_actual_pos) +
              ", path=" + clip.path);
     
