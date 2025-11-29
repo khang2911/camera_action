@@ -1050,20 +1050,24 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
             // Store ROI offset for scaling detections back to true original frame
             frame_data.roi_offset_x = clip.has_roi ? clip.roi_offset_x : 0;
             frame_data.roi_offset_y = clip.has_roi ? clip.roi_offset_y : 0;
-            // Use timeout push to prevent indefinite blocking
-            // Increased timeout to 500ms to allow more buffering before blocking
+            // OPTIMIZATION: Use progressive timeouts to reduce blocking
+            // Try non-blocking first (10ms), then medium (50ms), then longer (200ms)
             // This prevents readers from blocking too quickly while still ensuring frames are processed
             if (raw_frame_queue_) {
-                if (!raw_frame_queue_->push(frame_data, 500)) {
-                    // Queue still full after longer timeout - this indicates a serious bottleneck
-                    // Log warning but still push (blocking) to ensure frame is not lost
-                    static thread_local int slow_push_count = 0;
-                    if (++slow_push_count % 100 == 0) {
-                        LOG_WARNING("Reader", "Reader " + std::to_string(reader_id) + 
-                                   " queue push slow (" + std::to_string(slow_push_count) + 
-                                   " times) - preprocessors may be bottleneck");
+                if (!raw_frame_queue_->push(frame_data, 10)) {
+                    if (!raw_frame_queue_->push(frame_data, 50)) {
+                        if (!raw_frame_queue_->push(frame_data, 200)) {
+                            // Queue still full after timeouts - this indicates a serious bottleneck
+                            // Log warning but still push (blocking) to ensure frame is not lost
+                            static thread_local int slow_push_count = 0;
+                            if (++slow_push_count % 100 == 0) {
+                                LOG_WARNING("Reader", "Reader " + std::to_string(reader_id) + 
+                                           " queue push slow (" + std::to_string(slow_push_count) + 
+                                           " times) - preprocessors may be bottleneck");
+                            }
+                            raw_frame_queue_->push(frame_data);  // Blocking push as last resort
+                        }
                     }
-                    raw_frame_queue_->push(frame_data);  // Blocking push as last resort
                 }
             }
             
@@ -1122,8 +1126,21 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             continue;
         }
         
-        // Push to each group's queue in order - use blocking push to maintain FIFO
-        // If one queue is full, we wait (with timeout) rather than skipping or buffering
+        // OPTIMIZATION: Use cv::Mat reference counting - frames are only read, never modified
+        // Preprocessors create new tensors, they don't modify the original frame
+        // Only clone if debug mode (where frames need to be preserved for visualization)
+        // This eliminates 3x frame cloning per frame (one per preprocess group)!
+        FrameData frame_copy = raw_frame;
+        if (debug_mode_ && !raw_frame.frame.empty()) {
+            // In debug mode, we need independent copies since frames are kept longer
+            cv::Mat frame_clone;
+            raw_frame.frame.copyTo(frame_clone);
+            frame_copy.frame = frame_clone;
+        }
+        // Otherwise, cv::Mat reference counting handles sharing safely
+        
+        // Push to each group's queue in order - use non-blocking push first to avoid delays
+        // If one queue is full, we wait (with shorter timeout) rather than blocking too long
         for (size_t g = 0; g < preprocess_groups_.size(); ++g) {
             auto& shared_group_ptr = preprocess_groups_[g];
             if (!shared_group_ptr || !shared_group_ptr->queue) {
@@ -1131,29 +1148,23 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             }
             auto* shared_group = shared_group_ptr.get();
             
-            // CRITICAL: Create a deep copy to ensure each group gets an independent frame
-            // cv::Mat uses reference counting, so assignment creates a shallow copy
-            FrameData frame_copy = raw_frame;
-            // Ensure the frame is a deep copy
-            if (!raw_frame.frame.empty()) {
-                cv::Mat frame_clone;
-                raw_frame.frame.copyTo(frame_clone);
-                frame_copy.frame = frame_clone;
-            }
-            
-            // Use blocking push (500ms timeout) to maintain strict FIFO order
-            // If queue is full, we wait rather than buffering out of order
-            if (!shared_group->queue->push(frame_copy, 500)) {
-                // Queue still full after timeout - log warning but continue
-                // This indicates a serious bottleneck, but we don't want to lose frames
-                static thread_local int slow_push_count = 0;
-                if (++slow_push_count % 100 == 0) {
-                    LOG_WARNING("Preprocessor", "Dispatcher " + std::to_string(worker_id) + 
-                               " queue push slow for group " + std::to_string(g) + 
-                               " (" + std::to_string(slow_push_count) + " times)");
+            // OPTIMIZATION: Use shorter timeouts to reduce blocking
+            // Try non-blocking first (10ms), then medium (50ms), then longer (200ms)
+            if (!shared_group->queue->push(frame_copy, 10)) {
+                if (!shared_group->queue->push(frame_copy, 50)) {
+                    if (!shared_group->queue->push(frame_copy, 200)) {
+                        // Queue still full after timeouts - log warning but continue
+                        // This indicates a serious bottleneck, but we don't want to lose frames
+                        static thread_local int slow_push_count = 0;
+                        if (++slow_push_count % 100 == 0) {
+                            LOG_WARNING("Preprocessor", "Dispatcher " + std::to_string(worker_id) + 
+                                       " queue push slow for group " + std::to_string(g) + 
+                                       " (" + std::to_string(slow_push_count) + " times)");
+                        }
+                        // Final blocking push to ensure frame is not lost
+                        shared_group->queue->push(frame_copy);
+                    }
                 }
-                // Final blocking push to ensure frame is not lost
-                shared_group->queue->push(frame_copy);
             }
         }
     }
