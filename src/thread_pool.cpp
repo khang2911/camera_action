@@ -1368,63 +1368,24 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             // This prevents frame order violations when multiple videos are processed concurrently
             std::string batch_video_key;  // Empty means no frames in batch yet
             
-            // Track when last frame was added to detect if queue is empty
-            auto last_frame_time = std::chrono::steady_clock::now();
-            // CRITICAL FIX: For 200 FPS, we MUST prioritize full batches
-            // Processing partial batches kills performance (e.g., 1 frame takes same time as 16)
-            // - Full batch (16 frames): process immediately
-            // - Large partial (>= 12 frames): wait up to 10ms for more frames
-            // - Medium partial (>= 8 frames): wait up to 20ms
-            // - Small partial (< 8 frames): wait up to 100ms to avoid wasting GPU
-            // This ensures we maximize GPU utilization and achieve target FPS
-            const auto min_frames_for_fast_process = (batch_size * 3) / 4;  // 75% of batch (12 for batch_size=16)
-            const auto min_frames_for_medium_process = batch_size / 2;  // 50% of batch (8 for batch_size=16)
+            // CRITICAL: Match prod branch - simple approach that works!
+            // Prod branch: Simple loop with 100ms timeout, NO partial batch processing
+            // Only processes when batch_tensors.size() == batch_size (exactly full batch)
+            // This works because with TensorRT fixed batch_size, partial batches waste GPU time
+            auto last_wait_log = std::chrono::steady_clock::now();
             
-            // Collect batch_size frames from the SAME video
-            // CRITICAL: We need to ensure we don't lose frames when switching between videos
-            // If we encounter a frame from a different video, we save it as pending_frame
-            // and process the current batch. On the next iteration, we'll use the pending_frame first.
+            // Collect batch_size frames (match prod branch exactly)
             while (static_cast<int>(batch_tensors.size()) < batch_size && !stop_flag_) {
-                // Check if we should process partial batch (queue empty for too long)
-                if (!batch_tensors.empty()) {
-                    auto now = std::chrono::steady_clock::now();
-                    auto time_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time);
-                    
-                    // CRITICAL: Adaptive timeout optimized for 200 FPS target
-                    // Full batches are critical - partial batches waste GPU time
-                    int current_batch_size = static_cast<int>(batch_tensors.size());
-                    int timeout_ms = 100;  // Default for small batches - wait longer to avoid wasting GPU
-                    if (current_batch_size >= min_frames_for_fast_process) {
-                        // We have at least 75% batch (12+ frames) - wait briefly (10ms) for full batch
-                        timeout_ms = 10;
-                    } else if (current_batch_size >= min_frames_for_medium_process) {
-                        // We have at least 50% batch (8+ frames) - wait a bit longer (20ms)
-                        timeout_ms = 20;
-                    }
-                    // else: small batch (< 8 frames) uses 100ms timeout to avoid wasting GPU on tiny batches
-                    
-                    if (time_since_last_frame.count() >= timeout_ms) {
-                        // Queue has been empty for too long - process partial batch
-                        LOG_DEBUG("Detector", "Processing partial batch of " + std::to_string(batch_tensors.size()) + 
-                                 " frames after " + std::to_string(time_since_last_frame.count()) + "ms timeout " +
-                                 "(engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
-                        break;  // Exit loop to process partial batch
-                    }
-                }
-                // First, check if we have a pending frame from previous iteration
-                // This ensures we don't lose frames when switching between videos
+                // First, check if we have a pending frame from previous iteration (video switching)
                 if (pending_frame.has_value()) {
                     frame_data = pending_frame.value();
                     pending_frame.reset();
-                    // Update timestamp when we use pending frame
-                    last_frame_time = std::chrono::steady_clock::now();
                     
-                    // OPTIMIZATION: Use pre-computed video_key from frame_data
                     const std::string& pending_video_key = frame_data.video_key;
                     
-                    // If we already have a batch from a different video, process it first
+                    // If we already have a batch from a different video, save pending frame and break
+                    // Current batch will be processed if it's full, otherwise continue next iteration
                     if (!batch_video_key.empty() && pending_video_key != batch_video_key && batch_tensors.size() > 0) {
-                        // Put pending frame back and process current batch
                         pending_frame = frame_data;
                         break;
                     }
@@ -1434,43 +1395,21 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         batch_video_key = pending_video_key;
                     }
                 } else {
-                    // CRITICAL: Use very short timeout (5ms) to quickly check for new frames
-                    // This allows us to collect full batches faster and achieve 200 FPS target
-                    // If queue is empty, we'll check timeout logic to decide if we should process partial batch
-                    if (!engine_group->frame_queue->pop(frame_data, 5)) {
+                    // Match prod branch: simple pop with 100ms timeout
+                    if (!engine_group->frame_queue->pop(frame_data, 100)) {
                         if (stop_flag_) break;
                         
-                        // Check if we should process partial batch (queue empty)
-                        if (!batch_tensors.empty()) {
-                            auto now = std::chrono::steady_clock::now();
-                            auto time_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time);
-                            
-                            // CRITICAL: Adaptive timeout optimized for 200 FPS target
-                            int current_batch_size = static_cast<int>(batch_tensors.size());
-                            int timeout_ms = 100;  // Default for small batches
-                            if (current_batch_size >= min_frames_for_fast_process) {
-                                // We have at least 75% batch (12+ frames) - wait briefly (10ms) for full batch
-                                timeout_ms = 10;
-                            } else if (current_batch_size >= min_frames_for_medium_process) {
-                                // We have at least 50% batch (8+ frames) - wait a bit longer (20ms)
-                                timeout_ms = 20;
-                            }
-                            // else: small batch (< 8 frames) uses 100ms timeout
-                            
-                            if (time_since_last_frame.count() >= timeout_ms) {
-                                // Queue has been empty for too long - process partial batch
-                                LOG_DEBUG("Detector", "Processing partial batch of " + std::to_string(batch_tensors.size()) + 
-                                         " frames after " + std::to_string(time_since_last_frame.count()) + "ms timeout " +
-                                         "(engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
-                                break;  // Exit loop to process partial batch
-                            }
+                        // Log waiting status periodically (every 5 seconds) - match prod branch
+                        auto now = std::chrono::steady_clock::now();
+                        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_wait_log).count();
+                        if (elapsed >= 5) {
+                            LOG_INFO("Detector", "[WAITING] Detector " + std::to_string(detector_id) + 
+                                     " (" + engine_group->engine_name + ") waiting for frames... " +
+                                     "(Queue size: " + std::to_string(engine_group->frame_queue->size()) + ")");
+                            last_wait_log = now;
                         }
-                        
-                        // Removed waiting log - too expensive, queue size check involves mutex
-                        continue;
+                        continue;  // Just continue waiting - prod branch doesn't process partial batches!
                     }
-                    // Update timestamp when we successfully pop a frame
-                    last_frame_time = std::chrono::steady_clock::now();
                 }
                 
                 // OPTIMIZATION: Don't clone frame here - it will be cloned later when adding to batch_frames if needed
@@ -1593,71 +1532,12 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 batch_record_dates.push_back(frame_data.record_date);
             }
             
-            // Process batches:
-            // - Full batches (exactly batch_size frames): always process
-            // - Partial batches: process if timeout reached (queue is likely empty or very slow)
-            bool is_full_batch = (static_cast<int>(batch_tensors.size()) == batch_size);
-            bool is_partial_batch_timeout = false;
-            if (!batch_tensors.empty() && !is_full_batch) {
-                auto now = std::chrono::steady_clock::now();
-                auto time_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time);
-                
-                // CRITICAL: Adaptive timeout optimized for 200 FPS target
-                int current_batch_size = static_cast<int>(batch_tensors.size());
-                int timeout_ms = 100;  // Default for small batches
-                if (current_batch_size >= min_frames_for_fast_process) {
-                    timeout_ms = 10;  // Wait briefly for full batch
-                } else if (current_batch_size >= min_frames_for_medium_process) {
-                    timeout_ms = 20;  // Wait a bit longer
-                }
-                is_partial_batch_timeout = (time_since_last_frame.count() >= timeout_ms);
-            }
-            bool should_process = is_full_batch || is_partial_batch_timeout;
-            
-            // Handle partial batches:
-            // - If stopping: clear to avoid memory leaks (frames will be lost)
-            // - If switching videos: PROCESS the partial batch (don't lose frames!)
-            // - If timeout: process the partial batch (queue is empty)
-            // - Otherwise: keep waiting for more frames (loop will continue)
-            if (!should_process && !batch_tensors.empty()) {
-                if (stop_flag_) {
-                    // System is stopping - clear partial batch
-                    batch_tensors.clear();
-                    batch_output_paths.clear();
-                    batch_frame_numbers.clear();
-                    batch_original_widths.clear();
-                    batch_original_heights.clear();
-                    batch_true_original_widths.clear();
-                    batch_true_original_heights.clear();
-                    batch_roi_offset_x.clear();
-                    batch_roi_offset_y.clear();
-                    batch_message_keys.clear();
-                    batch_video_indices.clear();
-                    batch_serials.clear();
-                    batch_record_ids.clear();
-                    batch_record_dates.clear();
-                    if (debug_mode_) {
-                        batch_frames.clear();
-                        batch_video_ids.clear();
-                    }
-                    continue;  // Skip to next iteration
-                } else if (pending_frame.has_value()) {
-                    // CRITICAL FIX: When switching videos, PROCESS the partial batch instead of clearing it
-                    // This prevents frame loss when videos finish with partial batches
-                    // The partial batch contains frames from the previous video that should be processed
-                    // Force processing of the partial batch by setting should_process = true
-                    should_process = true;
-                    // Note: We don't clear batch_video_key here - it will be reset when we process the new video's frames
-                }
-                // If should_process is still false, keep the partial batch and continue waiting for more frames
-                // (The loop will continue on next iteration)
-            }
-            
-            if (should_process && !batch_tensors.empty()) {
+            // CRITICAL: Match prod branch - ONLY process full batches!
+            // Prod branch: `if (batch_tensors.size() == batch_size)` - only processes exact full batches
+            // With TensorRT fixed batch_size, partial batches waste GPU time (1 frame = same time as 16 frames)
+            // Process batch ONLY if we have exactly batch_size frames (match prod branch exactly)
+            if (static_cast<int>(batch_tensors.size()) == batch_size) {
                 int actual_batch_count = static_cast<int>(batch_tensors.size());
-                
-                // Partial batch processing is normal operation (timeout or video switch)
-                // No need to log unless in debug mode
                 
                 // CRITICAL: Sort batch by frame number to ensure frames are processed in order
                 // This fixes the issue where multiple detectors pull frames from the same queue
