@@ -1869,11 +1869,15 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 
                 if (success) {
                     int actual_batch_size = static_cast<int>(batch_tensors.size());
+                    // CRITICAL: Only track inference time here, NOT frame count
+                    // Frame count is tracked in postprocessor after successful postprocessing
+                    // This prevents double-counting and ensures accurate statistics
                     {
                         std::lock_guard<std::mutex> lock(stats_.stats_mutex);
-                        stats_.frames_detected[engine_id] += actual_batch_size;
+                        // Only update timing statistics here, not frame counts
+                        // Frame counts are updated in postprocessor after successful processing
                         stats_.engine_total_time_ms[engine_id] += batch_time_ms;
-                        stats_.engine_frame_count[engine_id] += actual_batch_size;
+                        stats_.engine_frame_count[engine_id] += actual_batch_size;  // For timing average only
                     }
                     processed_count += actual_batch_size;
                     
@@ -1979,11 +1983,15 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             auto detect_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(detect_end - detect_start).count();
             
             if (success) {
+                // CRITICAL: Only track inference time here, NOT frame count
+                // Frame count is tracked in postprocessor after successful postprocessing
+                // This prevents double-counting and ensures accurate statistics
                 {
                     std::lock_guard<std::mutex> lock(stats_.stats_mutex);
-                    stats_.frames_detected[engine_id]++;
+                    // Only update timing statistics here, not frame counts
+                    // Frame counts are updated in postprocessor after successful processing
                     stats_.engine_total_time_ms[engine_id] += detect_time_ms;
-                    stats_.engine_frame_count[engine_id]++;
+                    stats_.engine_frame_count[engine_id]++;  // For timing average only
                 }
                 processed_count++;
                 
@@ -2019,6 +2027,7 @@ void ThreadPool::postprocessWorker(int worker_id) {
     
     PostProcessTask task;
     int processed_count = 0;
+    int skipped_count = 0;
     
     while (!stop_flag_) {
         if (!postprocess_queue_ || !postprocess_queue_->pop(task, 100)) {
@@ -2027,7 +2036,21 @@ void ThreadPool::postprocessWorker(int worker_id) {
         }
         
         if (!task.detector || task.raw_outputs.empty() || task.output_paths.empty()) {
-            LOG_ERROR("PostProcess", "Invalid post-processing task");
+            LOG_ERROR("PostProcess", "Invalid post-processing task: detector=" + 
+                     std::to_string(task.detector != nullptr) + 
+                     ", outputs=" + std::to_string(task.raw_outputs.size()) + 
+                     ", paths=" + std::to_string(task.output_paths.size()));
+            skipped_count++;
+            continue;
+        }
+        
+        // Validate task has all required fields
+        if (task.raw_outputs.size() != task.output_paths.size() || 
+            task.raw_outputs.size() != task.frame_numbers.size()) {
+            LOG_ERROR("PostProcess", "Task size mismatch: outputs=" + std::to_string(task.raw_outputs.size()) + 
+                     ", paths=" + std::to_string(task.output_paths.size()) + 
+                     ", frames=" + std::to_string(task.frame_numbers.size()));
+            skipped_count++;
             continue;
         }
         
@@ -2190,31 +2213,36 @@ void ThreadPool::postprocessWorker(int worker_id) {
             postprocess_end - postprocess_start).count();
         
         // Update postprocessing statistics
-        stats_.frames_postprocessed += static_cast<int>(task.raw_outputs.size());
+        int frames_in_task = static_cast<int>(task.raw_outputs.size());
+        stats_.frames_postprocessed += frames_in_task;
         stats_.postprocessor_total_time_ms += postprocess_time_ms;
         
+        // CRITICAL: Only count frames as "detected" after successful postprocessing
+        // This is the single source of truth for frame counts
+        // Note: engine_total_time_ms and engine_frame_count are already updated in detector
+        // for inference timing purposes - we don't update them here to avoid double-counting
         if (all_success) {
             {
                 std::lock_guard<std::mutex> lock(stats_.stats_mutex);
                 if (task.engine_id >= 0 && task.engine_id < static_cast<int>(stats_.frames_detected.size())) {
-                    stats_.frames_detected[task.engine_id] += static_cast<int>(task.raw_outputs.size());
-                    stats_.engine_total_time_ms[task.engine_id] += postprocess_time_ms;
-                    stats_.engine_frame_count[task.engine_id] += static_cast<int>(task.raw_outputs.size());
+                    // This is where frames are actually counted as successfully processed
+                    stats_.frames_detected[task.engine_id] += frames_in_task;
                 }
             }
-            processed_count += static_cast<int>(task.raw_outputs.size());
+            processed_count += frames_in_task;
         } else {
             {
                 std::lock_guard<std::mutex> lock(stats_.stats_mutex);
                 if (task.engine_id >= 0 && task.engine_id < static_cast<int>(stats_.frames_failed.size())) {
-                    stats_.frames_failed[task.engine_id] += static_cast<int>(task.raw_outputs.size());
+                    stats_.frames_failed[task.engine_id] += frames_in_task;
                 }
             }
         }
     }
     
     LOG_INFO("PostProcess", "Post-processing thread " + std::to_string(worker_id) + 
-             " finished (" + std::to_string(processed_count) + " frames processed)");
+             " finished (" + std::to_string(processed_count) + " frames processed" +
+             (skipped_count > 0 ? ", " + std::to_string(skipped_count) + " tasks skipped" : "") + ")");
 }
 
 void ThreadPool::redisOutputWorker() {
