@@ -1374,6 +1374,11 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             // This works because with TensorRT fixed batch_size, partial batches waste GPU time
             auto last_wait_log = std::chrono::steady_clock::now();
             
+            // Track consecutive frames from different videos to detect when current video has finished
+            // If we keep getting frames from different videos, current video is likely done
+            int consecutive_different_video_frames = 0;
+            const int MAX_DIFFERENT_VIDEO_FRAMES = 10;  // If we get 10 frames from different videos, current video is done
+            
             // Collect batch_size frames (match prod branch exactly)
             while (static_cast<int>(batch_tensors.size()) < batch_size && !stop_flag_) {
                 // First, check if we have a pending frame from previous iteration (video switching)
@@ -1383,11 +1388,31 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     
                     const std::string& pending_video_key = frame_data.video_key;
                     
-                    // If we already have a batch from a different video, save pending frame and break
-                    // Current batch will be processed if it's full, otherwise continue next iteration
+                    // If we already have a batch from a different video, check if current video is done
                     if (!batch_video_key.empty() && pending_video_key != batch_video_key && batch_tensors.size() > 0) {
-                        pending_frame = frame_data;
-                        break;
+                        consecutive_different_video_frames++;
+                        
+                        // If we've gotten too many frames from different videos, current video is likely finished
+                        // Process the partial batch (will be padded with zeros by TensorRT) instead of losing frames
+                        if (consecutive_different_video_frames >= MAX_DIFFERENT_VIDEO_FRAMES) {
+                            LOG_DEBUG("Detector", "Current video appears finished (got " + 
+                                     std::to_string(consecutive_different_video_frames) + 
+                                     " consecutive frames from different videos). " +
+                                     "Processing partial batch of " + std::to_string(batch_tensors.size()) + 
+                                     " frames (will be padded with zeros) (engine=" + engine_group->engine_name + 
+                                     ", detector=" + std::to_string(detector_id) + ")");
+                            // Save the pending frame for next batch
+                            pending_frame = frame_data;
+                            // Break to process the partial batch (will be padded to batch_size by TensorRT)
+                            break;
+                        } else {
+                            // Save pending frame and continue collecting from current video
+                            pending_frame = frame_data;
+                            continue;  // Skip pending frame, continue collecting from current video
+                        }
+                    } else {
+                        // Reset counter when we get a frame from current video
+                        consecutive_different_video_frames = 0;
                     }
                     
                     // Use the pending frame (either starting new batch or continuing current batch)
@@ -1427,18 +1452,35 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 // If this is the first frame, set the batch video_key
                 if (batch_video_key.empty()) {
                     batch_video_key = current_video_key;
+                    consecutive_different_video_frames = 0;  // Reset counter
                 }
-                // If this frame is from a different video, save it for next batch and process current batch
+                // If this frame is from a different video, save it for next batch
+                // CRITICAL: Don't break here - continue collecting from current video until we have full batch
+                // But track consecutive different video frames to detect when current video is done
                 else if (current_video_key != batch_video_key) {
-                    // If we already have frames in the batch, save this frame and process current batch
-                    if (batch_tensors.size() > 0) {
-                        pending_frame = frame_data;
-                        break;  // Exit loop to process current batch
-                    }
+                    consecutive_different_video_frames++;
                     
-                    // If batch was empty, just start new batch with this frame
-                    batch_video_key = current_video_key;
-                    // Continue to process this frame (it's already in frame_data)
+                    // If we've gotten too many frames from different videos, current video is likely finished
+                    // Process the partial batch (will be padded with zeros by TensorRT) instead of losing frames
+                    if (consecutive_different_video_frames >= MAX_DIFFERENT_VIDEO_FRAMES) {
+                        LOG_DEBUG("Detector", "Current video appears finished (got " + 
+                                 std::to_string(consecutive_different_video_frames) + 
+                                 " consecutive frames from different videos). " +
+                                 "Processing partial batch of " + std::to_string(batch_tensors.size()) + 
+                                 " frames (will be padded with zeros) (engine=" + engine_group->engine_name + 
+                                 ", detector=" + std::to_string(detector_id) + ")");
+                        // Save the new video frame for next batch
+                        pending_frame = frame_data;
+                        // Break to process the partial batch (will be padded to batch_size by TensorRT)
+                        break;
+                    } else {
+                        // Save this frame for next batch and continue collecting current batch
+                        pending_frame = frame_data;
+                        continue;  // Skip this frame, continue collecting from current video
+                    }
+                } else {
+                    // Reset counter when we get a frame from current video
+                    consecutive_different_video_frames = 0;
                 }
                 
                 // OPTIMIZATION: Cache output paths to avoid expensive string operations
@@ -1532,11 +1574,32 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 batch_record_dates.push_back(frame_data.record_date);
             }
             
-            // CRITICAL: Match prod branch - ONLY process full batches!
-            // Prod branch: `if (batch_tensors.size() == batch_size)` - only processes exact full batches
-            // With TensorRT fixed batch_size, partial batches waste GPU time (1 frame = same time as 16 frames)
-            // Process batch ONLY if we have exactly batch_size frames (match prod branch exactly)
+            // CRITICAL: Process batches - full batches OR partial batches when video finishes
+            // Prod branch: Only processes full batches (batch_tensors.size() == batch_size)
+            // But we also need to process partial batches when video finishes to avoid losing frames
+            // TensorRT will pad partial batches with zeros automatically in getRawInferenceOutput
+            bool should_process = false;
             if (static_cast<int>(batch_tensors.size()) == batch_size) {
+                // Full batch - always process (matches prod branch)
+                should_process = true;
+            } else if (!batch_tensors.empty() && static_cast<int>(batch_tensors.size()) < batch_size) {
+                // Partial batch - only process if we detected video finished (consecutive different video frames)
+                // This ensures we don't lose frames when a video finishes
+                // TensorRT will pad with zeros, so we get results for the real frames
+                if (pending_frame.has_value()) {
+                    const std::string& pending_video_key = pending_frame.value().video_key;
+                    if (!batch_video_key.empty() && pending_video_key != batch_video_key) {
+                        // We broke the loop because current video finished - process partial batch
+                        should_process = true;
+                        LOG_DEBUG("Detector", "Processing partial batch of " + std::to_string(batch_tensors.size()) + 
+                                 " frames from finished video (will be padded to " + std::to_string(batch_size) + 
+                                 " with zeros) (engine=" + engine_group->engine_name + 
+                                 ", detector=" + std::to_string(detector_id) + ")");
+                    }
+                }
+            }
+            
+            if (should_process && !batch_tensors.empty()) {
                 int actual_batch_count = static_cast<int>(batch_tensors.size());
                 
                 // CRITICAL: Sort batch by frame number to ensure frames are processed in order
