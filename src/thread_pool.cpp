@@ -1370,13 +1370,15 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             
             // Track when last frame was added to detect if queue is empty
             auto last_frame_time = std::chrono::steady_clock::now();
-            // OPTIMIZATION: More aggressive timeout to process batches faster
-            // - Process immediately when we have full batch
-            // - For large partial batches (>= 75% full), use short timeout (50ms)
-            // - For medium batches (>= 50% full), use medium timeout (100ms)  
-            // - For small batches (< 50% full), use longer timeout (200ms) but not too long
-            const auto min_frames_for_fast_process = (batch_size * 3) / 4;  // 75% of batch
-            const auto min_frames_for_medium_process = batch_size / 2;  // 50% of batch
+            // CRITICAL FIX: For 200 FPS, we MUST prioritize full batches
+            // Processing partial batches kills performance (e.g., 1 frame takes same time as 16)
+            // - Full batch (16 frames): process immediately
+            // - Large partial (>= 12 frames): wait up to 10ms for more frames
+            // - Medium partial (>= 8 frames): wait up to 20ms
+            // - Small partial (< 8 frames): wait up to 100ms to avoid wasting GPU
+            // This ensures we maximize GPU utilization and achieve target FPS
+            const auto min_frames_for_fast_process = (batch_size * 3) / 4;  // 75% of batch (12 for batch_size=16)
+            const auto min_frames_for_medium_process = batch_size / 2;  // 50% of batch (8 for batch_size=16)
             
             // Collect batch_size frames from the SAME video
             // CRITICAL: We need to ensure we don't lose frames when switching between videos
@@ -1388,17 +1390,18 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     auto now = std::chrono::steady_clock::now();
                     auto time_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time);
                     
-                    // Adaptive timeout: more aggressive to process batches faster
+                    // CRITICAL: Adaptive timeout optimized for 200 FPS target
+                    // Full batches are critical - partial batches waste GPU time
                     int current_batch_size = static_cast<int>(batch_tensors.size());
-                    int timeout_ms = 200;  // Default for small batches
+                    int timeout_ms = 100;  // Default for small batches - wait longer to avoid wasting GPU
                     if (current_batch_size >= min_frames_for_fast_process) {
-                        // We have at least 75% batch - process very quickly (50ms)
-                        timeout_ms = 50;
+                        // We have at least 75% batch (12+ frames) - wait briefly (10ms) for full batch
+                        timeout_ms = 10;
                     } else if (current_batch_size >= min_frames_for_medium_process) {
-                        // We have at least 50% batch - use medium timeout (100ms)
-                        timeout_ms = 100;
+                        // We have at least 50% batch (8+ frames) - wait a bit longer (20ms)
+                        timeout_ms = 20;
                     }
-                    // else: small batch uses 200ms timeout (not 300ms to avoid waiting too long)
+                    // else: small batch (< 8 frames) uses 100ms timeout to avoid wasting GPU on tiny batches
                     
                     if (time_since_last_frame.count() >= timeout_ms) {
                         // Queue has been empty for too long - process partial batch
@@ -1416,8 +1419,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     // Update timestamp when we use pending frame
                     last_frame_time = std::chrono::steady_clock::now();
                     
-                    // Build video_key for pending frame
-                    std::string pending_video_key = frame_data.message_key + "_v" + std::to_string(frame_data.video_index);
+                    // OPTIMIZATION: Use pre-computed video_key from frame_data
+                    const std::string& pending_video_key = frame_data.video_key;
                     
                     // If we already have a batch from a different video, process it first
                     if (!batch_video_key.empty() && pending_video_key != batch_video_key && batch_tensors.size() > 0) {
@@ -1431,10 +1434,10 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         batch_video_key = pending_video_key;
                     }
                 } else {
-                    // OPTIMIZATION: Use longer timeout (50ms) to reduce failed pops and timeout checks
-                    // With queues almost full, pops should succeed quickly, but we need enough timeout
-                    // to avoid excessive failed pops when queues are temporarily empty
-                    if (!engine_group->frame_queue->pop(frame_data, 50)) {
+                    // CRITICAL: Use very short timeout (5ms) to quickly check for new frames
+                    // This allows us to collect full batches faster and achieve 200 FPS target
+                    // If queue is empty, we'll check timeout logic to decide if we should process partial batch
+                    if (!engine_group->frame_queue->pop(frame_data, 5)) {
                         if (stop_flag_) break;
                         
                         // Check if we should process partial batch (queue empty)
@@ -1442,17 +1445,17 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                             auto now = std::chrono::steady_clock::now();
                             auto time_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time);
                             
-                            // Adaptive timeout: more aggressive to process batches faster
+                            // CRITICAL: Adaptive timeout optimized for 200 FPS target
                             int current_batch_size = static_cast<int>(batch_tensors.size());
-                            int timeout_ms = 200;  // Default for small batches
+                            int timeout_ms = 100;  // Default for small batches
                             if (current_batch_size >= min_frames_for_fast_process) {
-                                // We have at least 75% batch - process very quickly (50ms)
-                                timeout_ms = 50;
+                                // We have at least 75% batch (12+ frames) - wait briefly (10ms) for full batch
+                                timeout_ms = 10;
                             } else if (current_batch_size >= min_frames_for_medium_process) {
-                                // We have at least 50% batch - use medium timeout (100ms)
-                                timeout_ms = 100;
+                                // We have at least 50% batch (8+ frames) - wait a bit longer (20ms)
+                                timeout_ms = 20;
                             }
-                            // else: small batch uses 200ms timeout
+                            // else: small batch (< 8 frames) uses 100ms timeout
                             
                             if (time_since_last_frame.count() >= timeout_ms) {
                                 // Queue has been empty for too long - process partial batch
@@ -1478,9 +1481,9 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     frame_data.frame = cv::Mat();
                 }
                 
-                // Build video_key: message_key + video_index uniquely identifies a video
-                // OPTIMIZATION: Use string_view or avoid string concatenation if possible
-                std::string current_video_key = frame_data.message_key + "_v" + std::to_string(frame_data.video_index);
+                // OPTIMIZATION: Use pre-computed video_key from frame_data instead of recomputing
+                // video_key is already computed in reader and stored in FrameData
+                const std::string& current_video_key = frame_data.video_key;
                 
                 // If this is the first frame, set the batch video_key
                 if (batch_video_key.empty()) {
@@ -1499,13 +1502,25 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     // Continue to process this frame (it's already in frame_data)
                 }
                 
-                // OPTIMIZATION: Generate output path - this is expensive, but needed for each frame
-                // Consider caching or optimizing generateOutputPath if it's a bottleneck
-                std::string serial_value = serialPart(frame_data.serial, frame_data.message_key, frame_data.video_id);
-                std::string record_value = recordPart(frame_data.record_id, frame_data.message_key, frame_data.video_id);
-                std::string output_path = generateOutputPath(
-                    serial_value, record_value, frame_data.record_date, engine_group->engine_name,
-                    frame_data.video_index);
+                // OPTIMIZATION: Cache output paths to avoid expensive string operations
+                // Use (video_key, engine_name) as cache key - video_key already computed and stored in frame_data
+                std::string cache_key = frame_data.video_key + "_" + engine_group->engine_name;
+                std::string output_path;
+                {
+                    std::lock_guard<std::mutex> lock(path_cache_mutex_);
+                    auto it = output_path_cache_.find(cache_key);
+                    if (it != output_path_cache_.end()) {
+                        output_path = it->second;
+                    } else {
+                        // Cache miss - generate path and cache it
+                        std::string serial_value = serialPart(frame_data.serial, frame_data.message_key, frame_data.video_id);
+                        std::string record_value = recordPart(frame_data.record_id, frame_data.message_key, frame_data.video_id);
+                        output_path = generateOutputPath(
+                            serial_value, record_value, frame_data.record_date, engine_group->engine_name,
+                            frame_data.video_index);
+                        output_path_cache_[cache_key] = output_path;
+                    }
+                }
                 
                 std::shared_ptr<std::vector<float>> tensor = frame_data.preprocessed_data;
                 if (!tensor) {
@@ -1587,13 +1602,13 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 auto now = std::chrono::steady_clock::now();
                 auto time_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time);
                 
-                // Adaptive timeout check (same logic as in collection loop)
+                // CRITICAL: Adaptive timeout optimized for 200 FPS target
                 int current_batch_size = static_cast<int>(batch_tensors.size());
-                int timeout_ms = 200;  // Default for small batches
+                int timeout_ms = 100;  // Default for small batches
                 if (current_batch_size >= min_frames_for_fast_process) {
-                    timeout_ms = 50;
+                    timeout_ms = 10;  // Wait briefly for full batch
                 } else if (current_batch_size >= min_frames_for_medium_process) {
-                    timeout_ms = 100;
+                    timeout_ms = 20;  // Wait a bit longer
                 }
                 is_partial_batch_timeout = (time_since_last_frame.count() >= timeout_ms);
             }
@@ -1967,16 +1982,27 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 continue;
             }
             
-            // Generate output path with engine name
-            std::string serial_value = serialPart(frame_data.serial, frame_data.message_key, frame_data.video_id);
-            std::string record_value = recordPart(frame_data.record_id, frame_data.message_key, frame_data.video_id);
-            std::string output_path = generateOutputPath(
-                serial_value,
-                record_value,
-                frame_data.record_date,
-                engine_group->engine_name,
-                frame_data.video_index
-            );
+            // OPTIMIZATION: Cache output paths to avoid expensive string operations
+            std::string cache_key = frame_data.video_key + "_" + engine_group->engine_name;
+            std::string output_path;
+            {
+                std::lock_guard<std::mutex> lock(path_cache_mutex_);
+                auto it = output_path_cache_.find(cache_key);
+                if (it != output_path_cache_.end()) {
+                    output_path = it->second;
+                } else {
+                    // Cache miss - generate path and cache it
+                    std::string serial_value = serialPart(frame_data.serial, frame_data.message_key, frame_data.video_id);
+                    std::string record_value = recordPart(frame_data.record_id, frame_data.message_key, frame_data.video_id);
+                    output_path = generateOutputPath(
+                        serial_value,
+                        record_value,
+                        frame_data.record_date,
+                        engine_group->engine_name,
+                        frame_data.video_index);
+                    output_path_cache_[cache_key] = output_path;
+                }
+            }
             
             // Run YOLO detection on GPU (TensorRT) - frame will be preprocessed by detector
             // Note: Multiple detector threads may write to the same file (same video+engine)

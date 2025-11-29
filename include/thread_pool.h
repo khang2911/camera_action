@@ -271,6 +271,11 @@ private:
     std::vector<long long> prev_frames_detected_;
     mutable std::mutex prev_stats_mutex_;
     
+    // OPTIMIZATION: Path cache to avoid string operations in hot path
+    // Cache key: (video_key, engine_name) -> output_path
+    std::unordered_map<std::string, std::string> output_path_cache_;
+    std::mutex path_cache_mutex_;
+    
     void readerWorker(int reader_id);
     void readerWorkerRedis(int reader_id);
     void preprocessorWorker(int worker_id);

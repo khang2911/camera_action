@@ -320,8 +320,13 @@ bool YOLODetector::getRawInferenceOutput(const std::vector<std::shared_ptr<std::
         return false;
     }
     
-    // Set CUDA device
-    cudaSetDevice(gpu_id_);
+    // OPTIMIZATION: Only set CUDA device if needed (device is set once per thread at initialization)
+    // Verify device is correct instead of always setting it
+    int current_device;
+    cudaGetDevice(&current_device);
+    if (current_device != gpu_id_) {
+        cudaSetDevice(gpu_id_);
+    }
     
     // Pad inputs to batch_size_ if needed (for partial batches)
     std::vector<std::shared_ptr<std::vector<float>>> padded_inputs = inputs;
@@ -386,8 +391,12 @@ bool YOLODetector::copyInputsToDevice(const std::vector<std::shared_ptr<std::vec
         return false;
     }
     
-    // Ensure correct device is active before copying data
-    cudaSetDevice(gpu_id_);
+    // OPTIMIZATION: Only set CUDA device if needed (device is set once per thread at initialization)
+    int current_device;
+    cudaGetDevice(&current_device);
+    if (current_device != gpu_id_) {
+        cudaSetDevice(gpu_id_);
+    }
     
     size_t single_input_bytes = input_size_ / batch_size_;
     
