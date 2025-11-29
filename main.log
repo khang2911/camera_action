@@ -1,0 +1,1457 @@
+[Config] Debug mode: disabled
+[Config] Max frames per video: 160
+unix_timestamp 1763465613.804514 ---->2025-11-18T18:33:33.8045144+07:00
+unix_timestamp 1763465778.232176 ---->2025-11-18T18:36:18.2321758+07:00
+record timeeeeeeeeeeee164.428
+unix_timestamp 1763465529.869852 ---->2025-11-18T18:32:09.869852+07:00
+unix_timestamp 1763465755.449142 ---->2025-11-18T18:35:55.4491415+07:00
+record timeeeeeeeeeeee225.579
+unix_timestamp 1763465157.259948 ---->2025-11-18T18:25:57.2599479+07:00
+unix_timestamp 1763465602.539695 ---->2025-11-18T18:33:22.5396951+07:00
+record timeeeeeeeeeeee445.28
+unix_timestamp 1763465209.250675 ---->2025-11-18T18:26:49.2506752+07:00
+unix_timestamp 1763465557.695076 ---->2025-11-18T18:32:37.6950758+07:00
+record timeeeeeeeeeeee348.444
+unix_timestamp 1763465279.305769 ---->2025-11-18T18:27:59.3057693+07:00
+unix_timestamp 1763465594.783370 ---->2025-11-18T18:33:14.7833699+07:00
+record timeeeeeeeeeeee315.478
+unix_timestamp 1763465283.180170 ---->2025-11-18T18:28:03.1801698+07:00
+unix_timestamp 1763465640.848424 ---->2025-11-18T18:34:00.8484239+07:00
+record timeeeeeeeeeeee357.668
+unix_timestamp 1763465119.744202 ---->2025-11-18T18:25:19.7442024+07:00
+unix_timestamp 1763465578.609340 ---->2025-11-18T18:32:58.6093402+07:00
+record timeeeeeeeeeeee458.865
+unix_timestamp 1763465481.199778 ---->2025-11-18T18:31:21.1997783+07:00
+unix_timestamp 1763465637.938864 ---->2025-11-18T18:33:57.9388643+07:00
+record timeeeeeeeeeeee156.739
+unix_timestamp 1763465308.603547 ---->2025-11-18T18:28:28.6035466+07:00
+unix_timestamp 1763465620.272723 ---->2025-11-18T18:33:40.2727233+07:00
+record timeeeeeeeeeeee311.669
+unix_timestamp 1763465320.185698 ---->2025-11-18T18:28:40.1856982+07:00
+unix_timestamp 1763465523.120602 ---->2025-11-18T18:32:03.1206018+07:00
+record timeeeeeeeeeeee202.935
+unix_timestamp 1763465284.256783 ---->2025-11-18T18:28:04.2567827+07:00
+unix_timestamp 1763465521.304426 ---->2025-11-18T18:32:01.3044256+07:00
+record timeeeeeeeeeeee237.048
+unix_timestamp 1763465361.583183 ---->2025-11-18T18:29:21.5831827+07:00
+unix_timestamp 1763465484.389828 ---->2025-11-18T18:31:24.3898277+07:00
+record timeeeeeeeeeeee122.807
+unix_timestamp 1763464929.658927 ---->2025-11-18T18:22:09.6589272+07:00
+unix_timestamp 1763465524.563154 ---->2025-11-18T18:32:04.5631541+07:00
+record timeeeeeeeeeeee594.904
+unix_timestamp 1763465383.334395 ---->2025-11-18T18:29:43.3343953+07:00
+unix_timestamp 1763465520.420145 ---->2025-11-18T18:32:00.4201445+07:00
+record timeeeeeeeeeeee137.086
+unix_timestamp 1763465440.135817 ---->2025-11-18T18:30:40.1358168+07:00
+unix_timestamp 1763465455.626008 ---->2025-11-18T18:30:55.626008+07:00
+record timeeeeeeeeeeee15.4902
+unix_timestamp 1763467888.848091 ---->2025-11-18T19:11:28.8480914+07:00
+unix_timestamp 1763468696.185458 ---->2025-11-18T19:24:56.1854576+07:00
+record timeeeeeeeeeeee807.337
+unix_timestamp 1763467085.283497 ---->2025-11-18T18:58:05.2834974+07:00
+unix_timestamp 1763467481.203891 ---->2025-11-18T19:04:41.203891+07:00
+record timeeeeeeeeeeee395.92
+unix_timestamp 1763467382.182866 ---->2025-11-18T19:03:02.1828659+07:00
+unix_timestamp 1763467598.285591 ---->2025-11-18T19:06:38.2855909+07:00
+record timeeeeeeeeeeee216.103
+unix_timestamp 1763467234.268299 ---->2025-11-18T19:00:34.2682987+07:00
+unix_timestamp 1763467445.055465 ---->2025-11-18T19:04:05.0554652+07:00
+record timeeeeeeeeeeee210.787
+unix_timestamp 1763467143.903209 ---->2025-11-18T18:59:03.9032092+07:00
+unix_timestamp 1763467514.454159 ---->2025-11-18T19:05:14.4541588+07:00
+record timeeeeeeeeeeee370.551
+unix_timestamp 1763467181.968707 ---->2025-11-18T18:59:41.9687072+07:00
+unix_timestamp 1763467513.216574 ---->2025-11-18T19:05:13.2165745+07:00
+record timeeeeeeeeeeee331.248
+unix_timestamp 1763467709.254294 ---->2025-11-18T19:08:29.254294+07:00
+unix_timestamp 1763468137.287227 ---->2025-11-18T19:15:37.2872274+07:00
+record timeeeeeeeeeeee428.033
+[2025-11-29 20:21:38.130] [INFO ] [Main] === AI Camera Solution ===
+[2025-11-29 20:21:38.131] [INFO ] [Main] Config file: config.yaml
+[2025-11-29 20:21:38.131] [INFO ] [Main] Number of reader threads: 5
+[2025-11-29 20:21:38.131] [INFO ] [Main] Number of preprocessor threads: 45
+[2025-11-29 20:21:38.131] [INFO ] [Main] Number of engines: 3
+[2025-11-29 20:21:38.131] [INFO ] [Main] Engine 0 (alcohol): /workspace/khangtd6/longchau_vaccine/action_c/weights/alcohol/2025-11-18_batch_16_640x640_fp16.engine [type=detection, detectors=1, batch_size=16, input_size=640x640, conf_threshold=0.200000, nms_threshold=0.550000, gpu_id=0]
+[2025-11-29 20:21:38.131] [INFO ] [Main] Engine 1 (hand): /workspace/khangtd6/longchau_vaccine/action_c/weights/hand/2025-11-18_batch_16_864x864_fp16.engine [type=detection, detectors=1, batch_size=16, input_size=864x864, conf_threshold=0.200000, nms_threshold=0.600000, gpu_id=0]
+[2025-11-29 20:21:38.131] [INFO ] [Main] Engine 2 (pose): /workspace/khangtd6/longchau_vaccine/action_c/weights/pose/2025-11-18_batch_16_640x640_fp16.engine [type=pose, detectors=2, batch_size=16, input_size=640x640, conf_threshold=0.400000, nms_threshold=0.550000, gpu_id=0]
+[2025-11-29 20:21:38.131] [INFO ] [Main] Output directory: /workspace/khangtd6/longchau_vaccine/action_c/outputs/bins/
+[2025-11-29 20:21:38.131] [INFO ] [Main] === REDIS QUEUE MODE ===
+[2025-11-29 20:21:38.131] [INFO ] [Main] Redis host: 172.19.0.6
+[2025-11-29 20:21:38.131] [INFO ] [Main] Redis port: 6379
+[2025-11-29 20:21:38.131] [INFO ] [Main] Redis DB: 0
+[2025-11-29 20:21:38.131] [INFO ] [Main] Input queue: ml#vaccine_monitor_test
+[2025-11-29 20:21:38.131] [INFO ] [Main] Output queue: ml#vaccine_detection_test
+[2025-11-29 20:21:38.134] [INFO ] [Redis] Connected to Redis at 172.19.0.6:6379
+[2025-11-29 20:21:38.135] [INFO ] [Redis] Connected to Redis at 172.19.0.6:6379
+[2025-11-29 20:21:38.135] [INFO ] [ThreadPool] Initializing engine alcohol with 1 detector threads (queue_size=500)
+[TensorRT] Using an engine plan file across different models of devices is not recommended and is likely to affect performance or even cause errors.
+[TensorRT] CUDA lazy loading is not enabled. Enabling it can significantly reduce device memory usage. See `CUDA_MODULE_LOADING` in https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#env-vars
+[2025-11-29 20:21:45.130] [INFO ] [ThreadPool] Initializing engine hand with 1 detector threads (queue_size=500)
+[TensorRT] Using an engine plan file across different models of devices is not recommended and is likely to affect performance or even cause errors.
+[TensorRT] CUDA lazy loading is not enabled. Enabling it can significantly reduce device memory usage. See `CUDA_MODULE_LOADING` in https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#env-vars
+[2025-11-29 20:21:45.242] [INFO ] [ThreadPool] Initializing engine pose with 2 detector threads (queue_size=500)
+[TensorRT] Using an engine plan file across different models of devices is not recommended and is likely to affect performance or even cause errors.
+[TensorRT] CUDA lazy loading is not enabled. Enabling it can significantly reduce device memory usage. See `CUDA_MODULE_LOADING` in https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#env-vars
+[TensorRT] Using an engine plan file across different models of devices is not recommended and is likely to affect performance or even cause errors.
+[TensorRT] CUDA lazy loading is not enabled. Enabling it can significantly reduce device memory usage. See `CUDA_MODULE_LOADING` in https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#env-vars
+[2025-11-29 20:21:46.854] [INFO ] [ThreadPool] ThreadPool initialized (Redis mode) with 5 reader threads, 4 dispatcher threads, 45 shared preprocess workers, and 3 engines
+[2025-11-29 20:21:46.854] [INFO ] [Main] Starting processing...
+[2025-11-29 20:21:46.854] [INFO ] [ThreadPool] Starting processing...
+[2025-11-29 20:21:46.855] [INFO ] [Reader] Reader thread 2 started
+[2025-11-29 20:21:46.855] [INFO ] [Reader] Reader thread 2 started (Redis mode)
+[2025-11-29 20:21:46.855] [INFO ] [Reader] Reader thread 2 waiting for messages from queue: ml#vaccine_monitor_test
+[2025-11-29 20:21:46.855] [INFO ] [Reader] Reader thread 4 started
+[2025-11-29 20:21:46.855] [INFO ] [Reader] Reader thread 4 started (Redis mode)
+[2025-11-29 20:21:46.855] [INFO ] [Reader] Reader thread 4 waiting for messages from queue: ml#vaccine_monitor_test
+[2025-11-29 20:21:46.855] [INFO ] [Preprocessor] Preprocess dispatcher thread 0 started
+[2025-11-29 20:21:46.855] [INFO ] [Reader] Reader thread 1 started
+[2025-11-29 20:21:46.855] [INFO ] [Reader] Reader thread 1 started (Redis mode)
+[2025-11-29 20:21:46.855] [INFO ] [Reader] Reader thread 1 waiting for messages from queue: ml#vaccine_monitor_test
+[2025-11-29 20:21:46.855] [INFO ] [Preprocessor] Preprocess dispatcher thread 1 started
+[2025-11-29 20:21:46.855] [INFO ] [Reader] Reader thread 0 started
+[2025-11-29 20:21:46.855] [INFO ] [Reader] Reader thread 0 started (Redis mode)
+[2025-11-29 20:21:46.855] [INFO ] [Reader] Reader thread 0 waiting for messages from queue: ml#vaccine_monitor_test
+[2025-11-29 20:21:46.855] [WARN ] [ThreadPool] Too many preprocess workers (45) for number of preprocess groups (3). This may cause queue contention. Consider reducing preprocess workers to ~15 or fewer.
+[2025-11-29 20:21:46.855] [INFO ] [Reader] Reader thread 3 started
+[2025-11-29 20:21:46.855] [INFO ] [Reader] Reader thread 3 started (Redis mode)
+[2025-11-29 20:21:46.855] [INFO ] [Reader] Reader thread 3 waiting for messages from queue: ml#vaccine_monitor_test
+[2025-11-29 20:21:46.855] [INFO ] [Preprocessor] Shared preprocess thread 0 started
+[2025-11-29 20:21:46.855] [INFO ] [Preprocessor] Shared preprocess thread 1 started
+[2025-11-29 20:21:46.855] [INFO ] [Preprocessor] Shared preprocess thread 3 started
+[2025-11-29 20:21:46.856] [INFO ] [Preprocessor] Shared preprocess thread 4 started
+[2025-11-29 20:21:46.856] [INFO ] [Preprocessor] Preprocess dispatcher thread 3 started
+[2025-11-29 20:21:46.856] [INFO ] [Preprocessor] Shared preprocess thread 5 started
+[2025-11-29 20:21:46.856] [INFO ] [Preprocessor] Preprocess dispatcher thread 2 started
+[2025-11-29 20:21:46.856] [INFO ] [Preprocessor] Shared preprocess thread 6 started
+[2025-11-29 20:21:46.856] [INFO ] [Preprocessor] Shared preprocess thread 7 started
+[2025-11-29 20:21:46.856] [INFO ] [Preprocessor] Shared preprocess thread 9 started
+[2025-11-29 20:21:46.856] [INFO ] [Preprocessor] Shared preprocess thread 8 started
+[2025-11-29 20:21:46.857] [INFO ] [Preprocessor] Shared preprocess thread 2 started
+[2025-11-29 20:21:46.857] [INFO ] [Preprocessor] Shared preprocess thread 10 started
+[2025-11-29 20:21:46.857] [INFO ] [Preprocessor] Shared preprocess thread 11 started
+[2025-11-29 20:21:46.857] [INFO ] [Preprocessor] Shared preprocess thread 12 started
+[2025-11-29 20:21:46.857] [INFO ] [Preprocessor] Shared preprocess thread 13 started
+unix_timestamp 1763346035.763989 ---->2025-11-17T09:20:35.7639888+07:00
+unix_timestamp 1763346305.966253 ---->2025-11-17T09:25:05.9662529+07:00
+[2025-11-29 20:21:46.857] [INFO ] [Preprocessor] Shared preprocess thread 14 started
+[2025-11-29 20:21:46.857] [INFO ] [Preprocessor] Shared preprocess thread 15 started
+unix_timestamp 1763346467.884109 ---->2025-11-17T09:27:47.8841088+07:00
+unix_timestamp 1763347022.734625 ---->2025-11-17T09:37:02.7346247+07:00
+[2025-11-29 20:21:46.857] [INFO ] [Preprocessor] Shared preprocess thread 16 started
+[2025-11-29 20:21:46.859] [INFO ] [Preprocessor] Shared preprocess thread 17 started
+[2025-11-29 20:21:46.859] [INFO ] [Preprocessor] Shared preprocess thread 18 started
+[2025-11-29 20:21:46.859] [INFO ] [Preprocessor] Shared preprocess thread 19 started
+unix_timestamp unix_timestamp [2025-11-29 20:21:46.859] [INFO ] [Preprocessor] Shared preprocess thread 20 started
+1763346248.750735 ---->2025-11-17T09:24:08.750735+07:00
+unix_timestamp 1763346532.814155 ---->2025-11-17T09:28:52.8141552+07:00
+1763346829.550766 ---->2025-11-17T09:33:49.5507659+07:00
+unix_timestamp 1763347091.833846 ---->2025-11-17T09:38:11.8338462+07:00
+[2025-11-29 20:21:46.859] [INFO ] [Preprocessor] Shared preprocess thread 21 started
+[2025-11-29 20:21:46.859] [INFO ] [Preprocessor] Shared preprocess thread 22 started
+unix_timestamp 1763346859.070112 ---->2025-11-17T09:34:19.0701121+07:00
+unix_timestamp 1763347085.617967 ---->2025-11-17T09:38:05.6179669+07:00
+[2025-11-29 20:21:46.859] [INFO ] [Preprocessor] Shared preprocess thread 24 started
+[2025-11-29 20:21:46.859] [INFO ] [Preprocessor] Shared preprocess thread 25 started
+[2025-11-29 20:21:46.859] [INFO ] [Preprocessor] Shared preprocess thread 26 started
+[2025-11-29 20:21:46.859] [INFO ] [Preprocessor] Shared preprocess thread 27 started
+[2025-11-29 20:21:46.860] [INFO ] [Preprocessor] Shared preprocess thread 28 started
+[2025-11-29 20:21:46.860] [INFO ] [Preprocessor] Shared preprocess thread 29 started
+[2025-11-29 20:21:46.860] [INFO ] [Preprocessor] Shared preprocess thread 23 started
+[2025-11-29 20:21:46.860] [INFO ] [Preprocessor] Shared preprocess thread 30 started
+[2025-11-29 20:21:46.860] [INFO ] [Preprocessor] Shared preprocess thread 31 started
+[2025-11-29 20:21:46.860] [INFO ] [Preprocessor] Shared preprocess thread 32 started
+[2025-11-29 20:21:46.860] [INFO ] [Preprocessor] Shared preprocess thread 33 started
+[2025-11-29 20:21:46.860] [INFO ] [Preprocessor] Shared preprocess thread 37 started
+[2025-11-29 20:21:46.860] [INFO ] [Preprocessor] Shared preprocess thread 38 started
+[2025-11-29 20:21:46.861] [INFO ] [Preprocessor] Shared preprocess thread 36 started
+[2025-11-29 20:21:46.861] [INFO ] [Preprocessor] Shared preprocess thread 34 started
+[2025-11-29 20:21:46.861] [INFO ] [Preprocessor] Shared preprocess thread 35 started
+[2025-11-29 20:21:46.861] [INFO ] [Preprocessor] Shared preprocess thread 40 started
+[2025-11-29 20:21:46.861] [INFO ] [Preprocessor] Shared preprocess thread 42 started
+[2025-11-29 20:21:46.861] [INFO ] [Preprocessor] Shared preprocess thread 43 started
+[2025-11-29 20:21:46.861] [INFO ] [Preprocessor] Shared preprocess thread 39 started
+[2025-11-29 20:21:46.861] [INFO ] [Preprocessor] Shared preprocess thread 44 started
+[2025-11-29 20:21:46.861] [INFO ] [Preprocessor] Shared preprocess thread 41 started
+[2025-11-29 20:21:46.861] [INFO ] [Detector] Detector thread 0 for engine hand started
+[2025-11-29 20:21:46.861] [INFO ] [Detector] Detector thread 1 for engine pose started
+[2025-11-29 20:21:46.862] [INFO ] [PostProcess] Post-processing thread 0 started
+[2025-11-29 20:21:46.862] [INFO ] [PostProcess] Post-processing thread 1 started
+[2025-11-29 20:21:46.862] [INFO ] [Detector] Detector thread 0 for engine alcohol started
+[2025-11-29 20:21:46.862] [INFO ] [Detector] Detector thread 0 for engine pose started
+[2025-11-29 20:21:46.862] [INFO ] [PostProcess] Post-processing thread 2 started
+[2025-11-29 20:21:46.862] [INFO ] [PostProcess] Post-processing thread 4 started
+[2025-11-29 20:21:46.862] [INFO ] [PostProcess] Post-processing thread 6 started
+[2025-11-29 20:21:46.862] [INFO ] [PostProcess] Post-processing thread 3 started
+[2025-11-29 20:21:46.862] [INFO ] [PostProcess] Post-processing thread 8 started
+[2025-11-29 20:21:46.862] [INFO ] [PostProcess] Post-processing thread 9 started
+[2025-11-29 20:21:46.862] [INFO ] [PostProcess] Post-processing thread 10 started
+[2025-11-29 20:21:46.862] [INFO ] [ThreadPool] Started 12 post-processing threads
+[2025-11-29 20:21:46.862] [INFO ] [PostProcess] Post-processing thread 11 started
+[2025-11-29 20:21:46.863] [INFO ] [PostProcess] Post-processing thread 5 started
+[2025-11-29 20:21:46.863] [INFO ] [RedisOutput] Async Redis output worker started
+[2025-11-29 20:21:46.863] [INFO ] [ThreadPool] Monitoring thread started
+[2025-11-29 20:21:46.863] [INFO ] [Main] Running in continuous mode. Waiting for messages from Redis queue...
+[2025-11-29 20:21:46.863] [INFO ] [Main] Press Ctrl+C to stop gracefully
+[2025-11-29 20:21:46.863] [INFO ] [Monitor] Monitoring thread started
+[2025-11-29 20:21:46.863] [INFO ] [ThreadPool] Redis queue mode: Process will run continuously, waiting for messages...
+[2025-11-29 20:21:46.863] [INFO ] [ThreadPool] Press Ctrl+C to stop the process
+[2025-11-29 20:21:46.863] [INFO ] [PostProcess] Post-processing thread 7 started
+[2025-11-29 20:21:46.988] [INFO ] [VideoReader] Found h264_cuvid hardware decoder
+[2025-11-29 20:21:46.988] [INFO ] [VideoReader] Using CUVID decoder: h264_cuvid (NVDEC hardware-accelerated)
+[2025-11-29 20:21:46.988] [INFO ] [VideoReader] Setting CUVID decoder with 32 surfaces for async decode
+[2025-11-29 20:21:46.988] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:21:46.988] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:21:46.999] [INFO ] [VideoReader] Found h264_cuvid hardware decoder
+[2025-11-29 20:21:46.999] [INFO ] [VideoReader] Using CUVID decoder: h264_cuvid (NVDEC hardware-accelerated)
+[2025-11-29 20:21:46.999] [INFO ] [VideoReader] Setting CUVID decoder with 32 surfaces for async decode
+[2025-11-29 20:21:47.019] [INFO ] [VideoReader] Found h264_cuvid hardware decoder
+[2025-11-29 20:21:47.019] [INFO ] [VideoReader] Using CUVID decoder: h264_cuvid (NVDEC hardware-accelerated)
+[2025-11-29 20:21:47.019] [INFO ] [VideoReader] Setting CUVID decoder with 32 surfaces for async decode
+[2025-11-29 20:21:47.025] [INFO ] [VideoReader] Found h264_cuvid hardware decoder
+[2025-11-29 20:21:47.025] [INFO ] [VideoReader] Using CUVID decoder: h264_cuvid (NVDEC hardware-accelerated)
+[2025-11-29 20:21:47.025] [INFO ] [VideoReader] Setting CUVID decoder with 32 surfaces for async decode
+[2025-11-29 20:21:47.028] [INFO ] [VideoReader] Found h264_cuvid hardware decoder
+[2025-11-29 20:21:47.029] [INFO ] [VideoReader] Using CUVID decoder: h264_cuvid (NVDEC hardware-accelerated)
+[2025-11-29 20:21:47.029] [INFO ] [VideoReader] Setting CUVID decoder with 32 surfaces for async decode
+[2025-11-29 20:21:47.949] [WARN ] [VideoReader] Unused decoder option: output=cuda
+[2025-11-29 20:21:47.950] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:21:47.950] [INFO ] [VideoReader] Codec opened with hardware decoder, decoder: h264_cuvid, hw_pix_fmt: 119, codec_id: 27
+[2025-11-29 20:21:47.950] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:21:47.951] [INFO ] [VideoReader] Initialized reader for /shared_storage/action_videos/c03o25010000307/20251117091924_f79b7232-6005-4e53-a453-1ce0880f584d.mp4 [NVDEC]
+[2025-11-29 20:21:47.951] [INFO ] [VideoReader] Time window: start_ts=1763346799.550766, end_ts=1763346864.180000, moment_time=1763345964.000000, duration=900.180000, video_range=[1763345964.000000, 1763346864.180000], actual_range=[1763346799.550766, 1763346864.180000], fps=12.996390, time_window_duration=64.629234, actual_available_duration=64.629234, total_expected_frames~839, actual_expected_frames~839, seek_to_frame=10859, seek_timestamp=1763346799.539722, remaining_duration=64.640278, remaining_frames~840
+[2025-11-29 20:21:47.951] [INFO ] [VideoReader]   (note: actual frames_read may be less than expected if: 1) video file ends before end_ts, 2) frames before start_ts are skipped, 3) debug mode frame limit is reached)
+[2025-11-29 20:21:48.026] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:21:48.027] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:21:48.675] [INFO ] [VideoReader] Frame 1: format: 119, expected: 119, match: YES, hw_frames_ctx: YES
+[2025-11-29 20:21:48.685] [INFO ] [VideoReader] Frame 0: total_read=10859, actual_pos=0, current_ts=1763346799.240000, start_ts=1763346799.550766, end_ts=1763346864.180000, frame_pts=835.240000, actual_ts_from_pts=1763346799.240000, calc_ts=1763346799.539722, ts_diff=0.299722, moment_time=1763345964.000000, fps=12.996390
+[2025-11-29 20:21:48.685] [INFO ] [VideoReader] Frame 2: format: 119, expected: 119, match: YES, hw_frames_ctx: YES
+[2025-11-29 20:21:48.691] [INFO ] [VideoReader] Frame 1: total_read=10860, actual_pos=0, current_ts=1763346799.320000, start_ts=1763346799.550766, end_ts=1763346864.180000, frame_pts=835.320000, actual_ts_from_pts=1763346799.320000, calc_ts=1763346799.616667, ts_diff=0.296667, moment_time=1763345964.000000, fps=12.996390
+[2025-11-29 20:21:48.692] [INFO ] [VideoReader] Frame 3: format: 119, expected: 119, match: YES, hw_frames_ctx: YES
+[2025-11-29 20:21:48.696] [INFO ] [VideoReader] Frame 2: total_read=10861, actual_pos=0, current_ts=1763346799.390000, start_ts=1763346799.550766, end_ts=1763346864.180000, frame_pts=835.390000, actual_ts_from_pts=1763346799.390000, calc_ts=1763346799.693611, ts_diff=0.303611, moment_time=1763345964.000000, fps=12.996390
+[2025-11-29 20:21:48.699] [INFO ] [VideoReader] Frame 3: total_read=10862, actual_pos=0, current_ts=1763346799.470000, start_ts=1763346799.550766, end_ts=1763346864.180000, frame_pts=835.470000, actual_ts_from_pts=1763346799.470000, calc_ts=1763346799.770555, ts_diff=0.300555, moment_time=1763345964.000000, fps=12.996390
+[2025-11-29 20:21:48.702] [INFO ] [VideoReader] Frame 4: total_read=10863, actual_pos=0, current_ts=1763346799.540000, start_ts=1763346799.550766, end_ts=1763346864.180000, frame_pts=835.540000, actual_ts_from_pts=1763346799.540000, calc_ts=1763346799.847500, ts_diff=0.307500, moment_time=1763345964.000000, fps=12.996390
+[2025-11-29 20:21:48.705] [INFO ] [VideoReader] Frame 5: total_read=10864, actual_pos=0, current_ts=1763346799.620000, start_ts=1763346799.550766, end_ts=1763346864.180000, frame_pts=835.620000, actual_ts_from_pts=1763346799.620000, calc_ts=1763346799.924444, ts_diff=0.304445, moment_time=1763345964.000000, fps=12.996390
+[2025-11-29 20:21:48.715] [INFO ] [VideoReader] Frame 6: total_read=10865, actual_pos=1, current_ts=1763346799.700000, start_ts=1763346799.550766, end_ts=1763346864.180000, frame_pts=835.700000, actual_ts_from_pts=1763346799.700000, calc_ts=1763346800.001389, ts_diff=0.301389, moment_time=1763345964.000000, fps=12.996390
+[2025-11-29 20:21:48.729] [INFO ] [VideoReader] Frame 7: total_read=10866, actual_pos=2, current_ts=1763346799.770000, start_ts=1763346799.550766, end_ts=1763346864.180000, frame_pts=835.770000, actual_ts_from_pts=1763346799.770000, calc_ts=1763346800.078333, ts_diff=0.308333, moment_time=1763345964.000000, fps=12.996390
+[2025-11-29 20:21:48.761] [INFO ] [VideoReader] Frame 8: total_read=10867, actual_pos=3, current_ts=1763346799.850000, start_ts=1763346799.550766, end_ts=1763346864.180000, frame_pts=835.850000, actual_ts_from_pts=1763346799.850000, calc_ts=1763346800.155278, ts_diff=0.305278, moment_time=1763345964.000000, fps=12.996390
+[2025-11-29 20:21:48.772] [INFO ] [VideoReader] Frame 9: total_read=10868, actual_pos=4, current_ts=1763346799.930000, start_ts=1763346799.550766, end_ts=1763346864.180000, frame_pts=835.930000, actual_ts_from_pts=1763346799.930000, calc_ts=1763346800.232222, ts_diff=0.302222, moment_time=1763345964.000000, fps=12.996390
+[2025-11-29 20:21:48.796] [WARN ] [VideoReader] Unused decoder option: output=cuda
+[2025-11-29 20:21:48.796] [INFO ] [VideoReader] Codec opened with hardware decoder, decoder: h264_cuvid, hw_pix_fmt: 119, codec_id: 27
+[2025-11-29 20:21:48.796] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:21:48.796] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:21:48.796] [INFO ] [VideoReader] Initialized reader for /shared_storage/action_videos/c03o25010001984/20251117092243_6e2d7aff-3d25-4ebe-a7af-e654c13a8a47.mp4 [NVDEC]
+[2025-11-29 20:21:48.796] [INFO ] [VideoReader] Time window: start_ts=1763346218.750735, end_ts=1763346537.814155, moment_time=1763346163.000000, duration=900.220000, video_range=[1763346163.000000, 1763347063.220000], actual_range=[1763346218.750735, 1763346537.814155], fps=12.995668, time_window_duration=319.063420, actual_available_duration=319.063420, total_expected_frames~4146, actual_expected_frames~4146, seek_to_frame=724, seek_timestamp=1763346218.710872, remaining_duration=319.103283, remaining_frames~4146
+[2025-11-29 20:21:48.796] [INFO ] [VideoReader]   (note: actual frames_read may be less than expected if: 1) video file ends before end_ts, 2) frames before start_ts are skipped, 3) debug mode frame limit is reached)
+[2025-11-29 20:21:48.871] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:21:48.871] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:21:49.812] [INFO ] [VideoReader] Frame 1: format: 119, expected: 119, match: YES, hw_frames_ctx: YES
+[2025-11-29 20:21:49.943] [INFO ] [VideoReader] Frame 0: total_read=724, actual_pos=0, current_ts=1763346218.040000, start_ts=1763346218.750735, end_ts=1763346537.814155, frame_pts=55.040000, actual_ts_from_pts=1763346218.040000, calc_ts=1763346218.710872, ts_diff=0.670872, moment_time=1763346163.000000, fps=12.995668
+[2025-11-29 20:21:49.945] [INFO ] [VideoReader] Frame 2: format: 119, expected: 119, match: YES, hw_frames_ctx: YES
+[2025-11-29 20:21:49.988] [INFO ] [VideoReader] Frame 1: total_read=725, actual_pos=0, current_ts=1763346218.120000, start_ts=1763346218.750735, end_ts=1763346537.814155, frame_pts=55.120000, actual_ts_from_pts=1763346218.120000, calc_ts=1763346218.787821, ts_diff=0.667821, moment_time=1763346163.000000, fps=12.995668
+[2025-11-29 20:21:49.989] [INFO ] [VideoReader] Frame 3: format: 119, expected: 119, match: YES, hw_frames_ctx: YES
+[2025-11-29 20:21:50.005] [INFO ] [VideoReader] Frame 2: total_read=726, actual_pos=0, current_ts=1763346218.190000, start_ts=1763346218.750735, end_ts=1763346537.814155, frame_pts=55.190000, actual_ts_from_pts=1763346218.190000, calc_ts=1763346218.864769, ts_diff=0.674769, moment_time=1763346163.000000, fps=12.995668
+[2025-11-29 20:21:50.019] [INFO ] [VideoReader] Frame 3: total_read=727, actual_pos=0, current_ts=1763346218.270000, start_ts=1763346218.750735, end_ts=1763346537.814155, frame_pts=55.270000, actual_ts_from_pts=1763346218.270000, calc_ts=1763346218.941718, ts_diff=0.671718, moment_time=1763346163.000000, fps=12.995668
+[2025-11-29 20:21:50.026] [WARN ] [VideoReader] Unused decoder option: output=cuda
+[2025-11-29 20:21:50.027] [INFO ] [VideoReader] Codec opened with hardware decoder, decoder: h264_cuvid, hw_pix_fmt: 119, codec_id: 27
+[2025-11-29 20:21:50.027] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:21:50.027] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:21:50.027] [INFO ] [VideoReader] Initialized reader for /shared_storage/action_videos/c03o25010001318/20251117091515_506de774-058e-4b07-a6c2-90e2d1fb7624.mp4 [NVDEC]
+[2025-11-29 20:21:50.027] [INFO ] [VideoReader] Time window: start_ts=1763346437.884109, end_ts=1763346615.780000, moment_time=1763345715.000000, duration=900.780000, video_range=[1763345715.000000, 1763346615.780000], actual_range=[1763346437.884109, 1763346615.780000], fps=12.857999, time_window_duration=177.895891, actual_available_duration=177.895891, total_expected_frames~2287, actual_expected_frames~2287, seek_to_frame=9294, seek_timestamp=1763346437.818524, remaining_duration=177.961476, remaining_frames~2288
+[2025-11-29 20:21:50.027] [INFO ] [VideoReader]   (note: actual frames_read may be less than expected if: 1) video file ends before end_ts, 2) frames before start_ts are skipped, 3) debug mode frame limit is reached)
+[2025-11-29 20:21:50.030] [INFO ] [VideoReader] Frame 4: total_read=728, actual_pos=0, current_ts=1763346218.340000, start_ts=1763346218.750735, end_ts=1763346537.814155, frame_pts=55.340000, actual_ts_from_pts=1763346218.340000, calc_ts=1763346219.018667, ts_diff=0.678667, moment_time=1763346163.000000, fps=12.995668
+[2025-11-29 20:21:50.048] [INFO ] [VideoReader] Frame 5: total_read=729, actual_pos=0, current_ts=1763346218.420000, start_ts=1763346218.750735, end_ts=1763346537.814155, frame_pts=55.420000, actual_ts_from_pts=1763346218.420000, calc_ts=1763346219.095615, ts_diff=0.675615, moment_time=1763346163.000000, fps=12.995668
+[2025-11-29 20:21:50.147] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:21:50.147] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:21:50.151] [INFO ] [VideoReader] Frame 6: total_read=730, actual_pos=0, current_ts=1763346218.500000, start_ts=1763346218.750735, end_ts=1763346537.814155, frame_pts=55.500000, actual_ts_from_pts=1763346218.500000, calc_ts=1763346219.172564, ts_diff=0.672564, moment_time=1763346163.000000, fps=12.995668
+[2025-11-29 20:21:50.176] [INFO ] [VideoReader] Frame 7: total_read=731, actual_pos=0, current_ts=1763346218.570000, start_ts=1763346218.750735, end_ts=1763346537.814155, frame_pts=55.570000, actual_ts_from_pts=1763346218.570000, calc_ts=1763346219.249513, ts_diff=0.679513, moment_time=1763346163.000000, fps=12.995668
+[2025-11-29 20:21:50.203] [INFO ] [VideoReader] Frame 8: total_read=732, actual_pos=0, current_ts=1763346218.650000, start_ts=1763346218.750735, end_ts=1763346537.814155, frame_pts=55.650000, actual_ts_from_pts=1763346218.650000, calc_ts=1763346219.326462, ts_diff=0.676461, moment_time=1763346163.000000, fps=12.995668
+[2025-11-29 20:21:50.215] [INFO ] [VideoReader] Frame 9: total_read=733, actual_pos=0, current_ts=1763346218.730000, start_ts=1763346218.750735, end_ts=1763346537.814155, frame_pts=55.730000, actual_ts_from_pts=1763346218.730000, calc_ts=1763346219.403410, ts_diff=0.673410, moment_time=1763346163.000000, fps=12.995668
+[2025-11-29 20:21:51.001] [INFO ] [VideoReader] Frame 1: format: 119, expected: 119, match: YES, hw_frames_ctx: YES
+[2025-11-29 20:21:51.298] [INFO ] [VideoReader] Frame 0: total_read=9294, actual_pos=0, current_ts=1763346436.880000, start_ts=1763346437.884109, end_ts=1763346615.780000, frame_pts=721.880000, actual_ts_from_pts=1763346436.880000, calc_ts=1763346437.818524, ts_diff=0.938524, moment_time=1763345715.000000, fps=12.857999
+[2025-11-29 20:21:51.299] [INFO ] [VideoReader] Frame 2: format: 119, expected: 119, match: YES, hw_frames_ctx: YES
+[2025-11-29 20:21:51.335] [INFO ] [VideoReader] Frame 1: total_read=9295, actual_pos=0, current_ts=1763346436.960000, start_ts=1763346437.884109, end_ts=1763346615.780000, frame_pts=721.960000, actual_ts_from_pts=1763346436.960000, calc_ts=1763346437.896296, ts_diff=0.936296, moment_time=1763345715.000000, fps=12.857999
+[2025-11-29 20:21:51.337] [INFO ] [VideoReader] Frame 3: format: 119, expected: 119, match: YES, hw_frames_ctx: YES
+[2025-11-29 20:21:51.351] [INFO ] [VideoReader] Frame 2: total_read=9296, actual_pos=0, current_ts=1763346437.040000, start_ts=1763346437.884109, end_ts=1763346615.780000, frame_pts=722.040000, actual_ts_from_pts=1763346437.040000, calc_ts=1763346437.974069, ts_diff=0.934069, moment_time=1763345715.000000, fps=12.857999
+[2025-11-29 20:21:51.379] [INFO ] [VideoReader] Frame 3: total_read=9297, actual_pos=0, current_ts=1763346437.120000, start_ts=1763346437.884109, end_ts=1763346615.780000, frame_pts=722.120000, actual_ts_from_pts=1763346437.120000, calc_ts=1763346438.051841, ts_diff=0.931842, moment_time=1763345715.000000, fps=12.857999
+[2025-11-29 20:21:51.399] [INFO ] [VideoReader] Frame 4: total_read=9298, actual_pos=0, current_ts=1763346437.190000, start_ts=1763346437.884109, end_ts=1763346615.780000, frame_pts=722.190000, actual_ts_from_pts=1763346437.190000, calc_ts=1763346438.129614, ts_diff=0.939614, moment_time=1763345715.000000, fps=12.857999
+[2025-11-29 20:21:51.424] [INFO ] [VideoReader] Frame 5: total_read=9299, actual_pos=0, current_ts=1763346437.270000, start_ts=1763346437.884109, end_ts=1763346615.780000, frame_pts=722.270000, actual_ts_from_pts=1763346437.270000, calc_ts=1763346438.207387, ts_diff=0.937387, moment_time=1763345715.000000, fps=12.857999
+[2025-11-29 20:21:51.436] [INFO ] [VideoReader] Frame 6: total_read=9300, actual_pos=0, current_ts=1763346437.350000, start_ts=1763346437.884109, end_ts=1763346615.780000, frame_pts=722.350000, actual_ts_from_pts=1763346437.350000, calc_ts=1763346438.285159, ts_diff=0.935159, moment_time=1763345715.000000, fps=12.857999
+[2025-11-29 20:21:51.446] [INFO ] [VideoReader] Frame 7: total_read=9301, actual_pos=0, current_ts=1763346437.420000, start_ts=1763346437.884109, end_ts=1763346615.780000, frame_pts=722.420000, actual_ts_from_pts=1763346437.420000, calc_ts=1763346438.362932, ts_diff=0.942932, moment_time=1763345715.000000, fps=12.857999
+[2025-11-29 20:21:51.460] [INFO ] [VideoReader] Frame 8: total_read=9302, actual_pos=0, current_ts=1763346437.500000, start_ts=1763346437.884109, end_ts=1763346615.780000, frame_pts=722.500000, actual_ts_from_pts=1763346437.500000, calc_ts=1763346438.440705, ts_diff=0.940705, moment_time=1763345715.000000, fps=12.857999
+[2025-11-29 20:21:51.559] [INFO ] [VideoReader] Frame 9: total_read=9303, actual_pos=0, current_ts=1763346437.580000, start_ts=1763346437.884109, end_ts=1763346615.780000, frame_pts=722.580000, actual_ts_from_pts=1763346437.580000, calc_ts=1763346438.518477, ts_diff=0.938477, moment_time=1763345715.000000, fps=12.857999
+[2025-11-29 20:21:51.863] [STATS] [Monitor] === Statistics (Runtime: 5s) ===
+Frames Read: 119 | Preprocessed: 242 | Read FPS: 23 | Preprocess FPS: 48
+RawQueue: 0/2000
+PreQ 640x640 [ROI] engines=1 queue=23/500
+PreQ 864x864 [FULL] engines=1 queue=24/500
+PreQ 640x640 [FULL] engines=1 queue=23/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=0 | Failed=0 | FPS=0
+Engine hand: Detected=0 | Failed=0 | FPS=0
+Engine pose: Detected=0 | Failed=0 | FPS=0
+Reader: Frames=119 | FPS=23 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=242 | FPS=48 | AvgTime=225.87ms/frame | TotalTime=54.66s
+Postprocessor: Frames=0 | FPS=0
+
+[2025-11-29 20:21:52.337] [WARN ] [VideoReader] Unused decoder option: output=cuda
+[2025-11-29 20:21:52.338] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:21:52.338] [INFO ] [VideoReader] Codec opened with hardware decoder, decoder: h264_cuvid, hw_pix_fmt: 119, codec_id: 27
+[2025-11-29 20:21:52.338] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:21:52.338] [INFO ] [VideoReader] Initialized reader for /shared_storage/action_videos/c03o24100008275/20251117091353_dba86e3e-9dce-4068-8b4b-ecd6cc95e92a.mp4 [NVDEC]
+[2025-11-29 20:21:52.338] [INFO ] [VideoReader] Time window: start_ts=1763346005.763989, end_ts=1763346310.966253, moment_time=1763345633.000000, duration=900.160000, video_range=[1763345633.000000, 1763346533.160000], actual_range=[1763346005.763989, 1763346310.966253], fps=12.996823, time_window_duration=305.202264, actual_available_duration=305.202264, total_expected_frames~3966, actual_expected_frames~3966, seek_to_frame=4844, seek_timestamp=1763346005.706468, remaining_duration=305.259784, remaining_frames~3967
+[2025-11-29 20:21:52.338] [INFO ] [VideoReader]   (note: actual frames_read may be less than expected if: 1) video file ends before end_ts, 2) frames before start_ts are skipped, 3) debug mode frame limit is reached)
+[2025-11-29 20:21:52.394] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:21:52.394] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:21:54.422] [INFO ] [VideoReader] Frame 1: format: 119, expected: 119, match: YES, hw_frames_ctx: YES
+[2025-11-29 20:21:54.915] [WARN ] [VideoReader] Unused decoder option: output=cuda
+[2025-11-29 20:21:54.915] [INFO ] [VideoReader] Codec opened with hardware decoder, decoder: h264_cuvid, hw_pix_fmt: 119, codec_id: 27
+[2025-11-29 20:21:54.916] [INFO ] [VideoReader] Initialized reader for /shared_storage/action_videos/c03o24100002882/20251117092404_81d9f6ac-0933-492d-83da-04fd6fcdaed7.mp4 [NVDEC]
+[2025-11-29 20:21:54.916] [INFO ] [VideoReader] Time window: start_ts=1763346829.070112, end_ts=1763347090.617967, moment_time=1763346244.000000, duration=900.180000, video_range=[1763346244.000000, 1763347144.180000], actual_range=[1763346829.070112, 1763347090.617967], fps=12.996534, time_window_duration=261.547855, actual_available_duration=261.547855, total_expected_frames~3399, actual_expected_frames~3399, seek_to_frame=7603, seek_timestamp=1763346829.002113, remaining_duration=261.615854, remaining_frames~3400
+[2025-11-29 20:21:54.916] [INFO ] [VideoReader]   (note: actual frames_read may be less than expected if: 1) video file ends before end_ts, 2) frames before start_ts are skipped, 3) debug mode frame limit is reached)
+[2025-11-29 20:21:54.937] [INFO ] [VideoReader] Frame 0: total_read=4844, actual_pos=0, current_ts=1763346005.100000, start_ts=1763346005.763989, end_ts=1763346310.966253, frame_pts=372.100000, actual_ts_from_pts=1763346005.100000, calc_ts=1763346005.706468, ts_diff=0.606468, moment_time=1763345633.000000, fps=12.996823
+[2025-11-29 20:21:54.938] [INFO ] [VideoReader] Frame 2: format: 119, expected: 119, match: YES, hw_frames_ctx: YES
+[2025-11-29 20:21:54.963] [INFO ] [VideoReader] Frame 1: total_read=4845, actual_pos=0, current_ts=1763346005.170000, start_ts=1763346005.763989, end_ts=1763346310.966253, frame_pts=372.170000, actual_ts_from_pts=1763346005.170000, calc_ts=1763346005.783410, ts_diff=0.613410, moment_time=1763345633.000000, fps=12.996823
+[2025-11-29 20:21:54.964] [INFO ] [VideoReader] Frame 3: format: 119, expected: 119, match: YES, hw_frames_ctx: YES
+[2025-11-29 20:21:54.969] [INFO ] [VideoReader] Frame 2: total_read=4846, actual_pos=0, current_ts=1763346005.250000, start_ts=1763346005.763989, end_ts=1763346310.966253, frame_pts=372.250000, actual_ts_from_pts=1763346005.250000, calc_ts=1763346005.860352, ts_diff=0.610352, moment_time=1763345633.000000, fps=12.996823
+[2025-11-29 20:21:54.992] [INFO ] [VideoReader] Frame 3: total_read=4847, actual_pos=0, current_ts=1763346005.330000, start_ts=1763346005.763989, end_ts=1763346310.966253, frame_pts=372.330000, actual_ts_from_pts=1763346005.330000, calc_ts=1763346005.937294, ts_diff=0.607294, moment_time=1763345633.000000, fps=12.996823
+[2025-11-29 20:21:55.006] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:21:55.006] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:21:55.025] [INFO ] [VideoReader] Frame 4: total_read=4848, actual_pos=0, current_ts=1763346005.400000, start_ts=1763346005.763989, end_ts=1763346310.966253, frame_pts=372.400000, actual_ts_from_pts=1763346005.400000, calc_ts=1763346006.014236, ts_diff=0.614236, moment_time=1763345633.000000, fps=12.996823
+[2025-11-29 20:21:55.043] [INFO ] [VideoReader] Frame 5: total_read=4849, actual_pos=0, current_ts=1763346005.480000, start_ts=1763346005.763989, end_ts=1763346310.966253, frame_pts=372.480000, actual_ts_from_pts=1763346005.480000, calc_ts=1763346006.091178, ts_diff=0.611178, moment_time=1763345633.000000, fps=12.996823
+[2025-11-29 20:21:55.060] [INFO ] [VideoReader] Frame 6: total_read=4850, actual_pos=0, current_ts=1763346005.560000, start_ts=1763346005.763989, end_ts=1763346310.966253, frame_pts=372.560000, actual_ts_from_pts=1763346005.560000, calc_ts=1763346006.168120, ts_diff=0.608120, moment_time=1763345633.000000, fps=12.996823
+[2025-11-29 20:21:55.076] [INFO ] [VideoReader] Frame 7: total_read=4851, actual_pos=0, current_ts=1763346005.640000, start_ts=1763346005.763989, end_ts=1763346310.966253, frame_pts=372.640000, actual_ts_from_pts=1763346005.640000, calc_ts=1763346006.245062, ts_diff=0.605062, moment_time=1763345633.000000, fps=12.996823
+[2025-11-29 20:21:55.088] [INFO ] [VideoReader] Frame 8: total_read=4852, actual_pos=0, current_ts=1763346005.710000, start_ts=1763346005.763989, end_ts=1763346310.966253, frame_pts=372.710000, actual_ts_from_pts=1763346005.710000, calc_ts=1763346006.322003, ts_diff=0.612003, moment_time=1763345633.000000, fps=12.996823
+[2025-11-29 20:21:55.118] [INFO ] [VideoReader] Frame 9: total_read=4853, actual_pos=0, current_ts=1763346005.790000, start_ts=1763346005.763989, end_ts=1763346310.966253, frame_pts=372.790000, actual_ts_from_pts=1763346005.790000, calc_ts=1763346006.398945, ts_diff=0.608945, moment_time=1763345633.000000, fps=12.996823
+[2025-11-29 20:21:56.127] [INFO ] [VideoReader] Frame 1: format: 119, expected: 119, match: YES, hw_frames_ctx: YES
+[2025-11-29 20:21:56.372] [INFO ] [VideoReader] Frame 0: total_read=7603, actual_pos=0, current_ts=1763346828.150000, start_ts=1763346829.070112, end_ts=1763347090.617967, frame_pts=584.150000, actual_ts_from_pts=1763346828.150000, calc_ts=1763346829.002113, ts_diff=0.852113, moment_time=1763346244.000000, fps=12.996534
+[2025-11-29 20:21:56.380] [INFO ] [VideoReader] Frame 2: format: 119, expected: 119, match: YES, hw_frames_ctx: YES
+[2025-11-29 20:21:56.496] [INFO ] [VideoReader] Frame 1: total_read=7604, actual_pos=0, current_ts=1763346828.220000, start_ts=1763346829.070112, end_ts=1763347090.617967, frame_pts=584.220000, actual_ts_from_pts=1763346828.220000, calc_ts=1763346829.079057, ts_diff=0.859056, moment_time=1763346244.000000, fps=12.996534
+[2025-11-29 20:21:56.498] [INFO ] [VideoReader] Frame 3: format: 119, expected: 119, match: YES, hw_frames_ctx: YES
+[2025-11-29 20:21:56.528] [INFO ] [VideoReader] Frame 2: total_read=7605, actual_pos=0, current_ts=1763346828.300000, start_ts=1763346829.070112, end_ts=1763347090.617967, frame_pts=584.300000, actual_ts_from_pts=1763346828.300000, calc_ts=1763346829.156000, ts_diff=0.856000, moment_time=1763346244.000000, fps=12.996534
+[2025-11-29 20:21:56.547] [INFO ] [VideoReader] Frame 3: total_read=7606, actual_pos=0, current_ts=1763346828.380000, start_ts=1763346829.070112, end_ts=1763347090.617967, frame_pts=584.380000, actual_ts_from_pts=1763346828.380000, calc_ts=1763346829.232944, ts_diff=0.852943, moment_time=1763346244.000000, fps=12.996534
+[2025-11-29 20:21:56.561] [INFO ] [VideoReader] Frame 4: total_read=7607, actual_pos=0, current_ts=1763346828.460000, start_ts=1763346829.070112, end_ts=1763347090.617967, frame_pts=584.460000, actual_ts_from_pts=1763346828.460000, calc_ts=1763346829.309887, ts_diff=0.849887, moment_time=1763346244.000000, fps=12.996534
+[2025-11-29 20:21:56.578] [INFO ] [VideoReader] Frame 5: total_read=7608, actual_pos=0, current_ts=1763346828.540000, start_ts=1763346829.070112, end_ts=1763347090.617967, frame_pts=584.540000, actual_ts_from_pts=1763346828.540000, calc_ts=1763346829.386831, ts_diff=0.846831, moment_time=1763346244.000000, fps=12.996534
+[2025-11-29 20:21:56.597] [INFO ] [VideoReader] Frame 6: total_read=7609, actual_pos=0, current_ts=1763346828.610000, start_ts=1763346829.070112, end_ts=1763347090.617967, frame_pts=584.610000, actual_ts_from_pts=1763346828.610000, calc_ts=1763346829.463774, ts_diff=0.853775, moment_time=1763346244.000000, fps=12.996534
+[2025-11-29 20:21:56.610] [INFO ] [VideoReader] Frame 7: total_read=7610, actual_pos=0, current_ts=1763346828.690000, start_ts=1763346829.070112, end_ts=1763347090.617967, frame_pts=584.690000, actual_ts_from_pts=1763346828.690000, calc_ts=1763346829.540718, ts_diff=0.850718, moment_time=1763346244.000000, fps=12.996534
+[2025-11-29 20:21:56.634] [INFO ] [VideoReader] Frame 8: total_read=7611, actual_pos=0, current_ts=1763346828.770000, start_ts=1763346829.070112, end_ts=1763347090.617967, frame_pts=584.770000, actual_ts_from_pts=1763346828.770000, calc_ts=1763346829.617661, ts_diff=0.847661, moment_time=1763346244.000000, fps=12.996534
+[2025-11-29 20:21:56.655] [INFO ] [VideoReader] Frame 9: total_read=7612, actual_pos=0, current_ts=1763346828.840000, start_ts=1763346829.070112, end_ts=1763347090.617967, frame_pts=584.840000, actual_ts_from_pts=1763346828.840000, calc_ts=1763346829.694605, ts_diff=0.854605, moment_time=1763346244.000000, fps=12.996534
+[2025-11-29 20:21:56.864] [STATS] [Monitor] === Statistics (Runtime: 10s) ===
+Frames Read: 428 | Preprocessed: 684 | Read FPS: 61 | Preprocess FPS: 88
+RawQueue: 0/2000
+PreQ 640x640 [ROI] engines=1 queue=176/500
+PreQ 864x864 [FULL] engines=1 queue=204/500
+PreQ 640x640 [FULL] engines=1 queue=175/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=0 | Failed=0 | FPS=0
+Engine hand: Detected=0 | Failed=0 | FPS=0
+Engine pose: Detected=0 | Failed=0 | FPS=0
+Reader: Frames=428 | FPS=61 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=684 | FPS=88 | AvgTime=416.11ms/frame | TotalTime=284.62s
+Postprocessor: Frames=0 | FPS=0
+
+[2025-11-29 20:22:01.870] [STATS] [Monitor] === Statistics (Runtime: 15s) ===
+Frames Read: 991 | Preprocessed: 1403 | Read FPS: 112 | Preprocess FPS: 143
+RawQueue: 59/2000
+PreQ 640x640 [ROI] engines=1 queue=436/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=404/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=0 | Failed=0 | FPS=0
+Engine hand: Detected=0 | Failed=0 | FPS=0
+Engine pose: Detected=0 | Failed=0 | FPS=0
+Reader: Frames=991 | FPS=112 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=1403 | FPS=143 | AvgTime=349.28ms/frame | TotalTime=490.04s
+Postprocessor: Frames=0 | FPS=0
+
+[2025-11-29 20:22:06.870] [STATS] [Monitor] === Statistics (Runtime: 20s) ===
+Frames Read: 1462 | Preprocessed: 1564 | Read FPS: 94 | Preprocess FPS: 32
+RawQueue: 427/2000
+PreQ 640x640 [ROI] engines=1 queue=500/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=484/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=0 | Failed=0 | FPS=0
+Engine hand: Detected=0 | Failed=0 | FPS=0
+Engine pose: Detected=0 | Failed=0 | FPS=0
+Reader: Frames=1462 | FPS=94 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=1564 | FPS=32 | AvgTime=364.31ms/frame | TotalTime=569.77s
+Postprocessor: Frames=0 | FPS=0
+
+[2025-11-29 20:22:12.065] [STATS] [Monitor] === Statistics (Runtime: 25s) ===
+Frames Read: 1987 | Preprocessed: 1819 | Read FPS: 105 | Preprocess FPS: 51
+RawQueue: 872/2000
+PreQ 640x640 [ROI] engines=1 queue=488/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=485/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=96 | Failed=0 | FPS=19 | AvgTime=226.86ms/frame | TotalTime=21.78s
+Engine hand: Detected=80 | Failed=0 | FPS=16 | AvgTime=228.85ms/frame | TotalTime=21.97s
+Engine pose: Detected=64 | Failed=0 | FPS=12 | AvgTime=532.33ms/frame | TotalTime=42.59s
+Reader: Frames=2003 | FPS=105 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=1825 | FPS=51 | AvgTime=337.36ms/frame | TotalTime=615.68s
+Postprocessor: Frames=240 | FPS=48 | AvgTime=1.91ms/frame | TotalTime=0.46s
+
+[2025-11-29 20:22:14.731] [INFO ] [VideoReader] *** STOPPING: Reached end of video file (end_of_stream=true) *** total_read=11427, actual_pos=563, frames_in_window=563
+[2025-11-29 20:22:14.732] [INFO ] [VideoReader]   Time window: current_ts=1763346843.167222, end_ts=1763346864.180000, remaining=21.012778s, expected_frames_remaining=273
+[2025-11-29 20:22:14.732] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o25010000307_f79b7232-6005-4e53-a453-1ce0880f584d_v0' *** frame_count=563, actual_frame_position=563, consecutive_failures=1
+[2025-11-29 20:22:14.733] [INFO ] [VideoReader] *** STOPPING: Reached end of video file (end_of_stream=true) *** total_read=11427, actual_pos=563, frames_in_window=563
+[2025-11-29 20:22:14.733] [INFO ] [VideoReader]   Time window: current_ts=1763346843.167222, end_ts=1763346864.180000, remaining=21.012778s, expected_frames_remaining=273
+[2025-11-29 20:22:14.733] [INFO ] [VideoReader] *** STOPPING: Reached end of video file (end_of_stream=true) *** total_read=11427, actual_pos=563, frames_in_window=563
+[2025-11-29 20:22:14.733] [INFO ] [VideoReader]   Time window: current_ts=1763346843.167222, end_ts=1763346864.180000, remaining=21.012778s, expected_frames_remaining=273
+[2025-11-29 20:22:14.733] [INFO ] [Reader] *** Stopping video reading after 3 consecutive readFrame() failures *** video_key='c03o25010000307_f79b7232-6005-4e53-a453-1ce0880f584d_v0', frames_read=563, actual_frame_position=563
+[2025-11-29 20:22:14.733] [INFO ] [Reader] *** Reader 1 finished video c03o25010000307_f79b7232-6005-4e53-a453-1ce0880f584d_v0 *** frames_read=563, actual_frame_position=563, path=/shared_storage/action_videos/c03o25010000307/20251117091924_f79b7232-6005-4e53-a453-1ce0880f584d.mp4
+[2025-11-29 20:22:16.198] [INFO ] [VideoReader] Found h264_cuvid hardware decoder
+[2025-11-29 20:22:16.199] [INFO ] [VideoReader] Using CUVID decoder: h264_cuvid (NVDEC hardware-accelerated)
+[2025-11-29 20:22:16.199] [INFO ] [VideoReader] Setting CUVID decoder with 32 surfaces for async decode
+[2025-11-29 20:22:16.199] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:22:16.199] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:22:17.066] [STATS] [Monitor] === Statistics (Runtime: 30s) ===
+Frames Read: 2478 | Preprocessed: 2940 | Read FPS: 94 | Preprocess FPS: 215
+RawQueue: 1010/2000
+PreQ 640x640 [ROI] engines=1 queue=456/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=452/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=480 | Failed=0 | FPS=73 | AvgTime=52.59ms/frame | TotalTime=25.25s
+Engine hand: Detected=432 | Failed=0 | FPS=67 | AvgTime=58.87ms/frame | TotalTime=25.43s
+Engine pose: Detected=464 | Failed=0 | FPS=76 | AvgTime=110.18ms/frame | TotalTime=51.12s
+Reader: Frames=2478 | FPS=94 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=2940 | FPS=215 | AvgTime=248.59ms/frame | TotalTime=730.85s
+Postprocessor: Frames=1376 | FPS=218 | AvgTime=3.15ms/frame | TotalTime=4.34s
+
+[2025-11-29 20:22:17.886] [WARN ] [VideoReader] Unused decoder option: output=cuda
+[2025-11-29 20:22:17.886] [INFO ] [VideoReader] Codec opened with hardware decoder, decoder: h264_cuvid, hw_pix_fmt: 119, codec_id: 27
+[2025-11-29 20:22:17.887] [INFO ] [VideoReader] Initialized reader for /shared_storage/action_videos/c03o25010000307/20251117093424_f79b7232-6005-4e53-a453-1ce0880f584d.mp4 [NVDEC]
+[2025-11-29 20:22:17.887] [INFO ] [VideoReader] Time window: start_ts=1763346864.180000, end_ts=1763347096.833846, moment_time=1763346864.000000, duration=900.180000, video_range=[1763346864.000000, 1763347764.180000], actual_range=[1763346864.180000, 1763347096.833846], fps=12.996534, time_window_duration=232.653846, actual_available_duration=232.653846, total_expected_frames~3023, actual_expected_frames~3023, seek_to_frame=2, seek_timestamp=1763346864.153887, remaining_duration=232.679959, remaining_frames~3024
+[2025-11-29 20:22:17.887] [INFO ] [VideoReader]   (note: actual frames_read may be less than expected if: 1) video file ends before end_ts, 2) frames before start_ts are skipped, 3) debug mode frame limit is reached)
+[2025-11-29 20:22:17.942] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:22:17.942] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:22:20.729] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (100 times)
+[2025-11-29 20:22:21.377] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (100 times)
+[2025-11-29 20:22:21.378] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (100 times)
+[2025-11-29 20:22:22.066] [STATS] [Monitor] === Statistics (Runtime: 35s) ===
+Frames Read: 3017 | Preprocessed: 4236 | Read FPS: 107 | Preprocess FPS: 259
+RawQueue: 1134/2000
+PreQ 640x640 [ROI] engines=1 queue=376/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=484/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=976 | Failed=0 | FPS=99 | AvgTime=30.11ms/frame | TotalTime=29.39s
+Engine hand: Detected=848 | Failed=0 | FPS=83 | AvgTime=34.92ms/frame | TotalTime=29.61s
+Engine pose: Detected=848 | Failed=0 | FPS=76 | AvgTime=71.03ms/frame | TotalTime=60.24s
+Reader: Frames=3017 | FPS=107 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=4236 | FPS=259 | AvgTime=195.82ms/frame | TotalTime=829.48s
+Postprocessor: Frames=2672 | FPS=259 | AvgTime=3.23ms/frame | TotalTime=8.63s
+
+[2025-11-29 20:22:22.526] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (100 times)
+[2025-11-29 20:22:27.072] [STATS] [Monitor] === Statistics (Runtime: 40s) ===
+Frames Read: 3611 | Preprocessed: 5515 | Read FPS: 118 | Preprocess FPS: 255
+RawQueue: 1329/2000
+PreQ 640x640 [ROI] engines=1 queue=343/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=435/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=1408 | Failed=0 | FPS=86 | AvgTime=23.98ms/frame | TotalTime=33.76s
+Engine hand: Detected=1232 | Failed=0 | FPS=76 | AvgTime=27.34ms/frame | TotalTime=34.12s
+Engine pose: Detected=1280 | Failed=0 | FPS=86 | AvgTime=53.51ms/frame | TotalTime=69.35s
+Reader: Frames=3613 | FPS=118 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=5515 | FPS=255 | AvgTime=159.50ms/frame | TotalTime=879.62s
+Postprocessor: Frames=3920 | FPS=249 | AvgTime=3.08ms/frame | TotalTime=12.08s
+
+[2025-11-29 20:22:32.182] [STATS] [Monitor] === Statistics (Runtime: 45s) ===
+Frames Read: 4186 | Preprocessed: 6694 | Read FPS: 114 | Preprocess FPS: 235
+RawQueue: 1544/2000
+PreQ 640x640 [ROI] engines=1 queue=284/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=392/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=1840 | Failed=0 | FPS=86 | AvgTime=20.48ms/frame | TotalTime=37.68s
+Engine hand: Detected=1616 | Failed=0 | FPS=76 | AvgTime=23.59ms/frame | TotalTime=38.13s
+Engine pose: Detected=1680 | Failed=0 | FPS=79 | AvgTime=45.72ms/frame | TotalTime=78.28s
+Reader: Frames=4193 | FPS=114 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=6721 | FPS=235 | AvgTime=142.44ms/frame | TotalTime=957.33s
+Postprocessor: Frames=5136 | FPS=242 | AvgTime=3.01ms/frame | TotalTime=15.46s
+
+[2025-11-29 20:22:35.369] [INFO ] [VideoReader] GPU conversion stats - GPU: 1000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:22:36.083] [INFO ] [VideoReader] Frame 10: total_read=1734, actual_pos=1000, current_ts=1763346334.100000, start_ts=1763346218.750735, end_ts=1763346537.814155, frame_pts=171.100000, actual_ts_from_pts=1763346334.100000, calc_ts=1763346296.429077, ts_diff=-37.670923, moment_time=1763346163.000000, fps=12.995668
+[2025-11-29 20:22:36.204] [INFO ] [VideoReader] GPU conversion stats - GPU: 1000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:22:37.237] [STATS] [Monitor] === Statistics (Runtime: 50s) ===
+Frames Read: 4687 | Preprocessed: 7688 | Read FPS: 98 | Preprocess FPS: 194
+RawQueue: 1748/2000
+PreQ 640x640 [ROI] engines=1 queue=264/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=308/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=2192 | Failed=0 | FPS=68 | AvgTime=19.00ms/frame | TotalTime=41.95s
+Engine hand: Detected=1904 | Failed=0 | FPS=56 | AvgTime=22.34ms/frame | TotalTime=42.53s
+Engine pose: Detected=2048 | Failed=0 | FPS=71 | AvgTime=41.98ms/frame | TotalTime=87.32s
+Reader: Frames=4693 | FPS=98 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=7694 | FPS=194 | AvgTime=132.58ms/frame | TotalTime=1020.08s
+Postprocessor: Frames=6144 | FPS=197 | AvgTime=3.02ms/frame | TotalTime=18.55s
+
+[2025-11-29 20:22:37.386] [INFO ] [VideoReader] Frame 10: total_read=444, actual_pos=439, current_ts=1763346914.470000, start_ts=1763346864.180000, end_ts=1763347096.833846, frame_pts=50.470000, actual_ts_from_pts=1763346914.470000, calc_ts=1763346898.162954, ts_diff=-16.307046, moment_time=1763346864.000000, fps=12.996534
+[2025-11-29 20:22:37.864] [INFO ] [VideoReader] GPU conversion stats - GPU: 1000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:22:38.055] [INFO ] [VideoReader] Frame 10: total_read=10304, actual_pos=997, current_ts=1763346554.170000, start_ts=1763346437.884109, end_ts=1763346615.780000, frame_pts=839.170000, actual_ts_from_pts=1763346554.170000, calc_ts=1763346516.368847, ts_diff=-37.801153, moment_time=1763345715.000000, fps=12.857999
+[2025-11-29 20:22:39.586] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (200 times)
+[2025-11-29 20:22:39.606] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (200 times)
+[2025-11-29 20:22:40.158] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (200 times)
+[2025-11-29 20:22:40.828] [INFO ] [VideoReader] GPU conversion stats - GPU: 1000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:22:40.888] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (200 times)
+[2025-11-29 20:22:41.115] [INFO ] [VideoReader] Frame 10: total_read=5854, actual_pos=1001, current_ts=1763346121.130000, start_ts=1763346005.763989, end_ts=1763346310.966253, frame_pts=488.130000, actual_ts_from_pts=1763346121.130000, calc_ts=1763346083.417768, ts_diff=-37.712233, moment_time=1763345633.000000, fps=12.996823
+[2025-11-29 20:22:42.280] [STATS] [Monitor] === Statistics (Runtime: 55s) ===
+Frames Read: 5352 | Preprocessed: 9162 | Read FPS: 131 | Preprocess FPS: 291
+RawQueue: 1997/2000
+PreQ 640x640 [ROI] engines=1 queue=90/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=260/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=2736 | Failed=0 | FPS=107 | AvgTime=16.83ms/frame | TotalTime=46.06s
+Engine hand: Detected=2320 | Failed=0 | FPS=82 | AvgTime=20.16ms/frame | TotalTime=46.78s
+Engine pose: Detected=2544 | Failed=0 | FPS=98 | AvgTime=37.70ms/frame | TotalTime=96.52s
+Reader: Frames=5354 | FPS=131 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=9180 | FPS=291 | AvgTime=117.80ms/frame | TotalTime=1081.39s
+Postprocessor: Frames=7600 | FPS=288 | AvgTime=2.98ms/frame | TotalTime=22.66s
+
+[2025-11-29 20:22:44.380] [INFO ] [VideoReader] GPU conversion stats - GPU: 1000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:22:45.192] [INFO ] [VideoReader] Frame 10: total_read=8613, actual_pos=997, current_ts=1763346944.180000, start_ts=1763346829.070112, end_ts=1763347090.617967, frame_pts=700.180000, actual_ts_from_pts=1763346944.180000, calc_ts=1763346906.715138, ts_diff=-37.464862, moment_time=1763346244.000000, fps=12.996534
+[2025-11-29 20:22:47.302] [STATS] [Monitor] === Statistics (Runtime: 60s) ===
+Frames Read: 5739 | Preprocessed: 10508 | Read FPS: 76 | Preprocess FPS: 266
+RawQueue: 1995/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=168/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=3216 | Failed=0 | FPS=95 | AvgTime=15.61ms/frame | TotalTime=50.20s
+Engine hand: Detected=2704 | Failed=0 | FPS=76 | AvgTime=18.93ms/frame | TotalTime=51.19s
+Engine pose: Detected=3024 | Failed=0 | FPS=95 | AvgTime=34.68ms/frame | TotalTime=105.44s
+Reader: Frames=5747 | FPS=76 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=10524 | FPS=266 | AvgTime=108.26ms/frame | TotalTime=1139.29s
+Postprocessor: Frames=8944 | FPS=266 | AvgTime=2.98ms/frame | TotalTime=26.61s
+
+[2025-11-29 20:22:52.302] [STATS] [Monitor] === Statistics (Runtime: 65s) ===
+Frames Read: 6207 | Preprocessed: 12014 | Read FPS: 93 | Preprocess FPS: 299
+RawQueue: 1990/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=81/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=3808 | Failed=0 | FPS=117 | AvgTime=14.22ms/frame | TotalTime=54.13s
+Engine hand: Detected=3168 | Failed=0 | FPS=92 | AvgTime=17.52ms/frame | TotalTime=55.51s
+Engine pose: Detected=3568 | Failed=0 | FPS=108 | AvgTime=31.79ms/frame | TotalTime=113.94s
+Reader: Frames=6207 | FPS=93 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=12014 | FPS=299 | AvgTime=98.88ms/frame | TotalTime=1187.94s
+Postprocessor: Frames=10544 | FPS=318 | AvgTime=2.93ms/frame | TotalTime=30.89s
+
+[2025-11-29 20:22:52.383] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (300 times)
+[2025-11-29 20:22:53.779] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (300 times)
+[2025-11-29 20:22:53.954] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (300 times)
+[2025-11-29 20:22:54.672] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (300 times)
+[2025-11-29 20:22:57.303] [STATS] [Monitor] === Statistics (Runtime: 70s) ===
+Frames Read: 6589 | Preprocessed: 13214 | Read FPS: 76 | Preprocess FPS: 240
+RawQueue: 1998/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=2/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=4304 | Failed=0 | FPS=99 | AvgTime=13.54ms/frame | TotalTime=58.29s
+Engine hand: Detected=3520 | Failed=0 | FPS=70 | AvgTime=16.94ms/frame | TotalTime=59.89s
+Engine pose: Detected=4112 | Failed=0 | FPS=108 | AvgTime=29.91ms/frame | TotalTime=123.00s
+Reader: Frames=6589 | FPS=76 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=13215 | FPS=240 | AvgTime=93.26ms/frame | TotalTime=1232.48s
+Postprocessor: Frames=11936 | FPS=278 | AvgTime=3.02ms/frame | TotalTime=36.00s
+
+[2025-11-29 20:23:00.547] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (400 times)
+[2025-11-29 20:23:01.218] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (400 times)
+[2025-11-29 20:23:01.402] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (400 times)
+[2025-11-29 20:23:02.304] [STATS] [Monitor] === Statistics (Runtime: 75s) ===
+Frames Read: 7038 | Preprocessed: 14544 | Read FPS: 89 | Preprocess FPS: 266
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=1/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=4880 | Failed=0 | FPS=115 | AvgTime=12.67ms/frame | TotalTime=61.84s
+Engine hand: Detected=3968 | Failed=0 | FPS=89 | AvgTime=16.04ms/frame | TotalTime=63.63s
+Engine pose: Detected=4736 | Failed=0 | FPS=124 | AvgTime=27.68ms/frame | TotalTime=131.12s
+Reader: Frames=7038 | FPS=89 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=14544 | FPS=266 | AvgTime=87.57ms/frame | TotalTime=1273.56s
+Postprocessor: Frames=13584 | FPS=329 | AvgTime=3.01ms/frame | TotalTime=40.88s
+
+[2025-11-29 20:23:02.368] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (400 times)
+[2025-11-29 20:23:06.579] [WARN ] [Reader] Reader 1 queue push slow (100 times) - preprocessors may be bottleneck
+[2025-11-29 20:23:06.605] [WARN ] [Reader] Reader 3 queue push slow (100 times) - preprocessors may be bottleneck
+[2025-11-29 20:23:06.729] [WARN ] [Reader] Reader 2 queue push slow (100 times) - preprocessors may be bottleneck
+[2025-11-29 20:23:07.374] [STATS] [Monitor] === Statistics (Runtime: 80s) ===
+Frames Read: 7393 | Preprocessed: 15630 | Read FPS: 71 | Preprocess FPS: 217
+RawQueue: 1996/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=1/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=5344 | Failed=0 | FPS=92 | AvgTime=12.31ms/frame | TotalTime=65.98s
+Engine hand: Detected=4336 | Failed=0 | FPS=73 | AvgTime=15.60ms/frame | TotalTime=67.91s
+Engine pose: Detected=5216 | Failed=0 | FPS=96 | AvgTime=26.70ms/frame | TotalTime=139.69s
+Reader: Frames=7406 | FPS=71 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=15673 | FPS=217 | AvgTime=83.93ms/frame | TotalTime=1315.37s
+Postprocessor: Frames=14896 | FPS=262 | AvgTime=3.06ms/frame | TotalTime=45.60s
+
+[2025-11-29 20:23:07.959] [WARN ] [Reader] Reader 0 queue push slow (100 times) - preprocessors may be bottleneck
+[2025-11-29 20:23:08.024] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (500 times)
+[2025-11-29 20:23:08.057] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (500 times)
+[2025-11-29 20:23:08.431] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (500 times)
+[2025-11-29 20:23:08.615] [INFO ] [VideoReader] *** STOPPING: Reached end of video file (end_of_stream=true) *** total_read=10833, actual_pos=1526, frames_in_window=1526
+[2025-11-29 20:23:08.615] [INFO ] [VideoReader]   Time window: current_ts=1763346557.432779, end_ts=1763346615.780000, remaining=58.347221s, expected_frames_remaining=750
+[2025-11-29 20:23:08.615] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o25010001318_506de774-058e-4b07-a6c2-90e2d1fb7624_v0' *** frame_count=1526, actual_frame_position=1526, consecutive_failures=1
+[2025-11-29 20:23:08.615] [INFO ] [VideoReader] *** STOPPING: Reached end of video file (end_of_stream=true) *** total_read=10833, actual_pos=1526, frames_in_window=1526
+[2025-11-29 20:23:08.615] [INFO ] [VideoReader]   Time window: current_ts=1763346557.432779, end_ts=1763346615.780000, remaining=58.347221s, expected_frames_remaining=750
+[2025-11-29 20:23:08.615] [INFO ] [VideoReader] *** STOPPING: Reached end of video file (end_of_stream=true) *** total_read=10833, actual_pos=1526, frames_in_window=1526
+[2025-11-29 20:23:08.615] [INFO ] [VideoReader]   Time window: current_ts=1763346557.432779, end_ts=1763346615.780000, remaining=58.347221s, expected_frames_remaining=750
+[2025-11-29 20:23:08.615] [INFO ] [Reader] *** Stopping video reading after 3 consecutive readFrame() failures *** video_key='c03o25010001318_506de774-058e-4b07-a6c2-90e2d1fb7624_v0', frames_read=1526, actual_frame_position=1526
+[2025-11-29 20:23:08.615] [INFO ] [Reader] *** Reader 4 finished video c03o25010001318_506de774-058e-4b07-a6c2-90e2d1fb7624_v0 *** frames_read=1526, actual_frame_position=1526, path=/shared_storage/action_videos/c03o25010001318/20251117091515_506de774-058e-4b07-a6c2-90e2d1fb7624.mp4
+[2025-11-29 20:23:09.838] [INFO ] [VideoReader] Found h264_cuvid hardware decoder
+[2025-11-29 20:23:09.838] [INFO ] [VideoReader] Using CUVID decoder: h264_cuvid (NVDEC hardware-accelerated)
+[2025-11-29 20:23:09.838] [INFO ] [VideoReader] Setting CUVID decoder with 32 surfaces for async decode
+[2025-11-29 20:23:09.838] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:23:09.838] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:23:09.902] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (500 times)
+[2025-11-29 20:23:11.233] [WARN ] [VideoReader] Unused decoder option: output=cuda
+[2025-11-29 20:23:11.233] [INFO ] [VideoReader] Codec opened with hardware decoder, decoder: h264_cuvid, hw_pix_fmt: 119, codec_id: 27
+[2025-11-29 20:23:11.233] [INFO ] [VideoReader] Initialized reader for /shared_storage/action_videos/c03o25010001318/20251117093016_506de774-058e-4b07-a6c2-90e2d1fb7624.mp4 [NVDEC]
+[2025-11-29 20:23:11.233] [INFO ] [VideoReader] Time window: start_ts=1763346616.000000, end_ts=1763347027.734625, moment_time=1763346616.000000, duration=900.840000, video_range=[1763346616.000000, 1763347516.840000], actual_range=[1763346616.000000, 1763347027.734625], fps=12.857000, time_window_duration=411.734625, actual_available_duration=411.734625, total_expected_frames~5293, actual_expected_frames~5293, seek_to_frame=0, seek_timestamp=1763346616.000000, remaining_duration=411.734625, remaining_frames~5293
+[2025-11-29 20:23:11.233] [INFO ] [VideoReader]   (note: actual frames_read may be less than expected if: 1) video file ends before end_ts, 2) frames before start_ts are skipped, 3) debug mode frame limit is reached)
+[2025-11-29 20:23:11.235] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:23:11.235] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:23:12.273] [WARN ] [Reader] Reader 4 queue push slow (100 times) - preprocessors may be bottleneck
+[2025-11-29 20:23:12.435] [STATS] [Monitor] === Statistics (Runtime: 85s) ===
+Frames Read: 7838 | Preprocessed: 16961 | Read FPS: 87 | Preprocess FPS: 262
+RawQueue: 1998/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=5/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=5824 | Failed=0 | FPS=94 | AvgTime=11.93ms/frame | TotalTime=69.49s
+Engine hand: Detected=4784 | Failed=0 | FPS=88 | AvgTime=15.07ms/frame | TotalTime=72.09s
+Engine pose: Detected=5728 | Failed=0 | FPS=101 | AvgTime=25.84ms/frame | TotalTime=148.42s
+Reader: Frames=7850 | FPS=87 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=16980 | FPS=262 | AvgTime=79.66ms/frame | TotalTime=1352.64s
+Postprocessor: Frames=16336 | FPS=284 | AvgTime=3.02ms/frame | TotalTime=49.28s
+
+[2025-11-29 20:23:15.976] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (600 times)
+[2025-11-29 20:23:16.171] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (600 times)
+[2025-11-29 20:23:16.296] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (600 times)
+[2025-11-29 20:23:17.436] [STATS] [Monitor] === Statistics (Runtime: 90s) ===
+Frames Read: 8305 | Preprocessed: 18359 | Read FPS: 92 | Preprocess FPS: 276
+RawQueue: 1998/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=5/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=6288 | Failed=0 | FPS=91 | AvgTime=11.74ms/frame | TotalTime=73.85s
+Engine hand: Detected=5248 | Failed=0 | FPS=91 | AvgTime=14.59ms/frame | TotalTime=76.59s
+Engine pose: Detected=6272 | Failed=0 | FPS=107 | AvgTime=25.08ms/frame | TotalTime=157.27s
+Reader: Frames=8305 | FPS=92 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=18359 | FPS=276 | AvgTime=75.67ms/frame | TotalTime=1389.23s
+Postprocessor: Frames=17808 | FPS=290 | AvgTime=2.92ms/frame | TotalTime=52.01s
+
+[2025-11-29 20:23:17.455] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (600 times)
+[2025-11-29 20:23:22.437] [STATS] [Monitor] === Statistics (Runtime: 95s) ===
+Frames Read: 8811 | Preprocessed: 19868 | Read FPS: 101 | Preprocess FPS: 301
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=0/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=6768 | Failed=0 | FPS=96 | AvgTime=11.50ms/frame | TotalTime=77.81s
+Engine hand: Detected=5744 | Failed=0 | FPS=99 | AvgTime=14.07ms/frame | TotalTime=80.82s
+Engine pose: Detected=6768 | Failed=0 | FPS=99 | AvgTime=24.38ms/frame | TotalTime=164.99s
+Reader: Frames=8811 | FPS=101 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=19868 | FPS=301 | AvgTime=72.00ms/frame | TotalTime=1430.55s
+Postprocessor: Frames=19280 | FPS=294 | AvgTime=2.87ms/frame | TotalTime=55.27s
+
+[2025-11-29 20:23:23.096] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (700 times)
+[2025-11-29 20:23:23.223] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (700 times)
+[2025-11-29 20:23:23.526] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (700 times)
+[2025-11-29 20:23:24.553] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (700 times)
+[2025-11-29 20:23:27.119] [INFO ] [VideoReader] GPU conversion stats - GPU: 2000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:23:27.461] [STATS] [Monitor] === Statistics (Runtime: 100s) ===
+Frames Read: 9310 | Preprocessed: 21359 | Read FPS: 99 | Preprocess FPS: 298
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=2/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=7248 | Failed=0 | FPS=96 | AvgTime=11.22ms/frame | TotalTime=81.29s
+Engine hand: Detected=6240 | Failed=0 | FPS=99 | AvgTime=13.62ms/frame | TotalTime=85.23s
+Engine pose: Detected=7216 | Failed=0 | FPS=89 | AvgTime=23.88ms/frame | TotalTime=172.69s
+Reader: Frames=9310 | FPS=99 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=21375 | FPS=298 | AvgTime=69.18ms/frame | TotalTime=1478.83s
+Postprocessor: Frames=20704 | FPS=284 | AvgTime=2.88ms/frame | TotalTime=59.71s
+
+[2025-11-29 20:23:27.727] [INFO ] [VideoReader] Frame 11: total_read=2735, actual_pos=2001, current_ts=1763346449.370000, start_ts=1763346218.750735, end_ts=1763346537.814155, frame_pts=286.370000, actual_ts_from_pts=1763346449.370000, calc_ts=1763346373.454744, ts_diff=-75.915256, moment_time=1763346163.000000, fps=12.995668
+[2025-11-29 20:23:30.064] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (800 times)
+[2025-11-29 20:23:30.257] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (800 times)
+[2025-11-29 20:23:30.550] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (800 times)
+[2025-11-29 20:23:31.277] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (800 times)
+[2025-11-29 20:23:32.154] [INFO ] [VideoReader] GPU conversion stats - GPU: 2000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:23:32.462] [STATS] [Monitor] === Statistics (Runtime: 105s) ===
+Frames Read: 9703 | Preprocessed: 22536 | Read FPS: 78 | Preprocess FPS: 234
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=3/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=2/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=7680 | Failed=0 | FPS=85 | AvgTime=11.07ms/frame | TotalTime=85.01s
+Engine hand: Detected=6640 | Failed=0 | FPS=79 | AvgTime=13.50ms/frame | TotalTime=89.66s
+Engine pose: Detected=7632 | Failed=0 | FPS=82 | AvgTime=23.61ms/frame | TotalTime=180.93s
+Reader: Frames=9703 | FPS=78 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=22536 | FPS=234 | AvgTime=67.23ms/frame | TotalTime=1515.16s
+Postprocessor: Frames=21952 | FPS=248 | AvgTime=2.86ms/frame | TotalTime=62.74s
+
+[2025-11-29 20:23:32.808] [INFO ] [VideoReader] Frame 11: total_read=1445, actual_pos=1440, current_ts=1763347029.500000, start_ts=1763346864.180000, end_ts=1763347096.833846, frame_pts=165.500000, actual_ts_from_pts=1763347029.500000, calc_ts=1763346975.183487, ts_diff=-54.316513, moment_time=1763346864.000000, fps=12.996534
+[2025-11-29 20:23:34.576] [WARN ] [Reader] Reader 3 queue push slow (200 times) - preprocessors may be bottleneck
+[2025-11-29 20:23:35.039] [WARN ] [Reader] Reader 0 queue push slow (200 times) - preprocessors may be bottleneck
+[2025-11-29 20:23:35.126] [WARN ] [Reader] Reader 2 queue push slow (200 times) - preprocessors may be bottleneck
+[2025-11-29 20:23:36.160] [INFO ] [VideoReader] GPU conversion stats - GPU: 2000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:23:36.698] [INFO ] [VideoReader] Frame 11: total_read=472, actual_pos=472, current_ts=1763346670.530000, start_ts=1763346616.000000, end_ts=1763347027.734625, frame_pts=54.530000, actual_ts_from_pts=1763346670.530000, calc_ts=1763346652.711519, ts_diff=-17.818481, moment_time=1763346616.000000, fps=12.857000
+[2025-11-29 20:23:36.883] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (900 times)
+[2025-11-29 20:23:37.193] [INFO ] [VideoReader] GPU conversion stats - GPU: 2000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:23:37.526] [STATS] [Monitor] === Statistics (Runtime: 110s) ===
+Frames Read: 10207 | Preprocessed: 24063 | Read FPS: 100 | Preprocess FPS: 305
+RawQueue: 1998/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=3/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=8192 | Failed=0 | FPS=102 | AvgTime=10.78ms/frame | TotalTime=88.32s
+Engine hand: Detected=7152 | Failed=0 | FPS=102 | AvgTime=13.13ms/frame | TotalTime=93.91s
+Engine pose: Detected=8144 | Failed=0 | FPS=102 | AvgTime=23.07ms/frame | TotalTime=188.63s
+Reader: Frames=10215 | FPS=100 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=24082 | FPS=305 | AvgTime=64.85ms/frame | TotalTime=1561.67s
+Postprocessor: Frames=23488 | FPS=307 | AvgTime=2.86ms/frame | TotalTime=67.25s
+
+[2025-11-29 20:23:37.660] [WARN ] [Reader] Reader 1 queue push slow (200 times) - preprocessors may be bottleneck
+[2025-11-29 20:23:37.751] [INFO ] [VideoReader] Frame 11: total_read=6855, actual_pos=2002, current_ts=1763346236.400000, start_ts=1763346005.763989, end_ts=1763346310.966253, frame_pts=603.400000, actual_ts_from_pts=1763346236.400000, calc_ts=1763346160.436590, ts_diff=-75.963410, moment_time=1763345633.000000, fps=12.996823
+[2025-11-29 20:23:37.830] [WARN ] [Reader] Reader 4 queue push slow (200 times) - preprocessors may be bottleneck
+[2025-11-29 20:23:37.961] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (900 times)
+[2025-11-29 20:23:37.962] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (900 times)
+[2025-11-29 20:23:38.664] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (900 times)
+[2025-11-29 20:23:40.592] [INFO ] [VideoReader] GPU conversion stats - GPU: 2000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:23:41.006] [INFO ] [VideoReader] Frame 11: total_read=9614, actual_pos=1998, current_ts=1763347059.450000, start_ts=1763346829.070112, end_ts=1763347090.617967, frame_pts=815.450000, actual_ts_from_pts=1763347059.450000, calc_ts=1763346983.735672, ts_diff=-75.714328, moment_time=1763346244.000000, fps=12.996534
+[2025-11-29 20:23:42.537] [STATS] [Monitor] === Statistics (Runtime: 115s) ===
+Frames Read: 10684 | Preprocessed: 25521 | Read FPS: 94 | Preprocess FPS: 287
+RawQueue: 1992/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=1/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=8656 | Failed=0 | FPS=91 | AvgTime=10.65ms/frame | TotalTime=92.33s
+Engine hand: Detected=7632 | Failed=0 | FPS=94 | AvgTime=12.88ms/frame | TotalTime=98.31s
+Engine pose: Detected=8624 | Failed=0 | FPS=94 | AvgTime=22.79ms/frame | TotalTime=196.91s
+Reader: Frames=10686 | FPS=94 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=25522 | FPS=287 | AvgTime=62.82ms/frame | TotalTime=1603.28s
+Postprocessor: Frames=24912 | FPS=281 | AvgTime=2.84ms/frame | TotalTime=70.66s
+
+[2025-11-29 20:23:43.613] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (1000 times)
+[2025-11-29 20:23:45.307] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (1000 times)
+[2025-11-29 20:23:46.432] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (1000 times)
+[2025-11-29 20:23:46.666] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (1000 times)
+[2025-11-29 20:23:47.645] [STATS] [Monitor] === Statistics (Runtime: 120s) ===
+Frames Read: 11070 | Preprocessed: 26640 | Read FPS: 77 | Preprocess FPS: 223
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=1/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=9040 | Failed=0 | FPS=76 | AvgTime=10.58ms/frame | TotalTime=95.62s
+Engine hand: Detected=8000 | Failed=0 | FPS=73 | AvgTime=12.76ms/frame | TotalTime=102.09s
+Engine pose: Detected=8992 | Failed=0 | FPS=73 | AvgTime=22.66ms/frame | TotalTime=204.53s
+Reader: Frames=11070 | FPS=77 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=26640 | FPS=223 | AvgTime=61.39ms/frame | TotalTime=1635.45s
+Postprocessor: Frames=26032 | FPS=223 | AvgTime=2.82ms/frame | TotalTime=73.52s
+
+[2025-11-29 20:23:51.212] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (1100 times)
+[2025-11-29 20:23:52.367] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (1100 times)
+[2025-11-29 20:23:52.646] [STATS] [Monitor] === Statistics (Runtime: 125s) ===
+Frames Read: 11561 | Preprocessed: 28118 | Read FPS: 96 | Preprocess FPS: 289
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=0/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=9520 | Failed=0 | FPS=93 | AvgTime=10.34ms/frame | TotalTime=98.45s
+Engine hand: Detected=8496 | Failed=0 | FPS=97 | AvgTime=12.51ms/frame | TotalTime=106.25s
+Engine pose: Detected=9488 | Failed=0 | FPS=97 | AvgTime=22.13ms/frame | TotalTime=210.71s
+Reader: Frames=11561 | FPS=96 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=28118 | FPS=289 | AvgTime=59.87ms/frame | TotalTime=1683.38s
+Postprocessor: Frames=27504 | FPS=288 | AvgTime=2.79ms/frame | TotalTime=76.66s
+
+[2025-11-29 20:23:52.799] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (1100 times)
+[2025-11-29 20:23:53.302] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (1100 times)
+[2025-11-29 20:23:55.988] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=9879, actual_pos=2263, current_ts=1763347090.760000, end_ts=1763347090.617967, frames_in_window=2263, end_of_stream=false
+[2025-11-29 20:23:55.989] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=846.760000, actual_ts_from_pts=1763347090.760000, calc_ts=1763347004.125723, calc_ts_diff=-86.634277
+[2025-11-29 20:23:55.989] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o24100002882_81d9f6ac-0933-492d-83da-04fd6fcdaed7_v0' *** frame_count=2263, actual_frame_position=2263, consecutive_failures=1
+[2025-11-29 20:23:56.076] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=9881, actual_pos=2264, current_ts=1763347090.840000, end_ts=1763347090.617967, frames_in_window=2264, end_of_stream=false
+[2025-11-29 20:23:56.076] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=846.840000, actual_ts_from_pts=1763347090.840000, calc_ts=1763347004.279610, calc_ts_diff=-86.560390
+[2025-11-29 20:23:56.076] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o24100002882_81d9f6ac-0933-492d-83da-04fd6fcdaed7_v0' *** frame_count=2264, actual_frame_position=2264, consecutive_failures=1
+[2025-11-29 20:23:56.155] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=9883, actual_pos=2265, current_ts=1763347090.990000, end_ts=1763347090.617967, frames_in_window=2265, end_of_stream=false
+[2025-11-29 20:23:56.155] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=846.990000, actual_ts_from_pts=1763347090.990000, calc_ts=1763347004.433497, calc_ts_diff=-86.556503
+[2025-11-29 20:23:56.155] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o24100002882_81d9f6ac-0933-492d-83da-04fd6fcdaed7_v0' *** frame_count=2265, actual_frame_position=2265, consecutive_failures=1
+[2025-11-29 20:23:56.241] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=9885, actual_pos=2266, current_ts=1763347091.070000, end_ts=1763347090.617967, frames_in_window=2266, end_of_stream=false
+[2025-11-29 20:23:56.242] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=847.070000, actual_ts_from_pts=1763347091.070000, calc_ts=1763347004.587385, calc_ts_diff=-86.482615
+[2025-11-29 20:23:56.242] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o24100002882_81d9f6ac-0933-492d-83da-04fd6fcdaed7_v0' *** frame_count=2266, actual_frame_position=2266, consecutive_failures=1
+[2025-11-29 20:23:56.284] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=9887, actual_pos=2267, current_ts=1763347091.220000, end_ts=1763347090.617967, frames_in_window=2267, end_of_stream=false
+[2025-11-29 20:23:56.284] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=847.220000, actual_ts_from_pts=1763347091.220000, calc_ts=1763347004.741272, calc_ts_diff=-86.478728
+[2025-11-29 20:23:56.284] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o24100002882_81d9f6ac-0933-492d-83da-04fd6fcdaed7_v0' *** frame_count=2267, actual_frame_position=2267, consecutive_failures=1
+[2025-11-29 20:23:56.288] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=9888, actual_pos=2267, current_ts=1763347091.300000, end_ts=1763347090.617967, frames_in_window=2267, end_of_stream=false
+[2025-11-29 20:23:56.289] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=847.300000, actual_ts_from_pts=1763347091.300000, calc_ts=1763347004.818215, calc_ts_diff=-86.481785
+[2025-11-29 20:23:56.312] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=9889, actual_pos=2267, current_ts=1763347091.460000, end_ts=1763347090.617967, frames_in_window=2267, end_of_stream=false
+[2025-11-29 20:23:56.312] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=847.460000, actual_ts_from_pts=1763347091.460000, calc_ts=1763347004.895159, calc_ts_diff=-86.564841
+[2025-11-29 20:23:56.312] [INFO ] [Reader] *** Stopping video reading after 3 consecutive readFrame() failures *** video_key='c03o24100002882_81d9f6ac-0933-492d-83da-04fd6fcdaed7_v0', frames_read=2267, actual_frame_position=2267
+[2025-11-29 20:23:56.312] [INFO ] [Reader] *** Reader 3 finished video c03o24100002882_81d9f6ac-0933-492d-83da-04fd6fcdaed7_v0 *** frames_read=2267, actual_frame_position=2267, path=/shared_storage/action_videos/c03o24100002882/20251117092404_81d9f6ac-0933-492d-83da-04fd6fcdaed7.mp4
+[2025-11-29 20:23:57.500] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (1200 times)
+[2025-11-29 20:23:57.646] [STATS] [Monitor] === Statistics (Runtime: 130s) ===
+Frames Read: 12054 | Preprocessed: 29601 | Read FPS: 98 | Preprocess FPS: 296
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=1/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=10016 | Failed=0 | FPS=99 | AvgTime=10.18ms/frame | TotalTime=101.96s
+Engine hand: Detected=8992 | Failed=0 | FPS=99 | AvgTime=12.32ms/frame | TotalTime=110.77s
+Engine pose: Detected=9968 | Failed=0 | FPS=96 | AvgTime=21.71ms/frame | TotalTime=216.71s
+Reader: Frames=12054 | FPS=98 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=29601 | FPS=296 | AvgTime=58.50ms/frame | TotalTime=1731.61s
+Postprocessor: Frames=28976 | FPS=294 | AvgTime=2.72ms/frame | TotalTime=78.94s
+
+unix_timestamp 1763346592.174050 ---->2025-11-17T09:29:52.1740499+07:00
+unix_timestamp 1763347278.610542 ---->2025-11-17T09:41:18.6105417+07:00
+[2025-11-29 20:23:58.119] [INFO ] [VideoReader] Found h264_cuvid hardware decoder
+[2025-11-29 20:23:58.120] [INFO ] [VideoReader] Using CUVID decoder: h264_cuvid (NVDEC hardware-accelerated)
+[2025-11-29 20:23:58.120] [INFO ] [VideoReader] Setting CUVID decoder with 32 surfaces for async decode
+[2025-11-29 20:23:58.120] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:23:58.120] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:23:58.885] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (1200 times)
+[2025-11-29 20:23:59.680] [WARN ] [VideoReader] Unused decoder option: output=cuda
+[2025-11-29 20:23:59.681] [INFO ] [VideoReader] Codec opened with hardware decoder, decoder: h264_cuvid, hw_pix_fmt: 119, codec_id: 27
+[2025-11-29 20:23:59.681] [INFO ] [VideoReader] Initialized reader for /shared_storage/action_videos/c03o24100008249/20251117092437_ffd7a35d-5de5-44a7-8e32-913ef25ea656.mp4 [NVDEC]
+[2025-11-29 20:23:59.681] [INFO ] [VideoReader] Time window: start_ts=1763346562.174050, end_ts=1763347177.140000, moment_time=1763346277.000000, duration=900.140000, video_range=[1763346277.000000, 1763347177.140000], actual_range=[1763346562.174050, 1763347177.140000], fps=12.996967, time_window_duration=614.965950, actual_available_duration=614.965950, total_expected_frames~7992, actual_expected_frames~7992, seek_to_frame=3706, seek_timestamp=1763346562.143441, remaining_duration=614.996559, remaining_frames~7993
+[2025-11-29 20:23:59.681] [INFO ] [VideoReader]   (note: actual frames_read may be less than expected if: 1) video file ends before end_ts, 2) frames before start_ts are skipped, 3) debug mode frame limit is reached)
+[2025-11-29 20:23:59.743] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:23:59.743] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:23:59.891] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (1200 times)
+[2025-11-29 20:23:59.931] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (1200 times)
+[2025-11-29 20:24:02.647] [STATS] [Monitor] === Statistics (Runtime: 135s) ===
+Frames Read: 12538 | Preprocessed: 31105 | Read FPS: 96 | Preprocess FPS: 300
+RawQueue: 1984/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=0/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=10528 | Failed=0 | FPS=102 | AvgTime=10.01ms/frame | TotalTime=105.39s
+Engine hand: Detected=9504 | Failed=0 | FPS=102 | AvgTime=12.15ms/frame | TotalTime=115.44s
+Engine pose: Detected=10512 | Failed=0 | FPS=108 | AvgTime=21.35ms/frame | TotalTime=224.47s
+Reader: Frames=12538 | FPS=96 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=31105 | FPS=300 | AvgTime=57.60ms/frame | TotalTime=1791.66s
+Postprocessor: Frames=30544 | FPS=313 | AvgTime=2.67ms/frame | TotalTime=81.68s
+
+[2025-11-29 20:24:02.648] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=2024, actual_pos=2019, current_ts=1763347096.910000, end_ts=1763347096.833846, frames_in_window=2019, end_of_stream=false
+[2025-11-29 20:24:02.648] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=232.910000, actual_ts_from_pts=1763347096.910000, calc_ts=1763347019.733826, calc_ts_diff=-77.176174
+[2025-11-29 20:24:02.648] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o25010000307_f79b7232-6005-4e53-a453-1ce0880f584d_v1' *** frame_count=2019, actual_frame_position=2019, consecutive_failures=1
+[2025-11-29 20:24:02.713] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=2026, actual_pos=2020, current_ts=1763347097.060000, end_ts=1763347096.833846, frames_in_window=2020, end_of_stream=false
+[2025-11-29 20:24:02.714] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=233.060000, actual_ts_from_pts=1763347097.060000, calc_ts=1763347019.887713, calc_ts_diff=-77.172287
+[2025-11-29 20:24:02.714] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o25010000307_f79b7232-6005-4e53-a453-1ce0880f584d_v1' *** frame_count=2020, actual_frame_position=2020, consecutive_failures=1
+[2025-11-29 20:24:02.740] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=2027, actual_pos=2020, current_ts=1763347097.130000, end_ts=1763347096.833846, frames_in_window=2020, end_of_stream=false
+[2025-11-29 20:24:02.740] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=233.130000, actual_ts_from_pts=1763347097.130000, calc_ts=1763347019.964656, calc_ts_diff=-77.165344
+[2025-11-29 20:24:02.754] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=2028, actual_pos=2020, current_ts=1763347097.290000, end_ts=1763347096.833846, frames_in_window=2020, end_of_stream=false
+[2025-11-29 20:24:02.754] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=233.290000, actual_ts_from_pts=1763347097.290000, calc_ts=1763347020.041600, calc_ts_diff=-77.248400
+[2025-11-29 20:24:02.754] [INFO ] [Reader] *** Stopping video reading after 3 consecutive readFrame() failures *** video_key='c03o25010000307_f79b7232-6005-4e53-a453-1ce0880f584d_v1', frames_read=2020, actual_frame_position=2020
+[2025-11-29 20:24:02.754] [INFO ] [Reader] *** Reader 1 finished video c03o25010000307_f79b7232-6005-4e53-a453-1ce0880f584d_v1 *** frames_read=2020, actual_frame_position=2020, path=/shared_storage/action_videos/c03o25010000307/20251117093424_f79b7232-6005-4e53-a453-1ce0880f584d.mp4
+unix_timestamp 1763347068.114458 ---->2025-11-17T09:37:48.1144576+07:00
+unix_timestamp 1763347251.439174 ---->2025-11-17T09:40:51.4391739+07:00
+[2025-11-29 20:24:03.543] [INFO ] [VideoReader] Found h264_cuvid hardware decoder
+[2025-11-29 20:24:03.543] [INFO ] [VideoReader] Using CUVID decoder: h264_cuvid (NVDEC hardware-accelerated)
+[2025-11-29 20:24:03.543] [INFO ] [VideoReader] Setting CUVID decoder with 32 surfaces for async decode
+[2025-11-29 20:24:03.544] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:24:03.544] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:24:04.120] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (1300 times)
+[2025-11-29 20:24:05.311] [WARN ] [VideoReader] Unused decoder option: output=cuda
+[2025-11-29 20:24:05.312] [INFO ] [VideoReader] Codec opened with hardware decoder, decoder: h264_cuvid, hw_pix_fmt: 119, codec_id: 27
+[2025-11-29 20:24:05.312] [INFO ] [VideoReader] Initialized reader for /shared_storage/action_videos/c03o24120002993/20251117092437_bd9603aa-c4e2-47a7-ba2e-e14d0b3e07e8.mp4 [NVDEC]
+[2025-11-29 20:24:05.312] [INFO ] [VideoReader] Time window: start_ts=1763347038.114458, end_ts=1763347177.820000, moment_time=1763346277.000000, duration=900.820000, video_range=[1763346277.000000, 1763347177.820000], actual_range=[1763347038.114458, 1763347177.820000], fps=12.857286, time_window_duration=139.705542, actual_available_duration=139.705542, total_expected_frames~1796, actual_expected_frames~1796, seek_to_frame=9785, seek_timestamp=1763347038.047108, remaining_duration=139.772892, remaining_frames~1797
+[2025-11-29 20:24:05.312] [INFO ] [VideoReader]   (note: actual frames_read may be less than expected if: 1) video file ends before end_ts, 2) frames before start_ts are skipped, 3) debug mode frame limit is reached)
+[2025-11-29 20:24:05.983] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (1300 times)
+[2025-11-29 20:24:06.498] [WARN ] [Reader] Reader 0 queue push slow (300 times) - preprocessors may be bottleneck
+[2025-11-29 20:24:06.572] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (1300 times)
+[2025-11-29 20:24:06.853] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (1300 times)
+[2025-11-29 20:24:06.969] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=3498, actual_pos=2764, current_ts=1763346537.930000, end_ts=1763346537.814155, frames_in_window=2764, end_of_stream=false
+[2025-11-29 20:24:06.970] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=374.930000, actual_ts_from_pts=1763346537.930000, calc_ts=1763346432.166615, calc_ts_diff=-105.763385
+[2025-11-29 20:24:06.970] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o25010001984_6e2d7aff-3d25-4ebe-a7af-e654c13a8a47_v0' *** frame_count=2764, actual_frame_position=2764, consecutive_failures=1
+[2025-11-29 20:24:07.028] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=3500, actual_pos=2765, current_ts=1763346538.010000, end_ts=1763346537.814155, frames_in_window=2765, end_of_stream=false
+[2025-11-29 20:24:07.028] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=375.010000, actual_ts_from_pts=1763346538.010000, calc_ts=1763346432.320513, calc_ts_diff=-105.689487
+[2025-11-29 20:24:07.028] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o25010001984_6e2d7aff-3d25-4ebe-a7af-e654c13a8a47_v0' *** frame_count=2765, actual_frame_position=2765, consecutive_failures=1
+[2025-11-29 20:24:07.129] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=3502, actual_pos=2766, current_ts=1763346538.160000, end_ts=1763346537.814155, frames_in_window=2766, end_of_stream=false
+[2025-11-29 20:24:07.130] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=375.160000, actual_ts_from_pts=1763346538.160000, calc_ts=1763346432.474410, calc_ts_diff=-105.685590
+[2025-11-29 20:24:07.130] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o25010001984_6e2d7aff-3d25-4ebe-a7af-e654c13a8a47_v0' *** frame_count=2766, actual_frame_position=2766, consecutive_failures=1
+[2025-11-29 20:24:07.171] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=3503, actual_pos=2766, current_ts=1763346538.240000, end_ts=1763346537.814155, frames_in_window=2766, end_of_stream=false
+[2025-11-29 20:24:07.172] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=375.240000, actual_ts_from_pts=1763346538.240000, calc_ts=1763346432.551359, calc_ts_diff=-105.688641
+[2025-11-29 20:24:07.197] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=3504, actual_pos=2766, current_ts=1763346538.390000, end_ts=1763346537.814155, frames_in_window=2766, end_of_stream=false
+[2025-11-29 20:24:07.198] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=375.390000, actual_ts_from_pts=1763346538.390000, calc_ts=1763346432.628308, calc_ts_diff=-105.761693
+[2025-11-29 20:24:07.198] [INFO ] [Reader] *** Stopping video reading after 3 consecutive readFrame() failures *** video_key='c03o25010001984_6e2d7aff-3d25-4ebe-a7af-e654c13a8a47_v0', frames_read=2766, actual_frame_position=2766
+[2025-11-29 20:24:07.198] [INFO ] [Reader] *** Reader 0 finished video c03o25010001984_6e2d7aff-3d25-4ebe-a7af-e654c13a8a47_v0 *** frames_read=2766, actual_frame_position=2766, path=/shared_storage/action_videos/c03o25010001984/20251117092243_6e2d7aff-3d25-4ebe-a7af-e654c13a8a47.mp4
+[2025-11-29 20:24:07.647] [STATS] [Monitor] === Statistics (Runtime: 140s) ===
+Frames Read: 13038 | Preprocessed: 32570 | Read FPS: 100 | Preprocess FPS: 293
+RawQueue: 1997/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=1/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=11024 | Failed=0 | FPS=99 | AvgTime=9.93ms/frame | TotalTime=109.42s
+Engine hand: Detected=9984 | Failed=0 | FPS=96 | AvgTime=12.02ms/frame | TotalTime=120.05s
+Engine pose: Detected=11008 | Failed=0 | FPS=99 | AvgTime=21.09ms/frame | TotalTime=232.46s
+Reader: Frames=13038 | FPS=100 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=32570 | FPS=293 | AvgTime=56.65ms/frame | TotalTime=1845.07s
+Postprocessor: Frames=32016 | FPS=294 | AvgTime=2.61ms/frame | TotalTime=83.72s
+
+unix_timestamp 1763346385.498781 ---->2025-11-17T09:26:25.4987813+07:00
+unix_timestamp 1763346507.568652 ---->2025-11-17T09:28:27.5686519+07:00
+[2025-11-29 20:24:07.984] [INFO ] [VideoReader] Found h264_cuvid hardware decoder
+[2025-11-29 20:24:07.984] [INFO ] [VideoReader] Using CUVID decoder: h264_cuvid (NVDEC hardware-accelerated)
+[2025-11-29 20:24:07.984] [INFO ] [VideoReader] Setting CUVID decoder with 32 surfaces for async decode
+[2025-11-29 20:24:07.984] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:24:07.984] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:24:08.989] [WARN ] [Reader] Reader 2 queue push slow (300 times) - preprocessors may be bottleneck
+[2025-11-29 20:24:09.722] [WARN ] [VideoReader] Unused decoder option: output=cuda
+[2025-11-29 20:24:09.723] [INFO ] [VideoReader] Codec opened with hardware decoder, decoder: h264_cuvid, hw_pix_fmt: 119, codec_id: 27
+[2025-11-29 20:24:09.724] [INFO ] [VideoReader] Initialized reader for /shared_storage/action_videos/c03o25010001872/20251117092500_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781.mp4 [NVDEC]
+[2025-11-29 20:24:09.724] [INFO ] [VideoReader] Time window: start_ts=1763346355.498781, end_ts=1763346512.568652, moment_time=1763346300.000000, duration=900.150000, video_range=[1763346300.000000, 1763347200.150000], actual_range=[1763346355.498781, 1763346512.568652], fps=12.996967, time_window_duration=157.069871, actual_available_duration=157.069871, total_expected_frames~2041, actual_expected_frames~2041, seek_to_frame=721, seek_timestamp=1763346355.474479, remaining_duration=157.094172, remaining_frames~2041
+[2025-11-29 20:24:09.724] [INFO ] [VideoReader]   (note: actual frames_read may be less than expected if: 1) video file ends before end_ts, 2) frames before start_ts are skipped, 3) debug mode frame limit is reached)
+[2025-11-29 20:24:09.794] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:24:09.795] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:24:09.830] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=7500, actual_pos=2647, current_ts=1763346311.110000, end_ts=1763346310.966253, frames_in_window=2647, end_of_stream=false
+[2025-11-29 20:24:09.830] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=678.110000, actual_ts_from_pts=1763346311.110000, calc_ts=1763346210.064103, calc_ts_diff=-101.045897
+[2025-11-29 20:24:09.830] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o24100008275_dba86e3e-9dce-4068-8b4b-ecd6cc95e92a_v0' *** frame_count=2647, actual_frame_position=2647, consecutive_failures=1
+[2025-11-29 20:24:09.872] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=7501, actual_pos=2647, current_ts=1763346311.190000, end_ts=1763346310.966253, frames_in_window=2647, end_of_stream=false
+[2025-11-29 20:24:09.872] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=678.190000, actual_ts_from_pts=1763346311.190000, calc_ts=1763346210.141044, calc_ts_diff=-101.048956
+[2025-11-29 20:24:09.897] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=7502, actual_pos=2647, current_ts=1763346312.260000, end_ts=1763346310.966253, frames_in_window=2647, end_of_stream=false
+[2025-11-29 20:24:09.898] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=679.260000, actual_ts_from_pts=1763346312.260000, calc_ts=1763346210.217986, calc_ts_diff=-102.042014
+[2025-11-29 20:24:09.898] [INFO ] [Reader] *** Stopping video reading after 3 consecutive readFrame() failures *** video_key='c03o24100008275_dba86e3e-9dce-4068-8b4b-ecd6cc95e92a_v0', frames_read=2647, actual_frame_position=2647
+[2025-11-29 20:24:09.902] [INFO ] [Reader] *** Reader 2 finished video c03o24100008275_dba86e3e-9dce-4068-8b4b-ecd6cc95e92a_v0 *** frames_read=2647, actual_frame_position=2647, path=/shared_storage/action_videos/c03o24100008275/20251117091353_dba86e3e-9dce-4068-8b4b-ecd6cc95e92a.mp4
+unix_timestamp 1763346985.166640 ---->2025-11-17T09:36:25.1666395+07:00
+unix_timestamp 1763347222.571638 ---->2025-11-17T09:40:22.5716377+07:00
+[2025-11-29 20:24:11.332] [INFO ] [VideoReader] Found h264_cuvid hardware decoder
+[2025-11-29 20:24:11.332] [INFO ] [VideoReader] Using CUVID decoder: h264_cuvid (NVDEC hardware-accelerated)
+[2025-11-29 20:24:11.332] [INFO ] [VideoReader] Setting CUVID decoder with 32 surfaces for async decode
+[2025-11-29 20:24:11.333] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:24:11.333] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:24:12.053] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (1400 times)
+[2025-11-29 20:24:12.658] [STATS] [Monitor] === Statistics (Runtime: 145s) ===
+Frames Read: 13470 | Preprocessed: 33874 | Read FPS: 86 | Preprocess FPS: 260
+RawQueue: 1990/2000
+PreQ 640x640 [ROI] engines=1 queue=6/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=4/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=11456 | Failed=0 | FPS=86 | AvgTime=9.90ms/frame | TotalTime=113.45s
+Engine hand: Detected=10416 | Failed=0 | FPS=86 | AvgTime=11.96ms/frame | TotalTime=124.75s
+Engine pose: Detected=11440 | Failed=0 | FPS=86 | AvgTime=20.95ms/frame | TotalTime=240.01s
+Reader: Frames=13472 | FPS=86 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=33884 | FPS=260 | AvgTime=56.25ms/frame | TotalTime=1905.96s
+Postprocessor: Frames=33312 | FPS=259 | AvgTime=2.60ms/frame | TotalTime=86.47s
+
+[2025-11-29 20:24:12.814] [WARN ] [VideoReader] Unused decoder option: output=cuda
+[2025-11-29 20:24:12.814] [INFO ] [VideoReader] Codec opened with hardware decoder, decoder: h264_cuvid, hw_pix_fmt: 119, codec_id: 27
+[2025-11-29 20:24:12.815] [INFO ] [VideoReader] Initialized reader for /shared_storage/action_videos/c03o24100008097/20251117092504_31c7cb12-2b53-4a7e-9509-1cb45b8e3482.mp4 [NVDEC]
+[2025-11-29 20:24:12.815] [INFO ] [VideoReader] Time window: start_ts=1763346955.166640, end_ts=1763347204.160000, moment_time=1763346304.000000, duration=900.160000, video_range=[1763346304.000000, 1763347204.160000], actual_range=[1763346955.166640, 1763347204.160000], fps=12.996679, time_window_duration=248.993361, actual_available_duration=248.993361, total_expected_frames~3236, actual_expected_frames~3236, seek_to_frame=8463, seek_timestamp=1763346955.166367, remaining_duration=248.993634, remaining_frames~3236
+[2025-11-29 20:24:12.816] [INFO ] [VideoReader]   (note: actual frames_read may be less than expected if: 1) video file ends before end_ts, 2) frames before start_ts are skipped, 3) debug mode frame limit is reached)
+[2025-11-29 20:24:12.905] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:24:12.905] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:24:13.233] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (1400 times)
+[2025-11-29 20:24:13.316] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (1400 times)
+[2025-11-29 20:24:13.605] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (1400 times)
+[2025-11-29 20:24:13.871] [WARN ] [Reader] Reader 3 queue push slow (300 times) - preprocessors may be bottleneck
+[2025-11-29 20:24:15.254] [WARN ] [Reader] Reader 4 queue push slow (300 times) - preprocessors may be bottleneck
+[2025-11-29 20:24:16.916] [WARN ] [Reader] Reader 1 queue push slow (300 times) - preprocessors may be bottleneck
+[2025-11-29 20:24:17.666] [STATS] [Monitor] === Statistics (Runtime: 150s) ===
+Frames Read: 13895 | Preprocessed: 35118 | Read FPS: 84 | Preprocess FPS: 248
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=0/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=11872 | Failed=0 | FPS=83 | AvgTime=9.88ms/frame | TotalTime=117.33s
+Engine hand: Detected=10832 | Failed=0 | FPS=83 | AvgTime=11.94ms/frame | TotalTime=129.52s
+Engine pose: Detected=11856 | Failed=0 | FPS=83 | AvgTime=20.88ms/frame | TotalTime=247.51s
+Reader: Frames=13895 | FPS=84 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=35136 | FPS=248 | AvgTime=55.75ms/frame | TotalTime=1958.72s
+Postprocessor: Frames=34560 | FPS=249 | AvgTime=2.56ms/frame | TotalTime=88.56s
+
+[2025-11-29 20:24:19.104] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (1500 times)
+[2025-11-29 20:24:21.189] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (1500 times)
+[2025-11-29 20:24:21.306] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (1500 times)
+[2025-11-29 20:24:21.776] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (1500 times)
+[2025-11-29 20:24:21.843] [INFO ] [VideoReader] GPU conversion stats - GPU: 3000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:24:22.379] [INFO ] [VideoReader] Frame 12: total_read=952, actual_pos=224, current_ts=1763346381.090000, start_ts=1763346355.498781, end_ts=1763346512.568652, frame_pts=81.090000, actual_ts_from_pts=1763346381.090000, calc_ts=1763346373.247856, ts_diff=-7.842144, moment_time=1763346300.000000, fps=12.996967
+[2025-11-29 20:24:22.667] [STATS] [Monitor] === Statistics (Runtime: 155s) ===
+Frames Read: 14287 | Preprocessed: 36320 | Read FPS: 78 | Preprocess FPS: 240
+RawQueue: 1995/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=0/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=12240 | Failed=0 | FPS=73 | AvgTime=9.87ms/frame | TotalTime=120.78s
+Engine hand: Detected=11232 | Failed=0 | FPS=79 | AvgTime=11.94ms/frame | TotalTime=134.12s
+Engine pose: Detected=12224 | Failed=0 | FPS=73 | AvgTime=20.79ms/frame | TotalTime=254.08s
+Reader: Frames=14287 | FPS=78 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=36320 | FPS=240 | AvgTime=55.58ms/frame | TotalTime=2018.73s
+Postprocessor: Frames=35696 | FPS=226 | AvgTime=2.55ms/frame | TotalTime=90.94s
+
+[2025-11-29 20:24:26.725] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (1600 times)
+[2025-11-29 20:24:27.668] [STATS] [Monitor] === Statistics (Runtime: 160s) ===
+Frames Read: 14700 | Preprocessed: 37678 | Read FPS: 82 | Preprocess FPS: 271
+RawQueue: 1955/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=1/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=12688 | Failed=0 | FPS=89 | AvgTime=9.80ms/frame | TotalTime=124.34s
+Engine hand: Detected=11680 | Failed=0 | FPS=89 | AvgTime=11.84ms/frame | TotalTime=138.30s
+Engine pose: Detected=12672 | Failed=0 | FPS=89 | AvgTime=20.56ms/frame | TotalTime=260.92s
+Reader: Frames=14700 | FPS=82 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=37678 | FPS=271 | AvgTime=55.87ms/frame | TotalTime=2105.01s
+Postprocessor: Frames=37040 | FPS=268 | AvgTime=2.53ms/frame | TotalTime=93.88s
+
+[2025-11-29 20:24:27.867] [INFO ] [VideoReader] GPU conversion stats - GPU: 3000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:24:27.944] [INFO ] [VideoReader] GPU conversion stats - GPU: 3000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:24:28.724] [INFO ] [VideoReader] Frame 12: total_read=10202, actual_pos=407, current_ts=1763347085.410000, start_ts=1763347038.114458, end_ts=1763347177.820000, frame_pts=808.410000, actual_ts_from_pts=1763347085.410000, calc_ts=1763347070.480081, ts_diff=-14.929919, moment_time=1763346277.000000, fps=12.857286
+[2025-11-29 20:24:28.839] [INFO ] [VideoReader] Frame 12: total_read=1473, actual_pos=1473, current_ts=1763346786.580000, start_ts=1763346616.000000, end_ts=1763347027.734625, frame_pts=170.580000, actual_ts_from_pts=1763346786.580000, calc_ts=1763346730.567938, ts_diff=-56.012062, moment_time=1763346616.000000, fps=12.857000
+[2025-11-29 20:24:29.642] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (1600 times)
+[2025-11-29 20:24:29.692] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (1600 times)
+[2025-11-29 20:24:30.268] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (1600 times)
+[2025-11-29 20:24:31.110] [INFO ] [RedisOutput] Appended output message to /workspace/khangtd6/longchau_vaccine/action_c/outputs/bins/redis_messages/17-11-25.jsonl
+[2025-11-29 20:24:31.111] [INFO ] [RedisOutput] Ready to push message for key 'c03o24100002882_81d9f6ac-0933-492d-83da-04fd6fcdaed7': {"alarm": {"serial": "c03o24100002882", "record_url": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533eb9797ce811a55b5b987eec0bcd1a4aa6902e66e663640e737b754420e88ea49e1a7bd7759ba3c2dc3e360d6c511363feca5edfa4ca3cad7dca35e51b65de9211b54d843bf3b483047af113201dc01938385554793f3b8bf12c7e9d5ac519992a.mp4", "record_list": [{"file": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533eb9797ce811a55b5b987eec0bcd1a4aa6902e66e663640e737b754420e88ea49e1a7bd7759ba3c2dc3e360d6c511363feca5edfa4ca3cad7dca35e51b65de9211b54d843bf3b483047af113201dc01938385554793f3b8bf12c7e9d5ac519992a.mp4", "record_start_time": "2025-11-17T09:24:04"}], "record_start_time": "2025-11-17T09:24:04", "alarm_time": "2025-11-17T11:01:08", "receive_time": "2025-11-18T22:46:57.908856", "record_id": "81d9f6ac-0933-492d-83da-04fd6fcdaed7", "raw_alarm": {"alarm": "trigger_alarm", "serial": "c03o24100002882", "record_id": "81d9f6ac-0933-492d-83da-04fd6fcdaed7", "home_id": "9e8c3fe4-47d9-4d46-9de4-88856bab0bbf", "send_at": "20251117110108", "video_start_time": "2025-11-17T09:34:19.0701121+07:00", "video_end_time": "2025-11-17T09:38:05.6179669+07:00", "record_list": [{"duration": "900.18", "file": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533eb9797ce811a55b5b987eec0bcd1a4aa6902e66e663640e737b754420e88ea49e1a7bd7759ba3c2dc3e360d6c511363feca5edfa4ca3cad7dca35e51b65de9211b54d843bf3b483047af113201dc01938385554793f3b8bf12c7e9d5ac519992a.mp4", "image": "https://livestream-02-hni.fcam.vn/thumbnails/c03o24100002882/1763346244872.jpg", "recordtimestamp": "2025-11-17T09:24:04+07:00", "moment_time": 1763346244}], "vaccine_info": {"Lcvid": "LP580651758074218563", "CameraId": "2220-I03S-R18-C03O24100002882", "ShopCode": "58065", "ShopName": "VX DNI 836-838 Ph\u00fa Ri\u1ec1ng \u0110\u1ecf, P. B\u00ecnh Ph\u01b0\u1edbc", "Indication": [{"Sku": "00038245", "Odac": "q3asHjLGXzriRaXA", "Taxonomies": "6 TRONG 1", "VaccineName": "HEXAXIM"}], "PersonName": "Kh\u1ed5ng Tr\u1ea7n Qu\u1ef3nh Nh\u01b0", "TicketCode": "TK58065537531763346466696", "TrackingTime": "2025-11-17T09:38:05.6179669+07:00", "InjectingTime": "2025-11-17T09:34:19.0701121+07:00", "InjectingNursingCode": "53745", "InjectingNursingName": "Ph\u1ea1m Ng\u1ecdc Mai"}, "target_action": [{"action_id": "1", "action_name": "S\u00e1t khu\u1ea9n tay", "type": "time", "value": [15]}, {"action_id": "2", "action_name": "L\u1eafc vaccin", "type": "count", "value": 3}]}, "tracking_key": "c03o24100002882#20251117092404#81d9f6ac-0933-492d-83da-04fd6fcdaed7"}, "download_info": [{"local_filepath": "/shared_storage/action_videos/c03o24100002882/20251117092404_81d9f6ac-0933-492d-83da-04fd6fcdaed7.mp4", "minio_object_name": "videos/c03o24100002882/20251117092404_81d9f6ac-0933-492d-83da-04fd6fcdaed7.mp4", "record_url": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533eb9797ce811a55b5b987eec0bcd1a4aa6902e66e663640e737b754420e88ea49e1a7bd7759ba3c2dc3e360d6c511363feca5edfa4ca3cad7dca35e51b65de9211b54d843bf3b483047af113201dc01938385554793f3b8bf12c7e9d5ac519992a.mp4"}], "playback_location": ["/shared_storage/action_videos/c03o24100002882/20251117092404_81d9f6ac-0933-492d-83da-04fd6fcdaed7.mp4"], "config": {"service_id": "eb305b04-a231-4ac2-a925-6cea95b27d9a", "service_name": "Action Recognition", "camera_id": "d660d434-e0cb-4348-a971-fc16c80e3475", "serial": "c03o24100002882", "camera_name": "c03o24100002882", "location_id": "9e8c3fe4-47d9-4d46-9de4-88856bab0bbf", "notify_result": true, "box": [[0.36875, 0.498611], [0.703906, 0.498611], [0.703906, 0.955556], [0.36875, 0.955556]], "zone": 1, "lines": [], "polygons": [], "external_data": {"actions": [{"id": "1", "name": "S\u00e1t khu\u1ea9n tay", "config": {"time": 5}}, {"id": "2", "name": "L\u1eafc vaccine", "config": {"time": 30}}]}}, "prioritize": false, "task_type": "2perday", "result_queue": "aicam#979219ff-b1d8-40ee-bfdc-c05f968b8972#results#h7UU0Trq85", "video_resolution": {"width": 1920, "height": 1080}, "run_only_office_hours": false, "hand": ["/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//hand/17-11-25/c03o24100002882_81d9f6ac-0933-492d-83da-04fd6fcdaed7.bin"], "pose": ["/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//pose/17-11-25/c03o24100002882_81d9f6ac-0933-492d-83da-04fd6fcdaed7.bin"], "alcohol": ["/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//alcohol/17-11-25/c03o24100002882_81d9f6ac-0933-492d-83da-04fd6fcdaed7.bin"]}
+[2025-11-29 20:24:31.112] [INFO ] [RedisOutput] Pushed processed message to output queue: ml#vaccine_detection_test (push_time=1ms, message_key='c03o24100002882_81d9f6ac-0933-492d-83da-04fd6fcdaed7')
+[2025-11-29 20:24:32.681] [STATS] [Monitor] === Statistics (Runtime: 165s) ===
+Frames Read: 15075 | Preprocessed: 38658 | Read FPS: 75 | Preprocess FPS: 196
+RawQueue: 1999/2000
+PreQ 640x640 [ROI] engines=1 queue=4/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=7/500
+PostQ: 1 tasks pending
+Engine alcohol: Detected=13056 | Failed=0 | FPS=73 | AvgTime=9.82ms/frame | TotalTime=128.17s
+Engine hand: Detected=12016 | Failed=0 | FPS=67 | AvgTime=11.92ms/frame | TotalTime=143.23s
+Engine pose: Detected=13040 | Failed=0 | FPS=73 | AvgTime=20.61ms/frame | TotalTime=268.75s
+Reader: Frames=15078 | FPS=75 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=38660 | FPS=196 | AvgTime=55.83ms/frame | TotalTime=2158.57s
+Postprocessor: Frames=38112 | FPS=214 | AvgTime=2.54ms/frame | TotalTime=96.63s
+
+[2025-11-29 20:24:33.599] [INFO ] [VideoReader] GPU conversion stats - GPU: 3000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:24:34.457] [INFO ] [VideoReader] Frame 12: total_read=8816, actual_pos=340, current_ts=1763346993.820000, start_ts=1763346955.166640, end_ts=1763347204.160000, frame_pts=689.820000, actual_ts_from_pts=1763346993.820000, calc_ts=1763346982.327152, ts_diff=-11.492848, moment_time=1763346304.000000, fps=12.996679
+[2025-11-29 20:24:35.840] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (1700 times)
+[2025-11-29 20:24:37.689] [STATS] [Monitor] === Statistics (Runtime: 170s) ===
+Frames Read: 15466 | Preprocessed: 39847 | Read FPS: 77 | Preprocess FPS: 237
+RawQueue: 1998/2000
+PreQ 640x640 [ROI] engines=1 queue=2/500
+PreQ 864x864 [FULL] engines=1 queue=499/500
+PreQ 640x640 [FULL] engines=1 queue=2/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=13440 | Failed=0 | FPS=76 | AvgTime=9.81ms/frame | TotalTime=131.88s
+Engine hand: Detected=12432 | Failed=0 | FPS=82 | AvgTime=11.89ms/frame | TotalTime=147.82s
+Engine pose: Detected=13424 | Failed=0 | FPS=76 | AvgTime=20.49ms/frame | TotalTime=275.10s
+Reader: Frames=15466 | FPS=77 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=39849 | FPS=237 | AvgTime=55.75ms/frame | TotalTime=2221.63s
+Postprocessor: Frames=39296 | FPS=236 | AvgTime=2.53ms/frame | TotalTime=99.43s
+
+[2025-11-29 20:24:38.325] [INFO ] [RedisOutput] Appended output message to /workspace/khangtd6/longchau_vaccine/action_c/outputs/bins/redis_messages/17-11-25.jsonl
+[2025-11-29 20:24:38.326] [INFO ] [RedisOutput] Ready to push message for key 'c03o25010000307_f79b7232-6005-4e53-a453-1ce0880f584d': {"alarm": {"serial": "c03o25010000307", "record_url": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533e4ed4b933cabeaa13ee951ed3a1dac6add50e62370b35e11e6f810a851cb6aa6ec506b14a8a3c5203c3091fe0938959c60ce7c83e0202430741f0912c5167c3e5a5fc3883b72d8a0aaec98cce73df6e008b2b5547e8283ae68a8b561e227326c2.mp4", "record_list": [{"file": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533e4ed4b933cabeaa13ee951ed3a1dac6add50e62370b35e11e6f810a851cb6aa6ec506b14a8a3c5203c3091fe0938959c60ce7c83e0202430741f0912c5167c3e5a5fc3883b72d8a0aaec98cce73df6e008b2b5547e8283ae68a8b561e227326c2.mp4", "record_start_time": "2025-11-17T09:19:24"}, {"file": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533e4ed4b933cabeaa13ee951ed3a1dac6add50e62370b35e11e6f810a851cb6aa6ec506b14a8a3c5203c3091fe0938959c60ce7c83e0202430741f0912c5167c3e5a5fc3883b72d8a0aaec98cce73df6e006153adf21d3917a176640e30c51ed25f.mp4", "record_start_time": "2025-11-17T09:34:24"}], "record_start_time": "2025-11-17T09:19:24", "alarm_time": "2025-11-17T11:00:43", "receive_time": "2025-11-18T22:46:58.367339", "record_id": "f79b7232-6005-4e53-a453-1ce0880f584d", "raw_alarm": {"alarm": "trigger_alarm", "serial": "c03o25010000307", "record_id": "f79b7232-6005-4e53-a453-1ce0880f584d", "home_id": "c5e064f8-e751-445a-8862-c0553eb553aa", "send_at": "20251117110043", "video_start_time": "2025-11-17T09:33:49.5507659+07:00", "video_end_time": "2025-11-17T09:38:11.8338462+07:00", "record_list": [{"duration": "900.18", "file": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533e4ed4b933cabeaa13ee951ed3a1dac6add50e62370b35e11e6f810a851cb6aa6ec506b14a8a3c5203c3091fe0938959c60ce7c83e0202430741f0912c5167c3e5a5fc3883b72d8a0aaec98cce73df6e008b2b5547e8283ae68a8b561e227326c2.mp4", "image": "https://livestream-02-hni.fcam.vn/thumbnails/c03o25010000307/1763345965159.jpg", "recordtimestamp": "2025-11-17T09:19:24+07:00", "moment_time": 1763345964}, {"duration": "900.18", "file": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533e4ed4b933cabeaa13ee951ed3a1dac6add50e62370b35e11e6f810a851cb6aa6ec506b14a8a3c5203c3091fe0938959c60ce7c83e0202430741f0912c5167c3e5a5fc3883b72d8a0aaec98cce73df6e006153adf21d3917a176640e30c51ed25f.mp4", "image": "https://livestream-02-hni.fcam.vn/thumbnails/c03o25010000307/1763346865404.jpg", "recordtimestamp": "2025-11-17T09:34:24+07:00", "moment_time": 1763346864}], "vaccine_info": {"Lcvid": "LP818851741864754615", "CameraId": "2220-I03S-R18-C03O25010000307", "ShopCode": "58046", "ShopName": "VX HCM 366 T\u1ec9nh L\u1ed9 10, P. B\u00ecnh Tr\u1ecb \u0110\u00f4ng", "Indication": [{"Sku": "00038229", "Odac": "2mthxh9EZOydwQkQ", "Taxonomies": "TH\u1ee6Y \u0110\u1eacU", "VaccineName": "VARILRIX 0.5ML"}], "PersonName": "V\u0169 Thanh Phong", "TicketCode": "TK58046533981763346321315", "TrackingTime": "2025-11-17T09:38:11.8338462+07:00", "InjectingTime": "2025-11-17T09:33:49.5507659+07:00", "InjectingNursingCode": "51471", "InjectingNursingName": "Nguy\u1ec5n Ng\u1ecdc Mai Ph\u01b0\u01a1ng"}, "target_action": [{"action_id": "1", "action_name": "S\u00e1t khu\u1ea9n tay", "type": "time", "value": [15]}, {"action_id": "2", "action_name": "L\u1eafc vaccin", "type": "count", "value": 3}]}, "tracking_key": "c03o25010000307#20251117091924#f79b7232-6005-4e53-a453-1ce0880f584d"}, "download_info": [{"local_filepath": "/shared_storage/action_videos/c03o25010000307/20251117091924_f79b7232-6005-4e53-a453-1ce0880f584d.mp4", "minio_object_name": "videos/c03o25010000307/20251117091924_f79b7232-6005-4e53-a453-1ce0880f584d.mp4", "record_url": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533e4ed4b933cabeaa13ee951ed3a1dac6add50e62370b35e11e6f810a851cb6aa6ec506b14a8a3c5203c3091fe0938959c60ce7c83e0202430741f0912c5167c3e5a5fc3883b72d8a0aaec98cce73df6e008b2b5547e8283ae68a8b561e227326c2.mp4"}, {"local_filepath": "/shared_storage/action_videos/c03o25010000307/20251117093424_f79b7232-6005-4e53-a453-1ce0880f584d.mp4", "minio_object_name": "videos/c03o25010000307/20251117093424_f79b7232-6005-4e53-a453-1ce0880f584d.mp4", "record_url": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533e4ed4b933cabeaa13ee951ed3a1dac6add50e62370b35e11e6f810a851cb6aa6ec506b14a8a3c5203c3091fe0938959c60ce7c83e0202430741f0912c5167c3e5a5fc3883b72d8a0aaec98cce73df6e006153adf21d3917a176640e30c51ed25f.mp4"}], "playback_location": ["/shared_storage/action_videos/c03o25010000307/20251117091924_f79b7232-6005-4e53-a453-1ce0880f584d.mp4", "/shared_storage/action_videos/c03o25010000307/20251117093424_f79b7232-6005-4e53-a453-1ce0880f584d.mp4"], "config": {"service_id": "eb305b04-a231-4ac2-a925-6cea95b27d9a", "service_name": "Action Recognition", "camera_id": "6fec67b1-811f-476c-a0fd-72c3be6b9458", "serial": "c03o25010000307", "camera_name": "c03o25010000307", "location_id": "c5e064f8-e751-445a-8862-c0553eb553aa", "notify_result": true, "box": [[0.363542, 0.37963], [0.68125, 0.37963], [0.68125, 0.769444], [0.363542, 0.769444]], "zone": 1, "lines": [], "polygons": [], "external_data": {"actions": [{"id": "1", "name": "S\u00e1t khu\u1ea9n tay", "config": {"time": 5}}, {"id": "2", "name": "L\u1eafc vaccine", "config": {"time": 30}}]}}, "prioritize": false, "task_type": "2perday", "result_queue": "aicam#979219ff-b1d8-40ee-bfdc-c05f968b8972#results#h7UU0Trq85", "video_resolution": {"width": 1920, "height": 1080}, "run_only_office_hours": false, "pose": ["/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//pose/17-11-25/c03o25010000307_f79b7232-6005-4e53-a453-1ce0880f584d.bin", "/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//pose/17-11-25/c03o25010000307_f79b7232-6005-4e53-a453-1ce0880f584d_v1.bin"], "hand": ["/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//hand/17-11-25/c03o25010000307_f79b7232-6005-4e53-a453-1ce0880f584d.bin", "/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//hand/17-11-25/c03o25010000307_f79b7232-6005-4e53-a453-1ce0880f584d_v1.bin"], "alcohol": ["/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//alcohol/17-11-25/c03o25010000307_f79b7232-6005-4e53-a453-1ce0880f584d.bin", "/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//alcohol/17-11-25/c03o25010000307_f79b7232-6005-4e53-a453-1ce0880f584d_v1.bin"]}
+[2025-11-29 20:24:38.327] [INFO ] [RedisOutput] Pushed processed message to output queue: ml#vaccine_detection_test (push_time=0ms, message_key='c03o25010000307_f79b7232-6005-4e53-a453-1ce0880f584d')
+[2025-11-29 20:24:38.581] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (1700 times)
+[2025-11-29 20:24:38.893] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (1700 times)
+[2025-11-29 20:24:39.005] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (1700 times)
+[2025-11-29 20:24:40.057] [INFO ] [VideoReader] GPU conversion stats - GPU: 3000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:24:40.522] [INFO ] [VideoReader] Frame 12: total_read=4431, actual_pos=723, current_ts=1763346645.140000, start_ts=1763346562.174050, end_ts=1763347177.140000, frame_pts=368.140000, actual_ts_from_pts=1763346645.140000, calc_ts=1763346617.925685, ts_diff=-27.214315, moment_time=1763346277.000000, fps=12.996967
+[2025-11-29 20:24:42.690] [STATS] [Monitor] === Statistics (Runtime: 175s) ===
+Frames Read: 15950 | Preprocessed: 41296 | Read FPS: 96 | Preprocess FPS: 289
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=0/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=13936 | Failed=0 | FPS=99 | AvgTime=9.72ms/frame | TotalTime=135.49s
+Engine hand: Detected=12896 | Failed=0 | FPS=92 | AvgTime=11.81ms/frame | TotalTime=152.27s
+Engine pose: Detected=13888 | Failed=0 | FPS=92 | AvgTime=20.24ms/frame | TotalTime=281.78s
+Reader: Frames=15950 | FPS=96 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=41296 | FPS=289 | AvgTime=55.22ms/frame | TotalTime=2280.53s
+Postprocessor: Frames=40720 | FPS=284 | AvgTime=2.50ms/frame | TotalTime=101.66s
+
+[2025-11-29 20:24:43.592] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (1800 times)
+[2025-11-29 20:24:43.913] [WARN ] [Reader] Reader 0 queue push slow (400 times) - preprocessors may be bottleneck
+[2025-11-29 20:24:44.181] [INFO ] [RedisOutput] Appended output message to /workspace/khangtd6/longchau_vaccine/action_c/outputs/bins/redis_messages/17-11-25.jsonl
+[2025-11-29 20:24:44.182] [INFO ] [RedisOutput] Ready to push message for key 'c03o25010001984_6e2d7aff-3d25-4ebe-a7af-e654c13a8a47': {"alarm": {"serial": "c03o25010001984", "record_url": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533ee64258ee5dddbb04a62774b15b18778da90540830056642eb6696ccb2b4d04ae622c4d44c9cea3cc205705469d9b96b8d12ee6de050ba0912d7592a7affa2dd7a095363edbbebe3114adacecfc7c9784000062a3cffb4efe55ba2a5f014f5aed.mp4", "record_list": [{"file": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533ee64258ee5dddbb04a62774b15b18778da90540830056642eb6696ccb2b4d04ae622c4d44c9cea3cc205705469d9b96b8d12ee6de050ba0912d7592a7affa2dd7a095363edbbebe3114adacecfc7c9784000062a3cffb4efe55ba2a5f014f5aed.mp4", "record_start_time": "2025-11-17T09:22:43"}], "record_start_time": "2025-11-17T09:22:43", "alarm_time": "2025-11-17T11:12:00", "receive_time": "2025-11-18T22:46:59.435989", "record_id": "6e2d7aff-3d25-4ebe-a7af-e654c13a8a47", "raw_alarm": {"alarm": "trigger_alarm", "serial": "c03o25010001984", "record_id": "6e2d7aff-3d25-4ebe-a7af-e654c13a8a47", "home_id": "2fda1601-128b-4911-9aaa-db4f513c0284", "send_at": "20251117111200", "video_start_time": "2025-11-17T09:24:08.750735+07:00", "video_end_time": "2025-11-17T09:28:52.8141552+07:00", "record_list": [{"duration": "900.22", "file": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533ee64258ee5dddbb04a62774b15b18778da90540830056642eb6696ccb2b4d04ae622c4d44c9cea3cc205705469d9b96b8d12ee6de050ba0912d7592a7affa2dd7a095363edbbebe3114adacecfc7c9784000062a3cffb4efe55ba2a5f014f5aed.mp4", "image": "https://livestream-04-hni.fcam.vn/thumbnails/c03o25010001984/1763346164306.jpg", "recordtimestamp": "2025-11-17T09:22:43+07:00", "moment_time": 1763346163}], "vaccine_info": {"Lcvid": "LP581151754450293556", "CameraId": "2220-I03S-R18-C03O25010001984", "ShopCode": "58115", "ShopName": "VX DNI 116/4-116A/4 Qu\u1ed1c L\u1ed9 1A, P. Long B\u00ecnh", "Indication": [{"Sku": "00038227", "Odac": "ilub1fFoFzSProsA", "Taxonomies": "B\u1ec6NH DO PH\u1ebe C\u1ea6U", "VaccineName": "SYNFLORIX INJ 0.5ML"}], "PersonName": "Phan Nh\u1eadt Quang Minh", "TicketCode": "TK58115625801763345424277", "TrackingTime": "2025-11-17T09:28:52.8141552+07:00", "InjectingTime": "2025-11-17T09:24:08.750735+07:00", "InjectingNursingCode": "57225", "InjectingNursingName": "Ph\u00f9ng Th\u1ecb H\u00e0"}, "target_action": [{"action_id": "1", "action_name": "S\u00e1t khu\u1ea9n tay", "type": "time", "value": [15]}, {"action_id": "2", "action_name": "L\u1eafc vaccin", "type": "count", "value": 3}]}, "tracking_key": "c03o25010001984#20251117092243#6e2d7aff-3d25-4ebe-a7af-e654c13a8a47"}, "download_info": [{"local_filepath": "/shared_storage/action_videos/c03o25010001984/20251117092243_6e2d7aff-3d25-4ebe-a7af-e654c13a8a47.mp4", "minio_object_name": "videos/c03o25010001984/20251117092243_6e2d7aff-3d25-4ebe-a7af-e654c13a8a47.mp4", "record_url": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533ee64258ee5dddbb04a62774b15b18778da90540830056642eb6696ccb2b4d04ae622c4d44c9cea3cc205705469d9b96b8d12ee6de050ba0912d7592a7affa2dd7a095363edbbebe3114adacecfc7c9784000062a3cffb4efe55ba2a5f014f5aed.mp4"}], "playback_location": ["/shared_storage/action_videos/c03o25010001984/20251117092243_6e2d7aff-3d25-4ebe-a7af-e654c13a8a47.mp4"], "config": {"service_id": "eb305b04-a231-4ac2-a925-6cea95b27d9a", "service_name": "Action Recognition", "camera_id": "6f6cfe5c-8418-4679-a23a-40fe1455dc90", "serial": "c03o25010001984", "camera_name": "c03o25010001984", "location_id": "2fda1601-128b-4911-9aaa-db4f513c0284", "notify_result": true, "box": [[0.25101214574898784, 0.4010791366906475], [0.6133603238866396, 0.4010791366906475], [0.6133603238866396, 0.8219424460431655], [0.25101214574898784, 0.8219424460431655]], "zone": 1, "lines": [], "polygons": [], "external_data": {"actions": [{"id": "1", "name": "S\u00e1t khu\u1ea9n tay", "config": {"time": 5}}, {"id": "2", "name": "L\u1eafc vaccine", "config": {"time": 30}}]}}, "prioritize": false, "task_type": "2perday", "result_queue": "aicam#979219ff-b1d8-40ee-bfdc-c05f968b8972#results#h7UU0Trq85", "video_resolution": {"width": 1920, "height": 1080}, "run_only_office_hours": false, "pose": ["/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//pose/17-11-25/c03o25010001984_6e2d7aff-3d25-4ebe-a7af-e654c13a8a47.bin"], "hand": ["/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//hand/17-11-25/c03o25010001984_6e2d7aff-3d25-4ebe-a7af-e654c13a8a47.bin"], "alcohol": ["/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//alcohol/17-11-25/c03o25010001984_6e2d7aff-3d25-4ebe-a7af-e654c13a8a47.bin"]}
+[2025-11-29 20:24:44.183] [INFO ] [RedisOutput] Pushed processed message to output queue: ml#vaccine_detection_test (push_time=0ms, message_key='c03o25010001984_6e2d7aff-3d25-4ebe-a7af-e654c13a8a47')
+[2025-11-29 20:24:44.255] [WARN ] [Reader] Reader 2 queue push slow (400 times) - preprocessors may be bottleneck
+[2025-11-29 20:24:45.672] [INFO ] [RedisOutput] Appended output message to /workspace/khangtd6/longchau_vaccine/action_c/outputs/bins/redis_messages/17-11-25.jsonl
+[2025-11-29 20:24:45.672] [INFO ] [RedisOutput] Ready to push message for key 'c03o24100008275_dba86e3e-9dce-4068-8b4b-ecd6cc95e92a': {"alarm": {"serial": "c03o24100008275", "record_url": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533ea930b6b7d1af6afb9decc91976a5f255581f309edbe398411ae40aec9a14fa342c10fd7abf36b1089467ed74268ac8ee65785a79c0bd68dd1b9c7265169e665ea34c85da7d642fd2d139a59400d091ab5c9362def0e57a935535612ec6dc6bba.mp4", "record_list": [{"file": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533ea930b6b7d1af6afb9decc91976a5f255581f309edbe398411ae40aec9a14fa342c10fd7abf36b1089467ed74268ac8ee65785a79c0bd68dd1b9c7265169e665ea34c85da7d642fd2d139a59400d091ab5c9362def0e57a935535612ec6dc6bba.mp4", "record_start_time": "2025-11-17T09:13:53"}], "record_start_time": "2025-11-17T09:13:53", "alarm_time": "2025-11-17T11:15:39", "receive_time": "2025-11-18T22:47:00.013353", "record_id": "dba86e3e-9dce-4068-8b4b-ecd6cc95e92a", "raw_alarm": {"alarm": "trigger_alarm", "serial": "c03o24100008275", "record_id": "dba86e3e-9dce-4068-8b4b-ecd6cc95e92a", "home_id": "59e69be9-fb42-4a89-a4c2-7fbb5a957d11", "send_at": "20251117111539", "video_start_time": "2025-11-17T09:20:35.7639888+07:00", "video_end_time": "2025-11-17T09:25:05.9662529+07:00", "record_list": [{"duration": "900.16", "file": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533ea930b6b7d1af6afb9decc91976a5f255581f309edbe398411ae40aec9a14fa342c10fd7abf36b1089467ed74268ac8ee65785a79c0bd68dd1b9c7265169e665ea34c85da7d642fd2d139a59400d091ab5c9362def0e57a935535612ec6dc6bba.mp4", "image": "https://livestream-03-hni.fcam.vn/thumbnails/c03o24100008275/1763345633937.jpg", "recordtimestamp": "2025-11-17T09:13:53+07:00", "moment_time": 1763345633}], "vaccine_info": {"Lcvid": "LP581371760498510389", "CameraId": "2220-I03S-R18-C03O24100008275", "ShopCode": "58137", "ShopName": "VX HNI 7-9-11 B\u1eafc S\u01a1n, P. Ch\u01b0\u01a1ng M\u1ef9", "Indication": [{"Sku": "00038273", "Odac": "uMFwSI0Qg0ao3Bdw", "Taxonomies": "U\u1ed0N V\u00c1N H\u1ea4P PH\u1ee4 (TT)", "VaccineName": "U\u1ed0N V\u00c1N H\u1ea4P PH\u1ee4 (TT) 0.5 ML/\u1ed0NG"}], "PersonName": "T\u1ed1ng Th\u1ecb Th\u00e0nh", "TicketCode": "TK58137556101762917517772", "TrackingTime": "2025-11-17T09:25:05.9662529+07:00", "InjectingTime": "2025-11-17T09:20:35.7639888+07:00", "InjectingNursingCode": "60457", "InjectingNursingName": "\u0110\u1ed7 Th\u1ecb Hi\u1ec1n"}, "target_action": [{"action_id": "1", "action_name": "S\u00e1t khu\u1ea9n tay", "type": "time", "value": [15]}, {"action_id": "2", "action_name": "L\u1eafc vaccin", "type": "count", "value": 3}]}, "tracking_key": "c03o24100008275#20251117091353#dba86e3e-9dce-4068-8b4b-ecd6cc95e92a"}, "download_info": [{"local_filepath": "/shared_storage/action_videos/c03o24100008275/20251117091353_dba86e3e-9dce-4068-8b4b-ecd6cc95e92a.mp4", "minio_object_name": "videos/c03o24100008275/20251117091353_dba86e3e-9dce-4068-8b4b-ecd6cc95e92a.mp4", "record_url": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533ea930b6b7d1af6afb9decc91976a5f255581f309edbe398411ae40aec9a14fa342c10fd7abf36b1089467ed74268ac8ee65785a79c0bd68dd1b9c7265169e665ea34c85da7d642fd2d139a59400d091ab5c9362def0e57a935535612ec6dc6bba.mp4"}], "playback_location": ["/shared_storage/action_videos/c03o24100008275/20251117091353_dba86e3e-9dce-4068-8b4b-ecd6cc95e92a.mp4"], "config": {"service_id": "eb305b04-a231-4ac2-a925-6cea95b27d9a", "service_name": "Action Recognition", "camera_id": "5900540d-b127-4465-804e-ce308b738b81", "serial": "c03o24100008275", "camera_name": "c03o24100008275", "location_id": "59e69be9-fb42-4a89-a4c2-7fbb5a957d11", "notify_result": true, "box": [[0.242969, 0.479167], [0.590625, 0.479167], [0.590625, 0.941667], [0.242969, 0.941667]], "zone": 1, "lines": [], "polygons": [], "external_data": {"actions": [{"id": "1", "name": "S\u00e1t khu\u1ea9n tay", "config": {"time": 5}}, {"id": "2", "name": "L\u1eafc vaccine", "config": {"time": 30}}]}}, "prioritize": false, "task_type": "2perday", "result_queue": "aicam#979219ff-b1d8-40ee-bfdc-c05f968b8972#results#h7UU0Trq85", "video_resolution": {"width": 1920, "height": 1080}, "run_only_office_hours": false, "hand": ["/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//hand/17-11-25/c03o24100008275_dba86e3e-9dce-4068-8b4b-ecd6cc95e92a.bin"], "pose": ["/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//pose/17-11-25/c03o24100008275_dba86e3e-9dce-4068-8b4b-ecd6cc95e92a.bin"], "alcohol": ["/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//alcohol/17-11-25/c03o24100008275_dba86e3e-9dce-4068-8b4b-ecd6cc95e92a.bin"]}
+[2025-11-29 20:24:45.680] [INFO ] [RedisOutput] Pushed processed message to output queue: ml#vaccine_detection_test (push_time=7ms, message_key='c03o24100008275_dba86e3e-9dce-4068-8b4b-ecd6cc95e92a')
+[2025-11-29 20:24:45.806] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (1800 times)
+[2025-11-29 20:24:46.328] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (1800 times)
+[2025-11-29 20:24:46.689] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (1800 times)
+[2025-11-29 20:24:47.698] [STATS] [Monitor] === Statistics (Runtime: 180s) ===
+Frames Read: 16457 | Preprocessed: 42825 | Read FPS: 101 | Preprocess FPS: 305
+RawQueue: 1993/2000
+PreQ 640x640 [ROI] engines=1 queue=6/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=5/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=14432 | Failed=0 | FPS=99 | AvgTime=9.64ms/frame | TotalTime=139.29s
+Engine hand: Detected=13408 | Failed=0 | FPS=102 | AvgTime=11.71ms/frame | TotalTime=156.99s
+Engine pose: Detected=14416 | Failed=0 | FPS=105 | AvgTime=20.04ms/frame | TotalTime=289.18s
+Reader: Frames=16460 | FPS=101 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=42826 | FPS=305 | AvgTime=54.51ms/frame | TotalTime=2334.32s
+Postprocessor: Frames=42256 | FPS=307 | AvgTime=2.47ms/frame | TotalTime=104.53s
+
+[2025-11-29 20:24:48.443] [WARN ] [Reader] Reader 4 queue push slow (400 times) - preprocessors may be bottleneck
+[2025-11-29 20:24:49.145] [WARN ] [Reader] Reader 3 queue push slow (400 times) - preprocessors may be bottleneck
+[2025-11-29 20:24:50.855] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (1900 times)
+[2025-11-29 20:24:52.166] [WARN ] [Reader] Reader 1 queue push slow (400 times) - preprocessors may be bottleneck
+[2025-11-29 20:24:52.699] [STATS] [Monitor] === Statistics (Runtime: 185s) ===
+Frames Read: 16865 | Preprocessed: 44085 | Read FPS: 81 | Preprocess FPS: 251
+RawQueue: 1983/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=9/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=14848 | Failed=0 | FPS=83 | AvgTime=9.66ms/frame | TotalTime=143.37s
+Engine hand: Detected=13824 | Failed=0 | FPS=83 | AvgTime=11.69ms/frame | TotalTime=161.65s
+Engine pose: Detected=14816 | Failed=0 | FPS=79 | AvgTime=19.98ms/frame | TotalTime=296.06s
+Reader: Frames=16865 | FPS=81 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=44085 | FPS=251 | AvgTime=54.11ms/frame | TotalTime=2385.32s
+Postprocessor: Frames=43488 | FPS=246 | AvgTime=2.46ms/frame | TotalTime=106.87s
+
+[2025-11-29 20:24:53.125] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (1900 times)
+[2025-11-29 20:24:53.635] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (1900 times)
+[2025-11-29 20:24:53.935] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (1900 times)
+[2025-11-29 20:24:57.699] [STATS] [Monitor] === Statistics (Runtime: 190s) ===
+Frames Read: 17361 | Preprocessed: 45579 | Read FPS: 99 | Preprocess FPS: 298
+RawQueue: 1984/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=1/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=15360 | Failed=0 | FPS=102 | AvgTime=9.57ms/frame | TotalTime=147.05s
+Engine hand: Detected=14320 | Failed=0 | FPS=99 | AvgTime=11.61ms/frame | TotalTime=166.23s
+Engine pose: Detected=15328 | Failed=0 | FPS=102 | AvgTime=19.74ms/frame | TotalTime=302.90s
+Reader: Frames=17361 | FPS=99 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=45579 | FPS=298 | AvgTime=53.23ms/frame | TotalTime=2426.03s
+Postprocessor: Frames=45008 | FPS=304 | AvgTime=2.44ms/frame | TotalTime=109.61s
+
+[2025-11-29 20:24:58.579] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (2000 times)
+[2025-11-29 20:25:00.348] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (2000 times)
+[2025-11-29 20:25:01.814] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (2000 times)
+[2025-11-29 20:25:01.997] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (2000 times)
+[2025-11-29 20:25:02.700] [STATS] [Monitor] === Statistics (Runtime: 195s) ===
+Frames Read: 17868 | Preprocessed: 47039 | Read FPS: 101 | Preprocess FPS: 292
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=0/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=15840 | Failed=0 | FPS=96 | AvgTime=9.47ms/frame | TotalTime=150.08s
+Engine hand: Detected=14800 | Failed=0 | FPS=96 | AvgTime=11.53ms/frame | TotalTime=170.60s
+Engine pose: Detected=15792 | Failed=0 | FPS=92 | AvgTime=19.57ms/frame | TotalTime=309.61s
+Reader: Frames=17868 | FPS=101 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=47039 | FPS=292 | AvgTime=52.51ms/frame | TotalTime=2469.82s
+Postprocessor: Frames=46432 | FPS=284 | AvgTime=2.42ms/frame | TotalTime=112.51s
+
+[2025-11-29 20:25:06.095] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (2100 times)
+[2025-11-29 20:25:07.142] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (2100 times)
+[2025-11-29 20:25:07.786] [STATS] [Monitor] === Statistics (Runtime: 200s) ===
+Frames Read: 18290 | Preprocessed: 48320 | Read FPS: 84 | Preprocess FPS: 256
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=0/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=16256 | Failed=0 | FPS=83 | AvgTime=9.40ms/frame | TotalTime=152.85s
+Engine hand: Detected=15232 | Failed=0 | FPS=86 | AvgTime=11.50ms/frame | TotalTime=175.15s
+Engine pose: Detected=16240 | Failed=0 | FPS=89 | AvgTime=19.46ms/frame | TotalTime=316.36s
+Reader: Frames=18296 | FPS=84 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=48327 | FPS=256 | AvgTime=51.97ms/frame | TotalTime=2511.57s
+Postprocessor: Frames=47728 | FPS=259 | AvgTime=2.42ms/frame | TotalTime=115.63s
+
+[2025-11-29 20:25:08.369] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (2100 times)
+[2025-11-29 20:25:09.295] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (2100 times)
+[2025-11-29 20:25:12.716] [INFO ] [VideoReader] *** STOPPING: Reached end of video file (end_of_stream=true) *** total_read=10994, actual_pos=1199, frames_in_window=1199
+[2025-11-29 20:25:12.716] [INFO ] [VideoReader]   Time window: current_ts=1763347132.001621, end_ts=1763347177.820000, remaining=45.818379s, expected_frames_remaining=589
+[2025-11-29 20:25:12.716] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o24120002993_bd9603aa-c4e2-47a7-ba2e-e14d0b3e07e8_v0' *** frame_count=1199, actual_frame_position=1199, consecutive_failures=1
+[2025-11-29 20:25:12.717] [INFO ] [VideoReader] *** STOPPING: Reached end of video file (end_of_stream=true) *** total_read=10994, actual_pos=1199, frames_in_window=1199
+[2025-11-29 20:25:12.717] [INFO ] [VideoReader]   Time window: current_ts=1763347132.001621, end_ts=1763347177.820000, remaining=45.818379s, expected_frames_remaining=589
+[2025-11-29 20:25:12.718] [INFO ] [VideoReader] *** STOPPING: Reached end of video file (end_of_stream=true) *** total_read=10994, actual_pos=1199, frames_in_window=1199
+[2025-11-29 20:25:12.718] [INFO ] [VideoReader]   Time window: current_ts=1763347132.001621, end_ts=1763347177.820000, remaining=45.818379s, expected_frames_remaining=589
+[2025-11-29 20:25:12.718] [INFO ] [Reader] *** Stopping video reading after 3 consecutive readFrame() failures *** video_key='c03o24120002993_bd9603aa-c4e2-47a7-ba2e-e14d0b3e07e8_v0', frames_read=1199, actual_frame_position=1199
+[2025-11-29 20:25:12.718] [INFO ] [Reader] *** Reader 1 finished video c03o24120002993_bd9603aa-c4e2-47a7-ba2e-e14d0b3e07e8_v0 *** frames_read=1199, actual_frame_position=1199, path=/shared_storage/action_videos/c03o24120002993/20251117092437_bd9603aa-c4e2-47a7-ba2e-e14d0b3e07e8.mp4
+[2025-11-29 20:25:12.787] [STATS] [Monitor] === Statistics (Runtime: 205s) ===
+Frames Read: 18760 | Preprocessed: 49709 | Read FPS: 92 | Preprocess FPS: 273
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=15/500
+PostQ: 1 tasks pending
+Engine alcohol: Detected=16736 | Failed=0 | FPS=94 | AvgTime=9.36ms/frame | TotalTime=156.65s
+Engine hand: Detected=15696 | Failed=0 | FPS=91 | AvgTime=11.45ms/frame | TotalTime=179.77s
+Engine pose: Detected=16704 | Failed=0 | FPS=91 | AvgTime=19.33ms/frame | TotalTime=323.16s
+Reader: Frames=18760 | FPS=92 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=49709 | FPS=273 | AvgTime=51.28ms/frame | TotalTime=2549.07s
+Postprocessor: Frames=49136 | FPS=276 | AvgTime=2.42ms/frame | TotalTime=118.67s
+
+[2025-11-29 20:25:13.410] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (2200 times)
+[2025-11-29 20:25:13.568] [INFO ] [VideoReader] Found h264_cuvid hardware decoder
+[2025-11-29 20:25:13.568] [INFO ] [VideoReader] Using CUVID decoder: h264_cuvid (NVDEC hardware-accelerated)
+[2025-11-29 20:25:13.568] [INFO ] [VideoReader] Setting CUVID decoder with 32 surfaces for async decode
+[2025-11-29 20:25:14.131] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (2200 times)
+[2025-11-29 20:25:14.329] [WARN ] [Reader] Reader 0 queue push slow (500 times) - preprocessors may be bottleneck
+[2025-11-29 20:25:14.644] [WARN ] [VideoReader] Unused decoder option: output=cuda
+[2025-11-29 20:25:14.645] [INFO ] [VideoReader] Codec opened with hardware decoder, decoder: h264_cuvid, hw_pix_fmt: 119, codec_id: 27
+[2025-11-29 20:25:14.645] [INFO ] [VideoReader] Initialized reader for /shared_storage/action_videos/c03o24120002993/20251117093938_bd9603aa-c4e2-47a7-ba2e-e14d0b3e07e8.mp4 [NVDEC]
+[2025-11-29 20:25:14.645] [INFO ] [VideoReader] Time window: start_ts=1763347178.000000, end_ts=1763347256.439174, moment_time=1763347178.000000, duration=900.840000, video_range=[1763347178.000000, 1763348078.840000], actual_range=[1763347178.000000, 1763347256.439174], fps=12.857000, time_window_duration=78.439174, actual_available_duration=78.439174, total_expected_frames~1008, actual_expected_frames~1008, seek_to_frame=0, seek_timestamp=1763347178.000000, remaining_duration=78.439174, remaining_frames~1008
+[2025-11-29 20:25:14.645] [INFO ] [VideoReader]   (note: actual frames_read may be less than expected if: 1) video file ends before end_ts, 2) frames before start_ts are skipped, 3) debug mode frame limit is reached)
+[2025-11-29 20:25:14.944] [WARN ] [Reader] Reader 2 queue push slow (500 times) - preprocessors may be bottleneck
+[2025-11-29 20:25:15.331] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (2200 times)
+[2025-11-29 20:25:16.114] [INFO ] [VideoReader] GPU conversion stats - GPU: 4000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:25:16.503] [INFO ] [VideoReader] Frame 13: total_read=1953, actual_pos=1225, current_ts=1763346497.350000, start_ts=1763346355.498781, end_ts=1763346512.568652, frame_pts=197.350000, actual_ts_from_pts=1763346497.350000, calc_ts=1763346450.265823, ts_diff=-47.084177, moment_time=1763346300.000000, fps=12.996967
+[2025-11-29 20:25:16.743] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (2200 times)
+[2025-11-29 20:25:17.826] [STATS] [Monitor] === Statistics (Runtime: 210s) ===
+Frames Read: 19270 | Preprocessed: 51250 | Read FPS: 102 | Preprocess FPS: 308
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=0/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=17248 | Failed=0 | FPS=102 | AvgTime=9.29ms/frame | TotalTime=160.27s
+Engine hand: Detected=16208 | Failed=0 | FPS=102 | AvgTime=11.36ms/frame | TotalTime=184.16s
+Engine pose: Detected=17216 | Failed=0 | FPS=102 | AvgTime=19.19ms/frame | TotalTime=330.95s
+Reader: Frames=19274 | FPS=102 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=51254 | FPS=308 | AvgTime=50.55ms/frame | TotalTime=2590.82s
+Postprocessor: Frames=50672 | FPS=307 | AvgTime=2.40ms/frame | TotalTime=121.43s
+
+[2025-11-29 20:25:18.033] [WARN ] [Reader] Reader 4 queue push slow (500 times) - preprocessors may be bottleneck
+[2025-11-29 20:25:20.262] [WARN ] [Reader] Reader 3 queue push slow (500 times) - preprocessors may be bottleneck
+[2025-11-29 20:25:20.585] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (2300 times)
+[2025-11-29 20:25:20.742] [WARN ] [Reader] Reader 1 queue push slow (500 times) - preprocessors may be bottleneck
+[2025-11-29 20:25:21.488] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (2300 times)
+[2025-11-29 20:25:21.944] [INFO ] [VideoReader] GPU conversion stats - GPU: 4000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:25:22.285] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (2300 times)
+[2025-11-29 20:25:22.841] [STATS] [Monitor] === Statistics (Runtime: 215s) ===
+Frames Read: 19737 | Preprocessed: 52644 | Read FPS: 92 | Preprocess FPS: 276
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=1/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=17712 | Failed=0 | FPS=92 | AvgTime=9.26ms/frame | TotalTime=163.94s
+Engine hand: Detected=16672 | Failed=0 | FPS=92 | AvgTime=11.31ms/frame | TotalTime=188.51s
+Engine pose: Detected=17680 | Failed=0 | FPS=92 | AvgTime=19.04ms/frame | TotalTime=336.94s
+Reader: Frames=19737 | FPS=92 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=52646 | FPS=276 | AvgTime=50.33ms/frame | TotalTime=2649.45s
+Postprocessor: Frames=52064 | FPS=276 | AvgTime=2.39ms/frame | TotalTime=124.23s
+
+[2025-11-29 20:25:22.897] [INFO ] [VideoReader] Frame 13: total_read=2474, actual_pos=2474, current_ts=1763346904.100000, start_ts=1763346616.000000, end_ts=1763347027.734625, frame_pts=288.100000, actual_ts_from_pts=1763346904.100000, calc_ts=1763346808.424358, ts_diff=-95.675642, moment_time=1763346616.000000, fps=12.857000
+[2025-11-29 20:25:23.524] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=2087, actual_pos=1359, current_ts=1763346512.590000, end_ts=1763346512.568652, frames_in_window=1359, end_of_stream=false
+[2025-11-29 20:25:23.525] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=212.590000, actual_ts_from_pts=1763346512.590000, calc_ts=1763346460.575921, calc_ts_diff=-52.014079
+[2025-11-29 20:25:23.525] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o25010001872_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781_v0' *** frame_count=1359, actual_frame_position=1359, consecutive_failures=1
+[2025-11-29 20:25:23.571] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=2089, actual_pos=1360, current_ts=1763346512.670000, end_ts=1763346512.568652, frames_in_window=1360, end_of_stream=false
+[2025-11-29 20:25:23.571] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=212.670000, actual_ts_from_pts=1763346512.670000, calc_ts=1763346460.729803, calc_ts_diff=-51.940197
+[2025-11-29 20:25:23.571] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o25010001872_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781_v0' *** frame_count=1360, actual_frame_position=1360, consecutive_failures=1
+[2025-11-29 20:25:23.635] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=2091, actual_pos=1361, current_ts=1763346512.820000, end_ts=1763346512.568652, frames_in_window=1361, end_of_stream=false
+[2025-11-29 20:25:23.636] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=212.820000, actual_ts_from_pts=1763346512.820000, calc_ts=1763346460.883685, calc_ts_diff=-51.936315
+[2025-11-29 20:25:23.636] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o25010001872_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781_v0' *** frame_count=1361, actual_frame_position=1361, consecutive_failures=1
+[2025-11-29 20:25:23.678] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=2093, actual_pos=1362, current_ts=1763346512.890000, end_ts=1763346512.568652, frames_in_window=1362, end_of_stream=false
+[2025-11-29 20:25:23.679] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=212.890000, actual_ts_from_pts=1763346512.890000, calc_ts=1763346461.037567, calc_ts_diff=-51.852433
+[2025-11-29 20:25:23.679] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o25010001872_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781_v0' *** frame_count=1362, actual_frame_position=1362, consecutive_failures=1
+[2025-11-29 20:25:23.709] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=2095, actual_pos=1363, current_ts=1763346513.040000, end_ts=1763346512.568652, frames_in_window=1363, end_of_stream=false
+[2025-11-29 20:25:23.709] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=213.040000, actual_ts_from_pts=1763346513.040000, calc_ts=1763346461.191449, calc_ts_diff=-51.848551
+[2025-11-29 20:25:23.709] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o25010001872_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781_v0' *** frame_count=1363, actual_frame_position=1363, consecutive_failures=1
+[2025-11-29 20:25:23.716] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=2096, actual_pos=1363, current_ts=1763346513.120000, end_ts=1763346512.568652, frames_in_window=1363, end_of_stream=false
+[2025-11-29 20:25:23.717] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=213.120000, actual_ts_from_pts=1763346513.120000, calc_ts=1763346461.268390, calc_ts_diff=-51.851610
+[2025-11-29 20:25:23.728] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=2097, actual_pos=1363, current_ts=1763346513.280000, end_ts=1763346512.568652, frames_in_window=1363, end_of_stream=false
+[2025-11-29 20:25:23.728] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=213.280000, actual_ts_from_pts=1763346513.280000, calc_ts=1763346461.345331, calc_ts_diff=-51.934669
+[2025-11-29 20:25:23.728] [INFO ] [Reader] *** Stopping video reading after 3 consecutive readFrame() failures *** video_key='c03o25010001872_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781_v0', frames_read=1363, actual_frame_position=1363
+[2025-11-29 20:25:23.728] [INFO ] [Reader] *** Reader 0 finished video c03o25010001872_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781_v0 *** frames_read=1363, actual_frame_position=1363, path=/shared_storage/action_videos/c03o25010001872/20251117092500_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781.mp4
+[2025-11-29 20:25:24.084] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (2300 times)
+unix_timestamp 1763347170.421078 ---->2025-11-17T09:39:30.4210785+07:00
+unix_timestamp 1763347658.076291 ---->2025-11-17T09:47:38.0762906+07:00
+[2025-11-29 20:25:24.984] [INFO ] [VideoReader] Found h264_cuvid hardware decoder
+[2025-11-29 20:25:24.986] [INFO ] [VideoReader] Using CUVID decoder: h264_cuvid (NVDEC hardware-accelerated)
+[2025-11-29 20:25:24.986] [INFO ] [VideoReader] Setting CUVID decoder with 32 surfaces for async decode
+[2025-11-29 20:25:24.986] [INFO ] [VideoReader] getHWFormat called, available formats: 119 23 , looking for: 119
+[2025-11-29 20:25:24.986] [INFO ] [VideoReader] getHWFormat returning hardware format: 119
+[2025-11-29 20:25:25.180] [INFO ] [VideoReader] GPU conversion stats - GPU: 4000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:25:25.698] [INFO ] [VideoReader] Frame 13: total_read=209, actual_pos=209, current_ts=1763347201.810000, start_ts=1763347178.000000, end_ts=1763347256.439174, frame_pts=23.810000, actual_ts_from_pts=1763347201.810000, calc_ts=1763347194.255736, ts_diff=-7.554264, moment_time=1763347178.000000, fps=12.857000
+[2025-11-29 20:25:26.382] [INFO ] [VideoReader] GPU conversion stats - GPU: 4000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:25:27.071] [INFO ] [VideoReader] Frame 13: total_read=9817, actual_pos=1341, current_ts=1763347109.900000, start_ts=1763346955.166640, end_ts=1763347204.160000, frame_pts=805.900000, actual_ts_from_pts=1763347109.900000, calc_ts=1763347059.346830, ts_diff=-50.553170, moment_time=1763346304.000000, fps=12.996679
+[2025-11-29 20:25:27.085] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (2400 times)
+[2025-11-29 20:25:27.186] [WARN ] [VideoReader] Unused decoder option: output=cuda
+[2025-11-29 20:25:27.187] [INFO ] [VideoReader] Codec opened with hardware decoder, decoder: h264_cuvid, hw_pix_fmt: 119, codec_id: 27
+[2025-11-29 20:25:27.188] [INFO ] [VideoReader] Initialized reader for /shared_storage/action_videos/c03o25010005560/20251117092640_6815cd08-c515-4cde-8f3a-a3174fdf3f7e.mp4 [NVDEC]
+[2025-11-29 20:25:27.188] [INFO ] [VideoReader] Time window: start_ts=1763347140.421078, end_ts=1763347300.140000, moment_time=1763346400.000000, duration=900.140000, video_range=[1763346400.000000, 1763347300.140000], actual_range=[1763347140.421078, 1763347300.140000], fps=12.997112, time_window_duration=159.718922, actual_available_duration=159.718922, total_expected_frames~2075, actual_expected_frames~2075, seek_to_frame=9623, seek_timestamp=1763347140.395265, remaining_duration=159.744735, remaining_frames~2076
+[2025-11-29 20:25:27.188] [INFO ] [VideoReader]   (note: actual frames_read may be less than expected if: 1) video file ends before end_ts, 2) frames before start_ts are skipped, 3) debug mode frame limit is reached)
+[2025-11-29 20:25:27.846] [STATS] [Monitor] === Statistics (Runtime: 220s) ===
+Frames Read: 20198 | Preprocessed: 54045 | Read FPS: 91 | Preprocess FPS: 279
+RawQueue: 1998/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=0/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=18144 | Failed=0 | FPS=86 | AvgTime=9.25ms/frame | TotalTime=167.78s
+Engine hand: Detected=17136 | Failed=0 | FPS=92 | AvgTime=11.27ms/frame | TotalTime=193.15s
+Engine pose: Detected=18112 | Failed=0 | FPS=86 | AvgTime=19.04ms/frame | TotalTime=345.14s
+Reader: Frames=20198 | FPS=91 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=54045 | FPS=279 | AvgTime=49.97ms/frame | TotalTime=2700.46s
+Postprocessor: Frames=53392 | FPS=264 | AvgTime=2.37ms/frame | TotalTime=126.47s
+
+[2025-11-29 20:25:28.724] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (2400 times)
+[2025-11-29 20:25:29.179] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (2400 times)
+[2025-11-29 20:25:31.352] [INFO ] [VideoReader] GPU conversion stats - GPU: 4000, CPU: 0, GPU%: 100.000000
+[2025-11-29 20:25:31.640] [INFO ] [VideoReader] Frame 13: total_read=5432, actual_pos=1724, current_ts=1763346761.400000, start_ts=1763346562.174050, end_ts=1763347177.140000, frame_pts=484.400000, actual_ts_from_pts=1763346761.400000, calc_ts=1763346694.943651, ts_diff=-66.456349, moment_time=1763346277.000000, fps=12.996967
+[2025-11-29 20:25:31.719] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (2400 times)
+[2025-11-29 20:25:32.860] [STATS] [Monitor] === Statistics (Runtime: 225s) ===
+Frames Read: 20652 | Preprocessed: 55384 | Read FPS: 90 | Preprocess FPS: 267
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=6/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=18592 | Failed=0 | FPS=89 | AvgTime=9.25ms/frame | TotalTime=172.16s
+Engine hand: Detected=17584 | Failed=0 | FPS=89 | AvgTime=11.25ms/frame | TotalTime=197.74s
+Engine pose: Detected=18592 | Failed=0 | FPS=95 | AvgTime=18.92ms/frame | TotalTime=351.85s
+Reader: Frames=20653 | FPS=90 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=55385 | FPS=267 | AvgTime=49.57ms/frame | TotalTime=2745.46s
+Postprocessor: Frames=54768 | FPS=274 | AvgTime=2.37ms/frame | TotalTime=130.00s
+
+[2025-11-29 20:25:34.365] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (2500 times)
+[2025-11-29 20:25:36.677] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (2500 times)
+[2025-11-29 20:25:36.699] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (2500 times)
+[2025-11-29 20:25:37.861] [STATS] [Monitor] === Statistics (Runtime: 231s) ===
+Frames Read: 21101 | Preprocessed: 56736 | Read FPS: 89 | Preprocess FPS: 269
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=1/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=19072 | Failed=0 | FPS=95 | AvgTime=9.24ms/frame | TotalTime=176.18s
+Engine hand: Detected=18032 | Failed=0 | FPS=89 | AvgTime=11.22ms/frame | TotalTime=202.29s
+Engine pose: Detected=19024 | Failed=0 | FPS=86 | AvgTime=18.90ms/frame | TotalTime=360.19s
+Reader: Frames=21101 | FPS=89 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=56736 | FPS=269 | AvgTime=49.17ms/frame | TotalTime=2789.91s
+Postprocessor: Frames=56128 | FPS=271 | AvgTime=2.35ms/frame | TotalTime=131.96s
+
+[2025-11-29 20:25:39.290] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (2500 times)
+[2025-11-29 20:25:42.237] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (2600 times)
+[2025-11-29 20:25:42.904] [STATS] [Monitor] === Statistics (Runtime: 236s) ===
+Frames Read: 21510 | Preprocessed: 57978 | Read FPS: 81 | Preprocess FPS: 248
+RawQueue: 1999/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=1/500
+PostQ: 1 tasks pending
+Engine alcohol: Detected=19488 | Failed=0 | FPS=83 | AvgTime=9.21ms/frame | TotalTime=179.50s
+Engine hand: Detected=18448 | Failed=0 | FPS=83 | AvgTime=11.23ms/frame | TotalTime=207.15s
+Engine pose: Detected=19456 | Failed=0 | FPS=86 | AvgTime=18.84ms/frame | TotalTime=366.84s
+Reader: Frames=21514 | FPS=81 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=57982 | FPS=248 | AvgTime=48.97ms/frame | TotalTime=2839.66s
+Postprocessor: Frames=57392 | FPS=252 | AvgTime=2.35ms/frame | TotalTime=134.67s
+
+[2025-11-29 20:25:43.204] [WARN ] [Reader] Reader 2 queue push slow (600 times) - preprocessors may be bottleneck
+[2025-11-29 20:25:44.147] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (2600 times)
+[2025-11-29 20:25:44.227] [WARN ] [Reader] Reader 0 queue push slow (600 times) - preprocessors may be bottleneck
+[2025-11-29 20:25:44.437] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (2600 times)
+[2025-11-29 20:25:46.423] [WARN ] [Reader] Reader 4 queue push slow (600 times) - preprocessors may be bottleneck
+[2025-11-29 20:25:46.717] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (2600 times)
+[2025-11-29 20:25:47.146] [WARN ] [Reader] Reader 3 queue push slow (600 times) - preprocessors may be bottleneck
+[2025-11-29 20:25:47.905] [STATS] [Monitor] === Statistics (Runtime: 241s) ===
+Frames Read: 21922 | Preprocessed: 59210 | Read FPS: 81 | Preprocess FPS: 244
+RawQueue: 1997/2000
+PreQ 640x640 [ROI] engines=1 queue=3/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=3/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=19872 | Failed=0 | FPS=76 | AvgTime=9.21ms/frame | TotalTime=183.04s
+Engine hand: Detected=18864 | Failed=0 | FPS=82 | AvgTime=11.23ms/frame | TotalTime=211.86s
+Engine pose: Detected=19872 | Failed=0 | FPS=82 | AvgTime=18.81ms/frame | TotalTime=374.05s
+Reader: Frames=21922 | FPS=81 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=59211 | FPS=244 | AvgTime=48.70ms/frame | TotalTime=2883.66s
+Postprocessor: Frames=58608 | FPS=241 | AvgTime=2.36ms/frame | TotalTime=138.09s
+
+[2025-11-29 20:25:48.438] [WARN ] [Reader] Reader 1 queue push slow (600 times) - preprocessors may be bottleneck
+[2025-11-29 20:25:49.906] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (2700 times)
+[2025-11-29 20:25:51.608] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (2700 times)
+[2025-11-29 20:25:51.645] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (2700 times)
+[2025-11-29 20:25:52.760] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=678, actual_pos=678, current_ts=1763347256.560000, end_ts=1763347256.439174, frames_in_window=678, end_of_stream=false
+[2025-11-29 20:25:52.761] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=78.560000, actual_ts_from_pts=1763347256.560000, calc_ts=1763347230.733919, calc_ts_diff=-25.826081
+[2025-11-29 20:25:52.762] [INFO ] [Reader] *** readFrame() returned false for video_key='c03o24120002993_bd9603aa-c4e2-47a7-ba2e-e14d0b3e07e8_v1' *** frame_count=678, actual_frame_position=678, consecutive_failures=1
+[2025-11-29 20:25:52.809] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=679, actual_pos=678, current_ts=1763347256.640000, end_ts=1763347256.439174, frames_in_window=678, end_of_stream=false
+[2025-11-29 20:25:52.809] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=78.640000, actual_ts_from_pts=1763347256.640000, calc_ts=1763347230.811697, calc_ts_diff=-25.828303
+[2025-11-29 20:25:52.863] [INFO ] [VideoReader] *** STOPPING: Reached end of time window *** total_read=680, actual_pos=678, current_ts=1763347256.800000, end_ts=1763347256.439174, frames_in_window=678, end_of_stream=false
+[2025-11-29 20:25:52.864] [INFO ] [VideoReader]   Frame PTS comparison: frame_pts=78.800000, actual_ts_from_pts=1763347256.800000, calc_ts=1763347230.889476, calc_ts_diff=-25.910524
+[2025-11-29 20:25:52.864] [INFO ] [Reader] *** Stopping video reading after 3 consecutive readFrame() failures *** video_key='c03o24120002993_bd9603aa-c4e2-47a7-ba2e-e14d0b3e07e8_v1', frames_read=678, actual_frame_position=678
+[2025-11-29 20:25:52.864] [INFO ] [Reader] *** Reader 1 finished video c03o24120002993_bd9603aa-c4e2-47a7-ba2e-e14d0b3e07e8_v1 *** frames_read=678, actual_frame_position=678, path=/shared_storage/action_videos/c03o24120002993/20251117093938_bd9603aa-c4e2-47a7-ba2e-e14d0b3e07e8.mp4
+[2025-11-29 20:25:52.906] [STATS] [Monitor] === Statistics (Runtime: 246s) ===
+Frames Read: 22311 | Preprocessed: 60378 | Read FPS: 77 | Preprocess FPS: 233
+RawQueue: 2000/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=1/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=20272 | Failed=0 | FPS=80 | AvgTime=9.23ms/frame | TotalTime=187.06s
+Engine hand: Detected=19248 | Failed=0 | FPS=76 | AvgTime=11.24ms/frame | TotalTime=216.34s
+Engine pose: Detected=20256 | Failed=0 | FPS=76 | AvgTime=18.80ms/frame | TotalTime=380.89s
+Reader: Frames=22311 | FPS=77 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=60378 | FPS=233 | AvgTime=48.51ms/frame | TotalTime=2928.83s
+Postprocessor: Frames=59776 | FPS=233 | AvgTime=2.36ms/frame | TotalTime=140.93s
+
+unix_timestamp 1763346649.109553 ---->2025-11-17T09:30:49.109553+07:00
+unix_timestamp 1763346889.542206 ---->2025-11-17T09:34:49.5422055+07:00
+[2025-11-29 20:25:53.606] [INFO ] [VideoReader] Found h264_cuvid hardware decoder
+[2025-11-29 20:25:53.606] [INFO ] [VideoReader] Using CUVID decoder: h264_cuvid (NVDEC hardware-accelerated)
+[2025-11-29 20:25:53.606] [INFO ] [VideoReader] Setting CUVID decoder with 32 surfaces for async decode
+[2025-11-29 20:25:54.740] [WARN ] [VideoReader] Unused decoder option: output=cuda
+[2025-11-29 20:25:54.743] [INFO ] [VideoReader] Codec opened with hardware decoder, decoder: h264_cuvid, hw_pix_fmt: 119, codec_id: 27
+[2025-11-29 20:25:54.744] [INFO ] [VideoReader] Initialized reader for /shared_storage/action_videos/c03o24090015149/20251117092855_bf372359-4b49-4025-91e9-2c950daf8c71.mp4 [NVDEC]
+[2025-11-29 20:25:54.744] [INFO ] [VideoReader] Time window: start_ts=1763346619.109553, end_ts=1763346894.542206, moment_time=1763346535.000000, duration=900.170000, video_range=[1763346535.000000, 1763347435.170000], actual_range=[1763346619.109553, 1763346894.542206], fps=12.996679, time_window_duration=275.432652, actual_available_duration=275.432652, total_expected_frames~3579, actual_expected_frames~3579, seek_to_frame=1093, seek_timestamp=1763346619.098409, remaining_duration=275.443796, remaining_frames~3579
+[2025-11-29 20:25:54.744] [INFO ] [VideoReader]   (note: actual frames_read may be less than expected if: 1) video file ends before end_ts, 2) frames before start_ts are skipped, 3) debug mode frame limit is reached)
+[2025-11-29 20:25:55.062] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (2700 times)
+[2025-11-29 20:25:57.720] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (2800 times)
+[2025-11-29 20:25:57.907] [STATS] [Monitor] === Statistics (Runtime: 251s) ===
+Frames Read: 22773 | Preprocessed: 61765 | Read FPS: 92 | Preprocess FPS: 277
+RawQueue: 1999/2000
+PreQ 640x640 [ROI] engines=1 queue=1/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=0/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=20752 | Failed=0 | FPS=96 | AvgTime=9.22ms/frame | TotalTime=191.24s
+Engine hand: Detected=19712 | Failed=0 | FPS=92 | AvgTime=11.21ms/frame | TotalTime=221.05s
+Engine pose: Detected=20736 | Failed=0 | FPS=96 | AvgTime=18.74ms/frame | TotalTime=388.69s
+Reader: Frames=22774 | FPS=92 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=61765 | FPS=277 | AvgTime=48.10ms/frame | TotalTime=2971.03s
+Postprocessor: Frames=61200 | FPS=284 | AvgTime=2.34ms/frame | TotalTime=143.10s
+
+[2025-11-29 20:25:58.795] [WARN ] [Preprocessor] Dispatcher 2 queue push slow for group 1 (2800 times)
+[2025-11-29 20:25:59.179] [WARN ] [Preprocessor] Dispatcher 3 queue push slow for group 1 (2800 times)
+[2025-11-29 20:25:59.609] [INFO ] [RedisOutput] Appended output message to /workspace/khangtd6/longchau_vaccine/action_c/outputs/bins/redis_messages/17-11-25.jsonl
+[2025-11-29 20:25:59.610] [INFO ] [RedisOutput] Ready to push message for key 'c03o25010001872_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781': {"alarm": {"serial": "c03o25010001872", "record_url": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533e8050299cdad45407b5f267dbe9b6455362a339254303c926262fe9838b3c8c089134e45d76cd08f16aa70063b5450b91539af1582a50386e388fa469f6e7f1df49bfb37ce6b36f6187f30e12fddf98b99c2062a28e5bc2ade3eeb190518a6fb8.mp4", "record_list": [{"file": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533e8050299cdad45407b5f267dbe9b6455362a339254303c926262fe9838b3c8c089134e45d76cd08f16aa70063b5450b91539af1582a50386e388fa469f6e7f1df49bfb37ce6b36f6187f30e12fddf98b99c2062a28e5bc2ade3eeb190518a6fb8.mp4", "record_start_time": "2025-11-17T09:25:00"}], "record_start_time": "2025-11-17T09:25:00", "alarm_time": "2025-11-17T11:12:40", "receive_time": "2025-11-18T22:46:59.446097", "record_id": "19fc1a3b-9a0a-445a-8e4d-bd9a0a353781", "raw_alarm": {"alarm": "trigger_alarm", "serial": "c03o25010001872", "record_id": "19fc1a3b-9a0a-445a-8e4d-bd9a0a353781", "home_id": "718029a6-9f3f-4160-89c8-46ac330f877f", "send_at": "20251117111240", "video_start_time": "2025-11-17T09:26:25.4987813+07:00", "video_end_time": "2025-11-17T09:28:27.5686519+07:00", "record_list": [{"duration": "900.15", "file": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533e8050299cdad45407b5f267dbe9b6455362a339254303c926262fe9838b3c8c089134e45d76cd08f16aa70063b5450b91539af1582a50386e388fa469f6e7f1df49bfb37ce6b36f6187f30e12fddf98b99c2062a28e5bc2ade3eeb190518a6fb8.mp4", "image": "https://livestream-04-hni.fcam.vn/thumbnails/c03o25010001872/1763346300853.jpg", "recordtimestamp": "2025-11-17T09:25:00+07:00", "moment_time": 1763346300}], "vaccine_info": {"Lcvid": "LP581621763345206116", "CameraId": "2220-I03S-R18-C03O25010001872", "ShopCode": "58162", "ShopName": "VX DTP 82-84 Nguy\u1ec5n Hu\u1ec7, P. Cao L\u00e3nh", "Indication": [{"Sku": "00038255", "Odac": "N2V28sVb94AWBtvQ", "Taxonomies": "C\u00daM", "VaccineName": "VAXIGRIP TETRA"}], "PersonName": "H\u1ed3 T\u00f4 Ch\u00e2u", "TicketCode": "TK58162524911763345332974", "TrackingTime": "2025-11-17T09:28:27.5686519+07:00", "InjectingTime": "2025-11-17T09:26:25.4987813+07:00", "InjectingNursingCode": "54773", "InjectingNursingName": "Ph\u1ea1m \u0110\u00ecnh V\u0103n"}, "target_action": [{"action_id": "1", "action_name": "S\u00e1t khu\u1ea9n tay", "type": "time", "value": [15]}, {"action_id": "2", "action_name": "L\u1eafc vaccin", "type": "count", "value": 3}]}, "tracking_key": "c03o25010001872#20251117092500#19fc1a3b-9a0a-445a-8e4d-bd9a0a353781"}, "download_info": [{"local_filepath": "/shared_storage/action_videos/c03o25010001872/20251117092500_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781.mp4", "minio_object_name": "videos/c03o25010001872/20251117092500_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781.mp4", "record_url": "http://pb-01-hni.fcam.vn/iwanttoplay/9dd373af15433a8df12a60634e31533e8050299cdad45407b5f267dbe9b6455362a339254303c926262fe9838b3c8c089134e45d76cd08f16aa70063b5450b91539af1582a50386e388fa469f6e7f1df49bfb37ce6b36f6187f30e12fddf98b99c2062a28e5bc2ade3eeb190518a6fb8.mp4"}], "playback_location": ["/shared_storage/action_videos/c03o25010001872/20251117092500_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781.mp4"], "config": {"service_id": "eb305b04-a231-4ac2-a925-6cea95b27d9a", "service_name": "Action Recognition", "camera_id": "de757951-1a7b-4a3c-9f7e-d1f1629b7e82", "serial": "c03o25010001872", "camera_name": "c03o25010001872", "location_id": "718029a6-9f3f-4160-89c8-46ac330f877f", "notify_result": true, "box": [[0.296354, 0.471296], [0.611979, 0.471296], [0.611979, 0.855556], [0.296354, 0.855556]], "zone": 1, "lines": [], "polygons": [], "external_data": {"actions": [{"id": "1", "name": "S\u00e1t khu\u1ea9n tay", "config": {"time": 5}}, {"id": "2", "name": "L\u1eafc vaccine", "config": {"time": 30}}]}}, "prioritize": false, "task_type": "2perday", "result_queue": "aicam#979219ff-b1d8-40ee-bfdc-c05f968b8972#results#h7UU0Trq85", "video_resolution": {"width": 1920, "height": 1080}, "run_only_office_hours": false, "hand": ["/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//hand/17-11-25/c03o25010001872_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781.bin"], "pose": ["/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//pose/17-11-25/c03o25010001872_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781.bin"], "alcohol": ["/workspace/khangtd6/longchau_vaccine/action_c/outputs/bins//alcohol/17-11-25/c03o25010001872_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781.bin"]}
+[2025-11-29 20:25:59.611] [INFO ] [RedisOutput] Pushed processed message to output queue: ml#vaccine_detection_test (push_time=1ms, message_key='c03o25010001872_19fc1a3b-9a0a-445a-8e4d-bd9a0a353781')
+[2025-11-29 20:26:02.907] [STATS] [Monitor] === Statistics (Runtime: 256s) ===
+Frames Read: 23155 | Preprocessed: 62911 | Read FPS: 76 | Preprocess FPS: 229
+RawQueue: 1997/2000
+PreQ 640x640 [ROI] engines=1 queue=0/500
+PreQ 864x864 [FULL] engines=1 queue=500/500
+PreQ 640x640 [FULL] engines=1 queue=0/500
+PostQ: 0 tasks pending
+Engine alcohol: Detected=21136 | Failed=0 | FPS=76 | AvgTime=9.20ms/frame | TotalTime=194.54s
+Engine hand: Detected=20096 | Failed=0 | FPS=76 | AvgTime=11.23ms/frame | TotalTime=225.63s
+Engine pose: Detected=21104 | Failed=0 | FPS=73 | AvgTime=18.68ms/frame | TotalTime=394.55s
+Reader: Frames=23155 | FPS=76 | AvgTime=0.00ms/frame | TotalTime=0.00s
+Preprocessor: Frames=62911 | FPS=229 | AvgTime=48.14ms/frame | TotalTime=3028.71s
+Postprocessor: Frames=62336 | FPS=227 | AvgTime=2.34ms/frame | TotalTime=145.60s
+
+[2025-11-29 20:26:03.051] [WARN ] [Preprocessor] Dispatcher 1 queue push slow for group 1 (2800 times)
+[2025-11-29 20:26:05.449] [WARN ] [Preprocessor] Dispatcher 0 queue push slow for group 1 (2900 times)
