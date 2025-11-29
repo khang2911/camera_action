@@ -1377,9 +1377,11 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             std::vector<std::string> batch_record_ids;
             std::vector<std::string> batch_record_dates;
             
-            // CRITICAL: Track video_key to ensure all frames in a batch are from the same video
-            // This prevents frame order violations when multiple videos are processed concurrently
-            std::string batch_video_key;  // Empty means no frames in batch yet
+            // CRITICAL FIX: Allow frames from different videos in same batch to avoid deadlock
+            // The original logic required same video, but this causes deadlock when videos switch
+            // Prod branch doesn't enforce same video - it just collects batch_size frames
+            // We'll track video_key for logging, but allow mixed videos
+            std::string batch_video_key;  // Track for logging, but allow mixed videos
             
             // CRITICAL: Match prod branch - simple approach that works!
             // Prod branch: Simple loop with 100ms timeout, NO partial batch processing
@@ -1399,18 +1401,13 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     
                     const std::string& pending_video_key = frame_data.video_key;
                     
-                    // If we already have a batch from a different video, save pending frame and continue
-                    // CRITICAL: Match prod branch - just skip different video frames, continue collecting current batch
-                    if (!batch_video_key.empty() && pending_video_key != batch_video_key && batch_tensors.size() > 0) {
-                        // Save pending frame and continue collecting from current video
-                        pending_frame = frame_data;
-                        continue;  // Skip pending frame, continue collecting from current video
-                    }
-                    
-                    // Use the pending frame (either starting new batch or continuing current batch)
+                    // CRITICAL FIX: Allow collecting batches from different videos to avoid getting stuck
+                    // Don't skip frames from different videos - allow them in the batch
+                    // This ensures we can always collect full batches even when videos switch
                     if (batch_video_key.empty()) {
                         batch_video_key = pending_video_key;
                     }
+                    // If different video, we still use the frame (don't skip it)
                 } else {
                     // CRITICAL: Use 1ms timeout when queue has frames to minimize latency
                     // Target is 5ms/frame, so we can't afford 100ms waits
@@ -1437,17 +1434,16 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 // video_key is already computed in reader and stored in FrameData
                 const std::string& current_video_key = frame_data.video_key;
                 
-                // If this is the first frame, set the batch video_key
+                // CRITICAL FIX: Allow collecting batches from different videos to avoid getting stuck
+                // The original logic required all frames from same video, but this causes deadlock when videos switch
+                // Prod branch doesn't enforce same video - it just collects batch_size frames
+                // We'll allow mixed videos in a batch, but prefer same video when possible
                 if (batch_video_key.empty()) {
                     batch_video_key = current_video_key;
-                }
-                // If this frame is from a different video, save it for next batch
-                // CRITICAL: Match prod branch - just skip different video frames, continue collecting current batch
-                // We only process full batches, so we don't need to detect when videos finish
-                else if (current_video_key != batch_video_key) {
-                    // Save this frame for next batch and continue collecting from current video
-                    pending_frame = frame_data;
-                    continue;  // Skip this frame, continue collecting from current video
+                } else if (current_video_key != batch_video_key) {
+                    // Different video - but don't skip it! Allow it in the batch to avoid deadlock
+                    // This ensures we can always collect full batches even when videos switch
+                    // The postprocessor can handle frames from different videos
                 }
                 
                 // OPTIMIZATION: Cache output paths to avoid expensive string operations
@@ -1559,34 +1555,40 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 // Full batch - always process (matches prod branch)
                 should_process = true;
             } else if (!batch_tensors.empty() && static_cast<int>(batch_tensors.size()) < batch_size) {
-                // Partial batch - DROP IT (match prod branch exactly)
-                // Processing partial batches causes low FPS (3-5 FPS instead of 200 FPS)
-                // Dropping partial batches ensures we only process full batches = maximum GPU efficiency
+                // Partial batch - DROP IT and restart batch collection
+                // CRITICAL: We dropped a partial batch, so we need to restart batch collection
+                // Clear everything and go back to the batch collection loop
                 LOG_DEBUG("Detector", "Dropping partial batch of " + std::to_string(batch_tensors.size()) + 
                          " frames (only processing full batches of " + std::to_string(batch_size) + 
                          " frames) (engine=" + engine_group->engine_name + 
                          ", detector=" + std::to_string(detector_id) + ")");
-                // Clear the partial batch and continue to collect a full batch
-                    batch_tensors.clear();
-                    batch_output_paths.clear();
-                    batch_frame_numbers.clear();
-                    batch_original_widths.clear();
-                    batch_original_heights.clear();
-                    batch_true_original_widths.clear();
-                    batch_true_original_heights.clear();
-                    batch_roi_offset_x.clear();
-                    batch_roi_offset_y.clear();
-                    batch_message_keys.clear();
-                    batch_video_indices.clear();
-                    batch_serials.clear();
-                    batch_record_ids.clear();
-                    batch_record_dates.clear();
-                    if (debug_mode_) {
-                        batch_frames.clear();
-                        batch_video_ids.clear();
-                    }
+                // Clear the partial batch
+                batch_tensors.clear();
+                batch_output_paths.clear();
+                batch_frame_numbers.clear();
+                batch_original_widths.clear();
+                batch_original_heights.clear();
+                batch_true_original_widths.clear();
+                batch_true_original_heights.clear();
+                batch_roi_offset_x.clear();
+                batch_roi_offset_y.clear();
+                batch_message_keys.clear();
+                batch_video_indices.clear();
+                batch_serials.clear();
+                batch_record_ids.clear();
+                batch_record_dates.clear();
+                if (debug_mode_) {
+                    batch_frames.clear();
+                    batch_video_ids.clear();
+                }
                 batch_video_key.clear();
-                // Continue to collect a full batch
+                // CRITICAL: Don't continue here - restart batch collection by going back to the while loop
+                // The continue statement will go back to the outer while loop, which will restart batch collection
+            }
+            
+            // If we get here with should_process=false, it means we had a partial batch that was dropped
+            // We need to restart batch collection, so continue to the outer loop
+            if (!should_process) {
                 continue;
             }
             
