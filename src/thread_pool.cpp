@@ -1595,21 +1595,6 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             if (should_process && !batch_tensors.empty()) {
                 int actual_batch_count = static_cast<int>(batch_tensors.size());
                 
-                // CRITICAL: Log batch size to diagnose performance issues
-                // If we're processing mostly 1-frame batches, that explains the low FPS
-                static thread_local int batch_count = 0;
-                static thread_local int total_batch_frames = 0;
-                batch_count++;
-                total_batch_frames += actual_batch_count;
-                if (batch_count % 10 == 0) {
-                    double avg_batch_size = static_cast<double>(total_batch_frames) / batch_count;
-                    LOG_INFO("Detector", "Batch size stats (engine=" + engine_group->engine_name + 
-                             ", detector=" + std::to_string(detector_id) + "): " +
-                             "avg_batch_size=" + std::to_string(avg_batch_size) + 
-                             ", current=" + std::to_string(actual_batch_count) + 
-                             ", target=" + std::to_string(batch_size));
-                }
-                
                 // CRITICAL: Sort batch by frame number to ensure frames are processed in order
                 // This fixes the issue where multiple detectors pull frames from the same queue
                 // and frames arrive out of order due to parallel processing
