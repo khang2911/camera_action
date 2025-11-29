@@ -998,7 +998,34 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
     cv::Mat prev_frame_for_validation;
     int prev_frame_number = -1;
     
-    while (!stop_flag_ && reader.readFrame(frame)) {
+    int consecutive_failures = 0;
+    while (!stop_flag_) {
+        bool frame_read = reader.readFrame(frame);
+        if (!frame_read) {
+            consecutive_failures++;
+            if (consecutive_failures == 1) {
+                // Log when readFrame first returns false
+                int actual_pos = reader.getActualFramePosition();
+                LOG_INFO("Reader", "*** readFrame() returned false for video_key='" + video_key + "' ***" +
+                         " frame_count=" + std::to_string(frame_count) +
+                         ", actual_frame_position=" + std::to_string(actual_pos) +
+                         ", consecutive_failures=" + std::to_string(consecutive_failures));
+            }
+            // If readFrame fails multiple times, it's likely end of video
+            if (consecutive_failures >= 3) {
+                LOG_INFO("Reader", "*** Stopping video reading after " + std::to_string(consecutive_failures) + 
+                         " consecutive readFrame() failures ***" +
+                         " video_key='" + video_key + "'" +
+                         ", frames_read=" + std::to_string(frame_count) +
+                         ", actual_frame_position=" + std::to_string(reader.getActualFramePosition()));
+                break;
+            }
+            // Give it a few more tries in case it's a temporary issue
+            continue;
+        }
+        
+        consecutive_failures = 0;  // Reset on successful read
+        
             // Check debug mode limit first (takes priority over global limit)
             // frame_count is the number of frames already processed, so check BEFORE processing this one
             if (debug_mode_ && max_frames_per_video_ > 0 && frame_count >= max_frames_per_video_) {
@@ -1117,8 +1144,10 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
         // Removed logging - too expensive
     
     // Log frame count for this video
-    LOG_INFO("Reader", "Reader " + std::to_string(reader_id) + " finished video " + video_key +
-             ": frames_read=" + std::to_string(frame_count) +
+    int final_actual_pos = reader.getActualFramePosition();
+    LOG_INFO("Reader", "*** Reader " + std::to_string(reader_id) + " finished video " + video_key + " ***" +
+             " frames_read=" + std::to_string(frame_count) +
+             ", actual_frame_position=" + std::to_string(final_actual_pos) +
              ", path=" + clip.path);
     
     // Update total frames read for this message (for validation)
