@@ -227,14 +227,28 @@ bool VideoReader::initialize(const VideoClip* clip) {
     
     // Log time window information for debugging
     if (has_clip_metadata_ && clip_.has_time_window) {
-        double expected_frames = (clip_.end_timestamp - clip_.start_timestamp) * fps_;
+        // CRITICAL FIX: Calculate expected frames correctly
+        // expected_frames = (end_ts - start_ts) * fps, but this is the total in the time window
+        // The actual frames we'll read depends on where we start (seek_to_frame)
+        // If we seek to frame N, we'll read frames from N to the end of the time window
+        double time_window_duration = clip_.end_timestamp - clip_.start_timestamp;
+        double total_expected_frames = time_window_duration * fps_;
+        // Frames remaining after seek: total_expected - frames_already_read (if seek happened)
+        // But seek_to_frame is the frame number we seeked to, not frames already read
+        // So we need to calculate: frames from seek position to end of time window
+        double seek_offset_seconds = (clip_.start_timestamp - clip_.moment_time);
+        long long seek_frame = (seek_offset_seconds > 0) ? static_cast<long long>(seek_offset_seconds * fps_) : 0;
+        double remaining_frames = std::max(0.0, total_expected_frames - seek_frame);
+        
         LOG_INFO("VideoReader", "Time window: start_ts=" + std::to_string(clip_.start_timestamp) +
                  ", end_ts=" + std::to_string(clip_.end_timestamp) +
                  ", moment_time=" + std::to_string(clip_.moment_time) +
                  ", duration=" + std::to_string(clip_.duration_seconds) +
                  ", fps=" + std::to_string(fps_) +
-                 ", expected_frames~" + std::to_string(static_cast<int>(expected_frames)) +
-                 ", seek_to_frame=" + std::to_string(total_frames_read_));
+                 ", time_window_duration=" + std::to_string(time_window_duration) +
+                 ", total_expected_frames~" + std::to_string(static_cast<int>(total_expected_frames)) +
+                 ", seek_to_frame=" + std::to_string(total_frames_read_) +
+                 ", remaining_frames~" + std::to_string(static_cast<int>(remaining_frames)));
     }
     
     if (options_.enable_prefetch) {

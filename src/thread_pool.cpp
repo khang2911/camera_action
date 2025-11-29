@@ -818,15 +818,15 @@ std::vector<VideoClip> ThreadPool::parseJsonToVideoClips(const std::string& json
         
         std::string video_start_time_str = getString(raw_alarm, "video_start_time");
         std::string video_end_time_str = getString(raw_alarm, "video_end_time");
-        double start_ts = ConfigParser::parseTimestamp(video_start_time_str)-30;
-        double end_ts = ConfigParser::parseTimestamp(video_end_time_str)+5;
+        double global_start_ts = ConfigParser::parseTimestamp(video_start_time_str)-30;
+        double global_end_ts = ConfigParser::parseTimestamp(video_end_time_str)+5;
         
         // Log parsed time window for debugging
         LOG_DEBUG("Reader", "Parsed time window: video_start_time='" + video_start_time_str + 
-                 "' -> " + std::to_string(start_ts) +
+                 "' -> " + std::to_string(global_start_ts) +
                  ", video_end_time='" + video_end_time_str + 
-                 "' -> " + std::to_string(end_ts) +
-                 ", duration=" + std::to_string(end_ts - start_ts) + "s");
+                 "' -> " + std::to_string(global_end_ts) +
+                 ", duration=" + std::to_string(global_end_ts - global_start_ts) + "s");
         
         std::string message_key = !tracking_key.empty() ? tracking_key : buildMessageKey(serial, record_id);
 
@@ -866,6 +866,11 @@ std::vector<VideoClip> ThreadPool::parseJsonToVideoClips(const std::string& json
         
         YAML::Node download_info = root["download_info"];
         
+        // CRITICAL: Sequential time window across videos
+        // The time window continues from video to video - if video0 doesn't cover everything,
+        // video1 continues from where video0 ended (or from video1's start, whichever is later)
+        double current_window_start = global_start_ts;
+        
         for (size_t i = 0; i < clip_count; ++i) {
             VideoClip clip;
             clip.serial = serial;
@@ -873,10 +878,56 @@ std::vector<VideoClip> ThreadPool::parseJsonToVideoClips(const std::string& json
             clip.record_date = record_date;
             clip.message_key = message_key;
             clip.video_index = static_cast<int>(i);
-            clip.start_timestamp = start_ts;
-            clip.end_timestamp = end_ts;
-            if (std::isfinite(start_ts) && std::isfinite(end_ts)) {
+            
+            // Initialize time window - will be adjusted based on video's actual time range
+            clip.start_timestamp = current_window_start;
+            clip.end_timestamp = global_end_ts;
+            
+            if (record_list && record_list.IsSequence() && i < record_list.size()) {
+                const auto& entry = record_list[i];
+                if (entry["moment_time"]) {
+                    clip.moment_time = entry["moment_time"].as<double>(0.0);
+                } else if (entry["recordtimestamp"]) {
+                    clip.moment_time = ConfigParser::parseTimestamp(entry["recordtimestamp"].as<std::string>());
+                }
+                if (entry["duration"]) {
+                    try {
+                        clip.duration_seconds = entry["duration"].as<double>(0.0);
+                    } catch (...) {
+                        clip.duration_seconds = 0.0;
+                    }
+                }
+                
+                // Calculate video's actual time range: [moment_time, moment_time + duration]
+                double video_start = clip.moment_time;
+                double video_end = clip.moment_time + clip.duration_seconds;
+                
+                // Sequential time window logic:
+                // 1. Start from current_window_start (where previous video ended, or global_start for first video)
+                // 2. But don't start before the video's actual start time
+                clip.start_timestamp = std::max(current_window_start, video_start);
+                
+                // 3. End at the earlier of: global_end_ts or video_end
+                clip.end_timestamp = std::min(global_end_ts, video_end);
+                
+                // 4. Update current_window_start for next video: continue from where this video ends
+                // If this video covers the entire remaining window, next video won't have anything to read
+                current_window_start = clip.end_timestamp;
+                
+                // Log clip time info for debugging
+                LOG_DEBUG("Reader", "Clip " + std::to_string(i) + ": moment_time=" + std::to_string(clip.moment_time) +
+                         ", duration=" + std::to_string(clip.duration_seconds) +
+                         ", video_range=[" + std::to_string(video_start) + ", " + std::to_string(video_end) + "]" +
+                         ", time_window=[" + std::to_string(clip.start_timestamp) + ", " + std::to_string(clip.end_timestamp) + "]" +
+                         ", next_window_start=" + std::to_string(current_window_start) +
+                         ", has_time_window=" + (clip.has_time_window ? "true" : "false"));
+            }
+            
+            if (std::isfinite(clip.start_timestamp) && std::isfinite(clip.end_timestamp) && 
+                clip.end_timestamp > clip.start_timestamp) {
                 clip.has_time_window = true;
+            } else {
+                clip.has_time_window = false;
             }
             clip.has_roi = has_roi;
             clip.roi_x1 = roi_x1;
@@ -895,28 +946,8 @@ std::vector<VideoClip> ThreadPool::parseJsonToVideoClips(const std::string& json
                 clip.path = getString(download_info[i], "local_filepath");
             }
             
-            if (record_list && record_list.IsSequence() && i < record_list.size()) {
-                const auto& entry = record_list[i];
-                if (entry["moment_time"]) {
-                    clip.moment_time = entry["moment_time"].as<double>(0.0);
-                } else if (entry["recordtimestamp"]) {
-                    clip.moment_time = ConfigParser::parseTimestamp(entry["recordtimestamp"].as<std::string>());
-                }
-                if (entry["duration"]) {
-                    try {
-                        clip.duration_seconds = entry["duration"].as<double>(0.0);
-                    } catch (...) {
-                        clip.duration_seconds = 0.0;
-                    }
-                }
-                
-                // Log clip time info for debugging
-                LOG_DEBUG("Reader", "Clip " + std::to_string(i) + ": moment_time=" + std::to_string(clip.moment_time) +
-                         ", duration=" + std::to_string(clip.duration_seconds) +
-                         ", start_ts=" + std::to_string(clip.start_timestamp) +
-                         ", end_ts=" + std::to_string(clip.end_timestamp) +
-                         ", has_time_window=" + (clip.has_time_window ? "true" : "false"));
-            }
+            // Note: record_list handling (moment_time, duration, time window calculation) 
+            // is now done earlier in the loop, before path assignment
             
             clips.push_back(clip);
         }
@@ -1563,24 +1594,24 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                          " frames) (engine=" + engine_group->engine_name + 
                          ", detector=" + std::to_string(detector_id) + ")");
                 // Clear the partial batch
-                batch_tensors.clear();
-                batch_output_paths.clear();
-                batch_frame_numbers.clear();
-                batch_original_widths.clear();
-                batch_original_heights.clear();
-                batch_true_original_widths.clear();
-                batch_true_original_heights.clear();
-                batch_roi_offset_x.clear();
-                batch_roi_offset_y.clear();
-                batch_message_keys.clear();
-                batch_video_indices.clear();
-                batch_serials.clear();
-                batch_record_ids.clear();
-                batch_record_dates.clear();
-                if (debug_mode_) {
-                    batch_frames.clear();
-                    batch_video_ids.clear();
-                }
+                    batch_tensors.clear();
+                    batch_output_paths.clear();
+                    batch_frame_numbers.clear();
+                    batch_original_widths.clear();
+                    batch_original_heights.clear();
+                    batch_true_original_widths.clear();
+                    batch_true_original_heights.clear();
+                    batch_roi_offset_x.clear();
+                    batch_roi_offset_y.clear();
+                    batch_message_keys.clear();
+                    batch_video_indices.clear();
+                    batch_serials.clear();
+                    batch_record_ids.clear();
+                    batch_record_dates.clear();
+                    if (debug_mode_) {
+                        batch_frames.clear();
+                        batch_video_ids.clear();
+                    }
                 batch_video_key.clear();
                 // CRITICAL: Don't continue here - restart batch collection by going back to the while loop
                 // The continue statement will go back to the outer while loop, which will restart batch collection
