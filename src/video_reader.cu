@@ -622,7 +622,7 @@ bool VideoReader::readFrame(cv::Mat& frame) {
                 if (current_ts > clip_.end_timestamp) {
                     std::string end_of_stream_str = end_of_stream_ ? "true" : "false";
                     long long total_read_val = total_frames_read_ - 1;
-                    std::string stop_msg = "*** STOPPING: Reached end of time window ***" +
+                    std::string stop_msg = std::string("*** STOPPING: Reached end of time window ***") +
                                          " total_read=" + std::to_string(total_read_val) + 
                                          ", actual_pos=" + std::to_string(actual_frame_position_) +
                                          ", current_ts=" + std::to_string(current_ts) +
@@ -675,7 +675,7 @@ bool VideoReader::readFrame(cv::Mat& frame) {
             }
             long long total_read_val = total_frames_read_;
             int actual_pos_val = actual_frame_position_;
-            std::string eof_stop_msg = "*** STOPPING: Reached end of video file (end_of_stream=true) ***" +
+            std::string eof_stop_msg = std::string("*** STOPPING: Reached end of video file (end_of_stream=true) ***") +
                                       " total_read=" + std::to_string(total_read_val) + 
                                       ", actual_pos=" + std::to_string(actual_pos_val) +
                                       ", frames_in_window=" + std::to_string(actual_pos_val);
@@ -756,7 +756,7 @@ bool VideoReader::sendNextPacket() {
             }
             long long total_read_val = total_frames_read_;
             int actual_pos_val = actual_frame_position_;
-            std::string eof_detect_msg = "*** EOF DETECTED: End of video file (AVERROR_EOF) in sendNextPacket ***" +
+            std::string eof_detect_msg = std::string("*** EOF DETECTED: End of video file (AVERROR_EOF) in sendNextPacket ***") +
                                         " total_read=" + std::to_string(total_read_val) +
                                         ", actual_pos=" + std::to_string(actual_pos_val);
             LOG_INFO("VideoReader", eof_detect_msg);
