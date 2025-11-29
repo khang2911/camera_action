@@ -1702,25 +1702,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     }
                 }
                 
-                // Log batch info for debugging (including video_key to track frame gaps)
-                if (actual_batch_count > 0) {
-                    std::string video_key_str = batch_video_key.empty() ? "unknown" : batch_video_key;
-                    std::string batch_info = "Processing batch: engine=" + engine_group->engine_name + 
-                                            ", detector=" + std::to_string(detector_id) +
-                                            ", batch_size=" + std::to_string(actual_batch_count) +
-                                            ", video_key=" + video_key_str +
-                                            ", frames=[" + std::to_string(batch_frame_numbers[0]);
-                    if (actual_batch_count > 1) {
-                        batch_info += ".." + std::to_string(batch_frame_numbers[actual_batch_count-1]);
-                    }
-                    batch_info += "]";
-                    if (debug_mode_) {
-                        LOG_DEBUG("Detector", batch_info);
-                    } else {
-                        // In non-debug mode, log at INFO level to track frame gaps
-                        LOG_INFO("Detector", batch_info);
-                    }
-                }
+                // Batch processing is normal operation - no need to log unless in debug mode
                 
                 auto batch_start = std::chrono::steady_clock::now();
                 bool success = false;
