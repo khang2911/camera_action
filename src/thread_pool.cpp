@@ -1496,7 +1496,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             
             // Handle partial batches:
             // - If stopping: clear to avoid memory leaks (frames will be lost)
-            // - If switching videos: clear partial batch (frames from previous video are lost)
+            // - If switching videos: PROCESS the partial batch (don't lose frames!)
             // - If timeout: process the partial batch (queue is empty)
             // - Otherwise: keep waiting for more frames (loop will continue)
             if (!should_process && !batch_tensors.empty()) {
@@ -1525,32 +1525,17 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     }
                     continue;  // Skip to next iteration
                 } else if (pending_frame.has_value()) {
-                    // Switching videos - clear partial batch from previous video
-                    LOG_DEBUG("Detector", "Skipping partial batch of " + std::to_string(batch_tensors.size()) + 
-                             " frames (switching videos) - " + 
-                             std::to_string(batch_tensors.size()) + " frames from previous video will be lost");
-                    batch_tensors.clear();
-                    batch_output_paths.clear();
-                    batch_frame_numbers.clear();
-                    batch_original_widths.clear();
-                    batch_original_heights.clear();
-                    batch_true_original_widths.clear();
-                    batch_true_original_heights.clear();
-                    batch_roi_offset_x.clear();
-                    batch_roi_offset_y.clear();
-                    batch_message_keys.clear();
-                    batch_video_indices.clear();
-                    batch_serials.clear();
-                    batch_record_ids.clear();
-                    batch_record_dates.clear();
-                    batch_video_key.clear();  // Reset video key for new video
-                    if (debug_mode_) {
-                        batch_frames.clear();
-                        batch_video_ids.clear();
-                    }
-                    continue;  // Start fresh batch for new video
+                    // CRITICAL FIX: When switching videos, PROCESS the partial batch instead of clearing it
+                    // This prevents frame loss when videos finish with partial batches
+                    // The partial batch contains frames from the previous video that should be processed
+                    LOG_INFO("Detector", "Switching videos - processing partial batch of " + 
+                             std::to_string(batch_tensors.size()) + " frames from previous video " +
+                             "(engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                    // Force processing of the partial batch by setting should_process = true
+                    should_process = true;
+                    // Note: We don't clear batch_video_key here - it will be reset when we process the new video's frames
                 }
-                // Otherwise, keep the partial batch and continue waiting for more frames
+                // If should_process is still false, keep the partial batch and continue waiting for more frames
                 // (The loop will continue on next iteration)
             }
             
@@ -1558,10 +1543,15 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 int actual_batch_count = static_cast<int>(batch_tensors.size());
                 
                 // Log if processing partial batch
-                if (!is_full_batch && is_partial_batch_timeout) {
-                    LOG_INFO("Detector", "Processing partial batch of " + std::to_string(actual_batch_count) + 
-                             " frames (expected " + std::to_string(batch_size) + ") after timeout " +
-                             "(engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                if (!is_full_batch) {
+                    if (is_partial_batch_timeout) {
+                        LOG_INFO("Detector", "Processing partial batch of " + std::to_string(actual_batch_count) + 
+                                 " frames (expected " + std::to_string(batch_size) + ") after timeout " +
+                                 "(engine=" + engine_group->engine_name + ", detector=" + std::to_string(detector_id) + ")");
+                    } else if (pending_frame.has_value()) {
+                        // Already logged above when setting should_process = true
+                        // This is just to ensure we don't log twice
+                    }
                 }
                 
                 // CRITICAL: Sort batch by frame number to ensure frames are processed in order

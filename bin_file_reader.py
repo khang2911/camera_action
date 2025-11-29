@@ -136,14 +136,16 @@ class BinFileReader:
                     # Read bbox (4 floats: x_center, y_center, width, height)
                     bbox_data = f.read(4 * 4)
                     if len(bbox_data) < 16:
-                        break
+                        raise ValueError(f"Incomplete bbox data at frame {frame_number}, detection {i}: expected 16 bytes, got {len(bbox_data)}")
                     bbox = struct.unpack('4f', bbox_data)
                     
                     # Read confidence and class_id
                     confidence_data = f.read(4)
                     class_id_data = f.read(4)
-                    if len(confidence_data) < 4 or len(class_id_data) < 4:
-                        break
+                    if len(confidence_data) < 4:
+                        raise ValueError(f"Incomplete confidence data at frame {frame_number}, detection {i}: expected 4 bytes, got {len(confidence_data)}")
+                    if len(class_id_data) < 4:
+                        raise ValueError(f"Incomplete class_id data at frame {frame_number}, detection {i}: expected 4 bytes, got {len(class_id_data)}")
                     
                     confidence = struct.unpack('f', confidence_data)[0]
                     class_id = struct.unpack('i', class_id_data)[0]
@@ -151,7 +153,7 @@ class BinFileReader:
                     # Read number of keypoints
                     num_keypoints_data = f.read(4)
                     if len(num_keypoints_data) < 4:
-                        break
+                        raise ValueError(f"Incomplete num_keypoints data at frame {frame_number}, detection {i}: expected 4 bytes, got {len(num_keypoints_data)}")
                     num_keypoints = struct.unpack('i', num_keypoints_data)[0]
                     
                     # Read keypoints
@@ -160,7 +162,7 @@ class BinFileReader:
                     for k in range(num_keypoints):
                         kpt_data = f.read(3 * 4)
                         if len(kpt_data) < 12:
-                            break
+                            raise ValueError(f"Incomplete keypoint data at frame {frame_number}, detection {i}, keypoint {k}: expected 12 bytes, got {len(kpt_data)}")
                         x, y, conf = struct.unpack('3f', kpt_data)
                         keypoint_xy.append([x, y])
                         keypoint_conf.append(conf)
