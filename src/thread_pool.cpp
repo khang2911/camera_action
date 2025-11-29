@@ -1061,14 +1061,14 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
                     if (!raw_frame_queue_->push(frame_data, 5)) {
                         if (!raw_frame_queue_->push(frame_data, 10)) {
                             // Queue still full after timeouts - this indicates a serious bottleneck
-                            // Log warning but still push (blocking) to ensure frame is not lost
-                            static thread_local int slow_push_count = 0;
-                            if (++slow_push_count % 100 == 0) {
-                                LOG_WARNING("Reader", "Reader " + std::to_string(reader_id) + 
-                                           " queue push slow (" + std::to_string(slow_push_count) + 
-                                           " times) - preprocessors may be bottleneck");
-                            }
-                            raw_frame_queue_->push(frame_data);  // Blocking push as last resort
+                    // Log warning but still push (blocking) to ensure frame is not lost
+                    static thread_local int slow_push_count = 0;
+                    if (++slow_push_count % 100 == 0) {
+                        LOG_WARNING("Reader", "Reader " + std::to_string(reader_id) + 
+                                   " queue push slow (" + std::to_string(slow_push_count) + 
+                                   " times) - preprocessors may be bottleneck");
+                    }
+                    raw_frame_queue_->push(frame_data);  // Blocking push as last resort
                         }
                     }
                 }
@@ -1162,15 +1162,15 @@ void ThreadPool::preprocessorWorker(int worker_id) {
                 if (!shared_group->queue->push(frame_copy, 5)) {
                     if (!shared_group->queue->push(frame_copy, 10)) {
                         // Queue still full after timeouts - log warning but continue
-                        // This indicates a serious bottleneck, but we don't want to lose frames
-                        static thread_local int slow_push_count = 0;
-                        if (++slow_push_count % 100 == 0) {
-                            LOG_WARNING("Preprocessor", "Dispatcher " + std::to_string(worker_id) + 
-                                       " queue push slow for group " + std::to_string(g) + 
-                                       " (" + std::to_string(slow_push_count) + " times)");
-                        }
-                        // Final blocking push to ensure frame is not lost
-                        shared_group->queue->push(frame_copy);
+                // This indicates a serious bottleneck, but we don't want to lose frames
+                static thread_local int slow_push_count = 0;
+                if (++slow_push_count % 100 == 0) {
+                    LOG_WARNING("Preprocessor", "Dispatcher " + std::to_string(worker_id) + 
+                               " queue push slow for group " + std::to_string(g) + 
+                               " (" + std::to_string(slow_push_count) + " times)");
+                }
+                // Final blocking push to ensure frame is not lost
+                shared_group->queue->push(frame_copy);
                     }
                 }
             }
@@ -1284,7 +1284,7 @@ void ThreadPool::enginePreprocessWorker(int worker_id) {
             // OPTIMIZATION: Only clone frame if debug mode is enabled (frame only used for debug images)
             // In normal operation, engines only need the preprocessed tensor
             if (debug_mode_ && !frame_to_process.empty()) {
-                processed.frame = frame_to_process.clone();
+            processed.frame = frame_to_process.clone();
             } else {
                 // Clear frame to save memory - engines don't need it
                 processed.frame = cv::Mat();
@@ -1387,10 +1387,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             // This works because with TensorRT fixed batch_size, partial batches waste GPU time
             auto last_wait_log = std::chrono::steady_clock::now();
             
-            // Track consecutive frames from different videos to detect when current video has finished
-            // If we keep getting frames from different videos, current video is likely done
-            int consecutive_different_video_frames = 0;
-            const int MAX_DIFFERENT_VIDEO_FRAMES = 10;  // If we get 10 frames from different videos, current video is done
+            // CRITICAL: Match prod branch - no need to track video finishing
+            // We only process full batches, so we just skip different video frames and continue
             
             // Collect batch_size frames (match prod branch exactly)
             while (static_cast<int>(batch_tensors.size()) < batch_size && !stop_flag_) {
@@ -1401,31 +1399,12 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     
                     const std::string& pending_video_key = frame_data.video_key;
                     
-                    // If we already have a batch from a different video, check if current video is done
+                    // If we already have a batch from a different video, save pending frame and continue
+                    // CRITICAL: Match prod branch - just skip different video frames, continue collecting current batch
                     if (!batch_video_key.empty() && pending_video_key != batch_video_key && batch_tensors.size() > 0) {
-                        consecutive_different_video_frames++;
-                        
-                        // If we've gotten too many frames from different videos, current video is likely finished
-                        // Process the partial batch (will be padded with zeros by TensorRT) instead of losing frames
-                        if (consecutive_different_video_frames >= MAX_DIFFERENT_VIDEO_FRAMES) {
-                            LOG_DEBUG("Detector", "Current video appears finished (got " + 
-                                     std::to_string(consecutive_different_video_frames) + 
-                                     " consecutive frames from different videos). " +
-                                     "Processing partial batch of " + std::to_string(batch_tensors.size()) + 
-                                     " frames (will be padded with zeros) (engine=" + engine_group->engine_name + 
-                                     ", detector=" + std::to_string(detector_id) + ")");
-                            // Save the pending frame for next batch
-                            pending_frame = frame_data;
-                            // Break to process the partial batch (will be padded to batch_size by TensorRT)
-                            break;
-                        } else {
-                            // Save pending frame and continue collecting from current video
-                            pending_frame = frame_data;
-                            continue;  // Skip pending frame, continue collecting from current video
-                        }
-                    } else {
-                        // Reset counter when we get a frame from current video
-                        consecutive_different_video_frames = 0;
+                        // Save pending frame and continue collecting from current video
+                        pending_frame = frame_data;
+                        continue;  // Skip pending frame, continue collecting from current video
                     }
                     
                     // Use the pending frame (either starting new batch or continuing current batch)
@@ -1442,7 +1421,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         if (stop_flag_) break;
                         
                         // Log waiting status periodically (every 5 seconds) - match prod branch
-                        auto now = std::chrono::steady_clock::now();
+                            auto now = std::chrono::steady_clock::now();
                         auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_wait_log).count();
                         if (elapsed >= 5) {
                             LOG_INFO("Detector", "[WAITING] Detector " + std::to_string(detector_id) + 
@@ -1461,35 +1440,14 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 // If this is the first frame, set the batch video_key
                 if (batch_video_key.empty()) {
                     batch_video_key = current_video_key;
-                    consecutive_different_video_frames = 0;  // Reset counter
                 }
                 // If this frame is from a different video, save it for next batch
-                // CRITICAL: Don't break here - continue collecting from current video until we have full batch
-                // But track consecutive different video frames to detect when current video is done
+                // CRITICAL: Match prod branch - just skip different video frames, continue collecting current batch
+                // We only process full batches, so we don't need to detect when videos finish
                 else if (current_video_key != batch_video_key) {
-                    consecutive_different_video_frames++;
-                    
-                    // If we've gotten too many frames from different videos, current video is likely finished
-                    // Process the partial batch (will be padded with zeros by TensorRT) instead of losing frames
-                    if (consecutive_different_video_frames >= MAX_DIFFERENT_VIDEO_FRAMES) {
-                        LOG_DEBUG("Detector", "Current video appears finished (got " + 
-                                 std::to_string(consecutive_different_video_frames) + 
-                                 " consecutive frames from different videos). " +
-                                 "Processing partial batch of " + std::to_string(batch_tensors.size()) + 
-                                 " frames (will be padded with zeros) (engine=" + engine_group->engine_name + 
-                                 ", detector=" + std::to_string(detector_id) + ")");
-                        // Save the new video frame for next batch
-                        pending_frame = frame_data;
-                        // Break to process the partial batch (will be padded to batch_size by TensorRT)
-                        break;
-                    } else {
-                        // Save this frame for next batch and continue collecting current batch
-                        pending_frame = frame_data;
-                        continue;  // Skip this frame, continue collecting from current video
-                    }
-                } else {
-                    // Reset counter when we get a frame from current video
-                    consecutive_different_video_frames = 0;
+                    // Save this frame for next batch and continue collecting from current video
+                    pending_frame = frame_data;
+                    continue;  // Skip this frame, continue collecting from current video
                 }
                 
                 // OPTIMIZATION: Cache output paths to avoid expensive string operations
@@ -1503,11 +1461,11 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         output_path = it->second;
                     } else {
                         // Cache miss - generate path and cache it
-                        std::string serial_value = serialPart(frame_data.serial, frame_data.message_key, frame_data.video_id);
-                        std::string record_value = recordPart(frame_data.record_id, frame_data.message_key, frame_data.video_id);
+                std::string serial_value = serialPart(frame_data.serial, frame_data.message_key, frame_data.video_id);
+                std::string record_value = recordPart(frame_data.record_id, frame_data.message_key, frame_data.video_id);
                         output_path = generateOutputPath(
-                            serial_value, record_value, frame_data.record_date, engine_group->engine_name,
-                            frame_data.video_index);
+                    serial_value, record_value, frame_data.record_date, engine_group->engine_name,
+                    frame_data.video_index);
                         output_path_cache_[cache_key] = output_path;
                     }
                 }
@@ -1591,33 +1549,64 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 batch_record_dates.push_back(frame_data.record_date);
             }
             
-            // CRITICAL: Process batches - full batches OR partial batches when video finishes
-            // Prod branch: Only processes full batches (batch_tensors.size() == batch_size)
-            // But we also need to process partial batches when video finishes to avoid losing frames
-            // TensorRT will pad partial batches with zeros automatically in getRawInferenceOutput
+            // CRITICAL: Match prod branch EXACTLY - ONLY process full batches!
+            // Prod branch strategy: NEVER process partial batches, even when videos finish
+            // This is the key to achieving 200 FPS - partial batches waste GPU time
+            // If a video finishes with a partial batch, we drop those frames and continue
+            // The alternative (processing partial batches) causes 3-5 FPS instead of 200 FPS
             bool should_process = false;
             if (static_cast<int>(batch_tensors.size()) == batch_size) {
                 // Full batch - always process (matches prod branch)
                 should_process = true;
             } else if (!batch_tensors.empty() && static_cast<int>(batch_tensors.size()) < batch_size) {
-                // Partial batch - only process if we detected video finished (consecutive different video frames)
-                // This ensures we don't lose frames when a video finishes
-                // TensorRT will pad with zeros, so we get results for the real frames
-                if (pending_frame.has_value()) {
-                    const std::string& pending_video_key = pending_frame.value().video_key;
-                    if (!batch_video_key.empty() && pending_video_key != batch_video_key) {
-                        // We broke the loop because current video finished - process partial batch
-                        should_process = true;
-                        LOG_DEBUG("Detector", "Processing partial batch of " + std::to_string(batch_tensors.size()) + 
-                                 " frames from finished video (will be padded to " + std::to_string(batch_size) + 
-                                 " with zeros) (engine=" + engine_group->engine_name + 
-                                 ", detector=" + std::to_string(detector_id) + ")");
+                // Partial batch - DROP IT (match prod branch exactly)
+                // Processing partial batches causes low FPS (3-5 FPS instead of 200 FPS)
+                // Dropping partial batches ensures we only process full batches = maximum GPU efficiency
+                LOG_DEBUG("Detector", "Dropping partial batch of " + std::to_string(batch_tensors.size()) + 
+                         " frames (only processing full batches of " + std::to_string(batch_size) + 
+                         " frames) (engine=" + engine_group->engine_name + 
+                         ", detector=" + std::to_string(detector_id) + ")");
+                // Clear the partial batch and continue to collect a full batch
+                    batch_tensors.clear();
+                    batch_output_paths.clear();
+                    batch_frame_numbers.clear();
+                    batch_original_widths.clear();
+                    batch_original_heights.clear();
+                    batch_true_original_widths.clear();
+                    batch_true_original_heights.clear();
+                    batch_roi_offset_x.clear();
+                    batch_roi_offset_y.clear();
+                    batch_message_keys.clear();
+                    batch_video_indices.clear();
+                    batch_serials.clear();
+                    batch_record_ids.clear();
+                    batch_record_dates.clear();
+                    if (debug_mode_) {
+                        batch_frames.clear();
+                        batch_video_ids.clear();
                     }
-                }
+                batch_video_key.clear();
+                // Continue to collect a full batch
+                continue;
             }
             
             if (should_process && !batch_tensors.empty()) {
                 int actual_batch_count = static_cast<int>(batch_tensors.size());
+                
+                // CRITICAL: Log batch size to diagnose performance issues
+                // If we're processing mostly 1-frame batches, that explains the low FPS
+                static thread_local int batch_count = 0;
+                static thread_local int total_batch_frames = 0;
+                batch_count++;
+                total_batch_frames += actual_batch_count;
+                if (batch_count % 10 == 0) {
+                    double avg_batch_size = static_cast<double>(total_batch_frames) / batch_count;
+                    LOG_INFO("Detector", "Batch size stats (engine=" + engine_group->engine_name + 
+                             ", detector=" + std::to_string(detector_id) + "): " +
+                             "avg_batch_size=" + std::to_string(avg_batch_size) + 
+                             ", current=" + std::to_string(actual_batch_count) + 
+                             ", target=" + std::to_string(batch_size));
+                }
                 
                 // CRITICAL: Sort batch by frame number to ensure frames are processed in order
                 // This fixes the issue where multiple detectors pull frames from the same queue
@@ -1952,13 +1941,13 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     output_path = it->second;
                 } else {
                     // Cache miss - generate path and cache it
-                    std::string serial_value = serialPart(frame_data.serial, frame_data.message_key, frame_data.video_id);
-                    std::string record_value = recordPart(frame_data.record_id, frame_data.message_key, frame_data.video_id);
+            std::string serial_value = serialPart(frame_data.serial, frame_data.message_key, frame_data.video_id);
+            std::string record_value = recordPart(frame_data.record_id, frame_data.message_key, frame_data.video_id);
                     output_path = generateOutputPath(
-                        serial_value,
-                        record_value,
-                        frame_data.record_date,
-                        engine_group->engine_name,
+                serial_value,
+                record_value,
+                frame_data.record_date,
+                engine_group->engine_name,
                         frame_data.video_index);
                     output_path_cache_[cache_key] = output_path;
                 }
@@ -2414,10 +2403,10 @@ void ThreadPool::monitorWorker() {
             stats_oss << " | FPS=" << window_engine_fps[i];
             if (engine_frame_count[i] > 0) {
                 double avg_time_ms = static_cast<double>(engine_total_time_ms[i]) / engine_frame_count[i];
-                stats_oss << " | AvgTime=" << std::fixed << std::setprecision(2) << avg_time_ms << "ms/frame";
+                    stats_oss << " | AvgTime=" << std::fixed << std::setprecision(2) << avg_time_ms << "ms/frame";
                 stats_oss << " | TotalTime=" << (engine_total_time_ms[i] / 1000.0) << "s";
-            }
-            stats_oss << std::endl;
+                }
+                stats_oss << std::endl;
         }
         
         // Reader statistics
