@@ -1359,12 +1359,13 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
             
             // Track when last frame was added to detect if queue is empty
             auto last_frame_time = std::chrono::steady_clock::now();
-            // OPTIMIZATION: Adaptive timeout based on batch size
-            // - Wait longer for full batches (more efficient for GPU)
-            // - Process partial batches faster if we have enough frames
-            // - For small partial batches, wait longer to avoid inefficient GPU usage
-            const auto base_timeout_ms = 200;  // Base timeout for partial batches
-            const auto min_frames_for_early_process = batch_size / 2;  // Process early if we have at least half batch
+            // OPTIMIZATION: More aggressive timeout to process batches faster
+            // - Process immediately when we have full batch
+            // - For large partial batches (>= 75% full), use short timeout (50ms)
+            // - For medium batches (>= 50% full), use medium timeout (100ms)  
+            // - For small batches (< 50% full), use longer timeout (200ms) but not too long
+            const auto min_frames_for_fast_process = (batch_size * 3) / 4;  // 75% of batch
+            const auto min_frames_for_medium_process = batch_size / 2;  // 50% of batch
             
             // Collect batch_size frames from the SAME video
             // CRITICAL: We need to ensure we don't lose frames when switching between videos
@@ -1376,16 +1377,17 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     auto now = std::chrono::steady_clock::now();
                     auto time_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time);
                     
-                    // Adaptive timeout: wait longer for small batches, process faster if we have enough frames
+                    // Adaptive timeout: more aggressive to process batches faster
                     int current_batch_size = static_cast<int>(batch_tensors.size());
-                    int timeout_ms = base_timeout_ms;
-                    if (current_batch_size >= min_frames_for_early_process) {
-                        // We have at least half batch - use shorter timeout (100ms)
+                    int timeout_ms = 200;  // Default for small batches
+                    if (current_batch_size >= min_frames_for_fast_process) {
+                        // We have at least 75% batch - process very quickly (50ms)
+                        timeout_ms = 50;
+                    } else if (current_batch_size >= min_frames_for_medium_process) {
+                        // We have at least 50% batch - use medium timeout (100ms)
                         timeout_ms = 100;
-                    } else {
-                        // Small batch - wait longer (300ms) to avoid inefficient GPU usage
-                        timeout_ms = 300;
                     }
+                    // else: small batch uses 200ms timeout (not 300ms to avoid waiting too long)
                     
                     if (time_since_last_frame.count() >= timeout_ms) {
                         // Queue has been empty for too long - process partial batch
@@ -1418,9 +1420,10 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         batch_video_key = pending_video_key;
                     }
                 } else {
-                    // OPTIMIZATION: Reduced queue pop timeout from 100ms to 10ms for faster response
-                    // This prevents engines from blocking too long when queues are empty
-                    if (!engine_group->frame_queue->pop(frame_data, 10)) {
+                    // OPTIMIZATION: Use longer timeout (50ms) to reduce failed pops and timeout checks
+                    // With queues almost full, pops should succeed quickly, but we need enough timeout
+                    // to avoid excessive failed pops when queues are temporarily empty
+                    if (!engine_group->frame_queue->pop(frame_data, 50)) {
                         if (stop_flag_) break;
                         
                         // Check if we should process partial batch (queue empty)
@@ -1428,16 +1431,17 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                             auto now = std::chrono::steady_clock::now();
                             auto time_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time);
                             
-                            // Adaptive timeout: wait longer for small batches, process faster if we have enough frames
+                            // Adaptive timeout: more aggressive to process batches faster
                             int current_batch_size = static_cast<int>(batch_tensors.size());
-                            int timeout_ms = base_timeout_ms;
-                            if (current_batch_size >= min_frames_for_early_process) {
-                                // We have at least half batch - use shorter timeout (100ms)
+                            int timeout_ms = 200;  // Default for small batches
+                            if (current_batch_size >= min_frames_for_fast_process) {
+                                // We have at least 75% batch - process very quickly (50ms)
+                                timeout_ms = 50;
+                            } else if (current_batch_size >= min_frames_for_medium_process) {
+                                // We have at least 50% batch - use medium timeout (100ms)
                                 timeout_ms = 100;
-                            } else {
-                                // Small batch - wait longer (300ms) to avoid inefficient GPU usage
-                                timeout_ms = 300;
                             }
+                            // else: small batch uses 200ms timeout
                             
                             if (time_since_last_frame.count() >= timeout_ms) {
                                 // Queue has been empty for too long - process partial batch
@@ -1464,6 +1468,7 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 }
                 
                 // Build video_key: message_key + video_index uniquely identifies a video
+                // OPTIMIZATION: Use string_view or avoid string concatenation if possible
                 std::string current_video_key = frame_data.message_key + "_v" + std::to_string(frame_data.video_index);
                 
                 // If this is the first frame, set the batch video_key
@@ -1483,7 +1488,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     // Continue to process this frame (it's already in frame_data)
                 }
                 
-                // Generate output path with engine name
+                // OPTIMIZATION: Generate output path - this is expensive, but needed for each frame
+                // Consider caching or optimizing generateOutputPath if it's a bottleneck
                 std::string serial_value = serialPart(frame_data.serial, frame_data.message_key, frame_data.video_id);
                 std::string record_value = recordPart(frame_data.record_id, frame_data.message_key, frame_data.video_id);
                 std::string output_path = generateOutputPath(
@@ -1533,33 +1539,10 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                                  ", detector=" + std::to_string(detector_id) + ")");
                     }
                     
-                    // Validate this frame is different from the previous frame in the batch
-                    if (!batch_frames.empty() && !frame_copy.empty()) {
-                        cv::Mat prev_frame = batch_frames.back();
-                        if (!prev_frame.empty() && 
-                            prev_frame.size() == frame_copy.size() && 
-                            prev_frame.type() == frame_copy.type()) {
-                            cv::Mat diff;
-                            cv::absdiff(prev_frame, frame_copy, diff);
-                            cv::Mat diff_gray;
-                            if (diff.channels() > 1) {
-                                cv::cvtColor(diff, diff_gray, cv::COLOR_BGR2GRAY);
-                            } else {
-                                diff_gray = diff;
-                            }
-                            int non_zero = cv::countNonZero(diff_gray);
-                            if (non_zero == 0 && frame_data.frame_number != batch_frame_numbers.back()) {
-                                std::string error_msg = std::string("CRITICAL: Duplicate frame detected when adding to batch! ") +
-                                                       "frame_number=" + std::to_string(frame_data.frame_number) +
-                                                       ", previous_frame_number=" + std::to_string(batch_frame_numbers.back()) +
-                                                       " (engine=" + engine_group->engine_name + 
-                                                       ", detector=" + std::to_string(detector_id) + ")";
-                                LOG_ERROR("Detector", error_msg);
-                                // Still add the frame (even if duplicate) to maintain batch alignment
-                                // The issue will be caught later during debug image saving
-                            }
-                        }
-                    }
+                    // OPTIMIZATION: Removed expensive duplicate frame validation during batch collection
+                    // This was doing absdiff + cvtColor + countNonZero for every frame, which is very slow
+                    // Duplicate frame detection can be done later if needed, or removed entirely
+                    // The frame_number check is sufficient for most cases
                     
                     batch_frames.push_back(frame_copy);
                     batch_video_ids.push_back(frame_data.video_id);
@@ -1595,11 +1578,11 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 
                 // Adaptive timeout check (same logic as in collection loop)
                 int current_batch_size = static_cast<int>(batch_tensors.size());
-                int timeout_ms = base_timeout_ms;
-                if (current_batch_size >= min_frames_for_early_process) {
+                int timeout_ms = 200;  // Default for small batches
+                if (current_batch_size >= min_frames_for_fast_process) {
+                    timeout_ms = 50;
+                } else if (current_batch_size >= min_frames_for_medium_process) {
                     timeout_ms = 100;
-                } else {
-                    timeout_ms = 300;
                 }
                 is_partial_batch_timeout = (time_since_last_frame.count() >= timeout_ms);
             }
@@ -1653,7 +1636,19 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                 // CRITICAL: Sort batch by frame number to ensure frames are processed in order
                 // This fixes the issue where multiple detectors pull frames from the same queue
                 // and frames arrive out of order due to parallel processing
+                // OPTIMIZATION: Quick check first - if frames are already in order, skip expensive sorting
+                bool needs_sorting = false;
                 if (actual_batch_count > 1) {
+                    // Quick check: are frames already in order?
+                    for (int i = 1; i < actual_batch_count; ++i) {
+                        if (batch_frame_numbers[i] < batch_frame_numbers[i-1]) {
+                            needs_sorting = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (needs_sorting && actual_batch_count > 1) {
                     // Create index vector and sort by frame number
                     std::vector<size_t> indices(actual_batch_count);
                     std::iota(indices.begin(), indices.end(), 0);
@@ -1661,15 +1656,6 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         [&batch_frame_numbers](size_t a, size_t b) {
                             return batch_frame_numbers[a] < batch_frame_numbers[b];
                         });
-                    
-                    // Check if sorting was needed
-                    bool needs_sorting = false;
-                    for (size_t i = 0; i < indices.size(); ++i) {
-                        if (indices[i] != i) {
-                            needs_sorting = true;
-                            break;
-                        }
-                    }
                     
                     // Reorder all batch vectors according to sorted indices
                     if (needs_sorting) {
