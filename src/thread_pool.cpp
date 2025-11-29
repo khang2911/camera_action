@@ -1054,9 +1054,12 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
             // Try non-blocking first (10ms), then medium (50ms), then longer (200ms)
             // This prevents readers from blocking too quickly while still ensuring frames are processed
             if (raw_frame_queue_) {
-                if (!raw_frame_queue_->push(frame_data, 10)) {
-                    if (!raw_frame_queue_->push(frame_data, 50)) {
-                        if (!raw_frame_queue_->push(frame_data, 200)) {
+                // CRITICAL: Use minimal timeouts to reduce blocking (target: 5ms/frame)
+                int queue_size = raw_frame_queue_->size();
+                int push_timeout1 = (queue_size < raw_frame_queue_->max_size() * 0.9) ? 1 : 5;
+                if (!raw_frame_queue_->push(frame_data, push_timeout1)) {
+                    if (!raw_frame_queue_->push(frame_data, 5)) {
+                        if (!raw_frame_queue_->push(frame_data, 10)) {
                             // Queue still full after timeouts - this indicates a serious bottleneck
                             // Log warning but still push (blocking) to ensure frame is not lost
                             static thread_local int slow_push_count = 0;
@@ -1120,8 +1123,11 @@ void ThreadPool::preprocessorWorker(int worker_id) {
     
     while (!stop_flag_) {
         // Pop a new frame from raw queue
+        // CRITICAL: Use 1ms timeout when queue has frames to minimize latency
+        // Target is 5ms/frame, so we can't afford 50ms waits
         FrameData raw_frame;
-        if (!raw_frame_queue_ || !raw_frame_queue_->pop(raw_frame, 50)) {
+        int raw_pop_timeout = (raw_frame_queue_ && raw_frame_queue_->size() > 0) ? 1 : 5;
+        if (!raw_frame_queue_ || !raw_frame_queue_->pop(raw_frame, raw_pop_timeout)) {
             if (stop_flag_) break;
             continue;
         }
@@ -1148,11 +1154,13 @@ void ThreadPool::preprocessorWorker(int worker_id) {
             }
             auto* shared_group = shared_group_ptr.get();
             
-            // OPTIMIZATION: Use shorter timeouts to reduce blocking
-            // Try non-blocking first (10ms), then medium (50ms), then longer (200ms)
-            if (!shared_group->queue->push(frame_copy, 10)) {
-                if (!shared_group->queue->push(frame_copy, 50)) {
-                    if (!shared_group->queue->push(frame_copy, 200)) {
+            // CRITICAL: Use minimal timeouts to reduce blocking (target: 5ms/frame)
+            // Try 1ms first (queue likely has space), then 5ms, then 10ms
+            int queue_size = shared_group->queue ? shared_group->queue->size() : 0;
+            int push_timeout1 = (queue_size < shared_group->queue->max_size() * 0.9) ? 1 : 5;
+            if (!shared_group->queue->push(frame_copy, push_timeout1)) {
+                if (!shared_group->queue->push(frame_copy, 5)) {
+                    if (!shared_group->queue->push(frame_copy, 10)) {
                         // Queue still full after timeouts - log warning but continue
                         // This indicates a serious bottleneck, but we don't want to lose frames
                         static thread_local int slow_push_count = 0;
@@ -1192,7 +1200,10 @@ void ThreadPool::enginePreprocessWorker(int worker_id) {
             if (!candidate || !candidate->queue) {
                 continue;
             }
-            int timeout = (attempt == 0) ? 100 : 5;
+            // CRITICAL: Use 1ms timeout when queue has frames to minimize latency
+            // Target is 5ms/frame, so we can't afford 100ms waits
+            int queue_size = candidate->queue ? candidate->queue->size() : 0;
+            int timeout = (queue_size > 0) ? 1 : ((attempt == 0) ? 5 : 1);
             if (candidate->queue->pop(frame_data, timeout)) {
                 target_group = candidate;
                 start_index = (idx + 1) % group_count;
@@ -1285,11 +1296,13 @@ void ThreadPool::enginePreprocessWorker(int worker_id) {
             processed.roi_offset_x = roi_offset_x;
             processed.roi_offset_y = roi_offset_y;
             
-            // OPTIMIZATION: Use non-blocking push first, only block if queue is full
+            // CRITICAL: Use minimal timeouts to reduce blocking (target: 5ms/frame)
             // Note: Queue push blocking time is NOT included in timing measurement
-            if (!engine_group->frame_queue->push(processed, 10)) {
+            int queue_size = engine_group->frame_queue->size();
+            int push_timeout1 = (queue_size < engine_group->frame_queue->max_size() * 0.9) ? 1 : 5;
+            if (!engine_group->frame_queue->push(processed, push_timeout1)) {
                 // Queue might be full, try with longer timeout
-                if (!engine_group->frame_queue->push(processed, 50)) {
+                if (!engine_group->frame_queue->push(processed, 5)) {
                     // Last resort: blocking push (should be rare)
                     engine_group->frame_queue->push(processed);
                 }
@@ -1420,8 +1433,12 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         batch_video_key = pending_video_key;
                     }
                 } else {
-                    // Match prod branch: simple pop with 100ms timeout
-                    if (!engine_group->frame_queue->pop(frame_data, 100)) {
+                    // CRITICAL: Use 1ms timeout when queue has frames to minimize latency
+                    // Target is 5ms/frame, so we can't afford 100ms waits
+                    // With queues 422-500/500 full, we should collect frames immediately
+                    int queue_size = engine_group->frame_queue->size();
+                    int pop_timeout = (queue_size > 0) ? 1 : 5;
+                    if (!engine_group->frame_queue->pop(frame_data, pop_timeout)) {
                         if (stop_flag_) break;
                         
                         // Log waiting status periodically (every 5 seconds) - match prod branch
@@ -1435,14 +1452,6 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                         }
                         continue;  // Just continue waiting - prod branch doesn't process partial batches!
                     }
-                }
-                
-                // OPTIMIZATION: Don't clone frame here - it will be cloned later when adding to batch_frames if needed
-                // frame_data is already a copy from the queue, so the frame is independent
-                // We only need to clone once at the final stage (when storing in batch_frames) to avoid multiple clones
-                // Clear frame here to save memory - it will be cloned later if debug mode is enabled
-                if (!debug_mode_) {
-                    frame_data.frame = cv::Mat();
                 }
                 
                 // OPTIMIZATION: Use pre-computed video_key from frame_data instead of recomputing
@@ -1503,6 +1512,8 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     }
                 }
                 
+                // CRITICAL: Get preprocessed tensor BEFORE clearing frame
+                // If preprocessed_data doesn't exist, we need frame_data.frame for preprocessing
                 std::shared_ptr<std::vector<float>> tensor = frame_data.preprocessed_data;
                 if (!tensor) {
                     auto shared_group = engine_group->shared_preprocess;
@@ -1511,6 +1522,12 @@ void ThreadPool::detectorWorker(int engine_id, int detector_id) {
                     auto* preproc = shared_group ? shared_group->preprocessor.get()
                                                  : engine_group->preprocessor.get();
                     preproc->preprocessToFloat(frame_data.frame, *tensor);
+                }
+                
+                // OPTIMIZATION: Clear frame AFTER we've ensured we have the preprocessed tensor
+                // This saves memory while ensuring we don't lose the frame before preprocessing
+                if (!debug_mode_) {
+                    frame_data.frame = cv::Mat();
                 }
                 
                 // OPTIMIZATION: Use shared_ptr directly - the reference counting ensures the buffer

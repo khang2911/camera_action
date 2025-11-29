@@ -76,6 +76,7 @@ public:
     bool pop(FrameData& frame, int timeout_ms = -1);
     bool empty() const;
     size_t size() const;
+    size_t max_size() const { return max_size_; }
     void clear();
     
 private:
