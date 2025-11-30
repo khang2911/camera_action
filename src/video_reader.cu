@@ -550,31 +550,30 @@ bool VideoReader::readFrame(cv::Mat& frame) {
         if (has_clip_metadata_ && clip_.has_time_window) {
             double effective_fps = (fps_ > 0.0) ? fps_ : 30.0;
             
-            // CRITICAL: Match cv2's timestamp calculation
+            // CRITICAL: Match cv2's timestamp calculation exactly
             // cv2 calculates: frame_ts = moment_time + (frame_number / fps)
-            // where frame_number is the absolute frame number from video start (0-indexed)
-            // After seeking, we need to calculate the absolute frame number
+            // where frame_number is 0-indexed from video start
+            // 
+            // After seeking, we need to track the actual frame position.
+            // The problem: PTS might not be accurate or might drift.
+            // Solution: Use frame counting like cv2 does, but account for seek position.
+            //
+            // Strategy: After seeking, the first frame we read corresponds to first_frame_after_seek_
+            // Then each subsequent frame increments the frame number.
+            // This matches cv2's behavior where we read sequentially.
             long long absolute_frame_number;
             if (seek_performed_) {
-                // After seeking, use PTS to determine actual frame position (most accurate)
-                // PTS is relative to video start (time 0), so we can calculate absolute frame number
-                if (frame_pts_seconds >= 0.0 && video_stream_) {
-                    // PTS is in seconds from video start, so absolute frame = PTS * fps
-                    // This matches cv2's calculation where frame_number = (frame_ts - moment_time) * fps
-                    // But here PTS is already relative to video start, so we use it directly
-                    absolute_frame_number = static_cast<long long>(std::max(0.0, std::floor(frame_pts_seconds * effective_fps)));
-                } else {
-                    // Fallback: estimate from seek position + frames read after seek
-                    // This is less accurate but better than nothing
-                    absolute_frame_number = first_frame_after_seek_ + (total_frames_read_ - 1);
-                }
+                // After seeking: absolute_frame = first_frame_after_seek + frames_read_after_seek
+                // This matches cv2's behavior: if we seek to frame N, then read sequentially,
+                // frame 0 after seek = frame N in video, frame 1 after seek = frame N+1, etc.
+                absolute_frame_number = first_frame_after_seek_ + (total_frames_read_ - 1);
             } else {
                 // No seeking: frame_number = total_frames_read_ - 1 (0-indexed, matching cv2)
                 // cv2: frame_number starts at 0, so first frame is frame 0
                 absolute_frame_number = total_frames_read_ - 1;
             }
             
-            // Calculate timestamp matching cv2: moment_time + (frame_number / fps)
+            // Calculate timestamp matching cv2 exactly: moment_time + (frame_number / fps)
             // This ensures we match cv2's sequential reading behavior
             double current_ts = clip_.moment_time + static_cast<double>(absolute_frame_number) / effective_fps;
                 
