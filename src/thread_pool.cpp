@@ -1152,7 +1152,22 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
     if (debug_mode_limit_reached_) {
         status = "debug_limit (max_frames_per_video reached)";
     } else if (stop_reason == VideoStopReason::END_OF_TIME_WINDOW) {
-        status = "normal (reached end of time window)";
+        // Check if we read significantly fewer frames than expected
+        if (has_clip_metadata_ && clip.has_time_window) {
+            double time_window_duration = clip.end_timestamp - clip.start_timestamp;
+            double expected_frames = time_window_duration * reader.getFps();
+            double frames_diff_percent = (expected_frames > 0.0) 
+                                        ? ((expected_frames - static_cast<double>(frame_count)) / expected_frames) * 100.0 
+                                        : 0.0;
+            if (frames_diff_percent > 15.0) {  // More than 15% fewer frames than expected
+                status = "normal_early (reached end_ts but " + std::to_string(static_cast<int>(frames_diff_percent)) + 
+                         "% fewer frames than expected, likely lower actual FPS)";
+            } else {
+                status = "normal (reached end of time window)";
+            }
+        } else {
+            status = "normal (reached end of time window)";
+        }
     } else if (stop_reason == VideoStopReason::END_OF_VIDEO_FILE) {
         status = "early (video file ended)";
     } else {

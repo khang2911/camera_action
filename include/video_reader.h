@@ -41,6 +41,7 @@ public:
     int getFrameNumber() const { return frame_number_; }
     int getActualFramePosition() const;  // Get actual frame position in video file
     VideoStopReason getStopReason() const { return stop_reason_; }
+    double getFps() const { return fps_; }
     int getVideoId() const { return video_id_; }
     std::string getVideoPath() const { return video_path_; }
     int getOriginalWidth() const { return original_width_; }

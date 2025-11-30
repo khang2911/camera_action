@@ -568,8 +568,22 @@ bool VideoReader::readFrame(cv::Mat& frame) {
                 }
                 if (current_ts > clip_.end_timestamp) {
                     stop_reason_ = VideoStopReason::END_OF_TIME_WINDOW;
+                    // Calculate expected frames for comparison
+                    double time_window_duration = clip_.end_timestamp - clip_.start_timestamp;
+                    double expected_frames = time_window_duration * fps_;
+                    double actual_fps = (actual_frame_position_ > 0 && time_window_duration > 0.0) 
+                                        ? static_cast<double>(actual_frame_position_) / time_window_duration 
+                                        : 0.0;
+                    double frames_diff = expected_frames - static_cast<double>(actual_frame_position_);
+                    double frames_diff_percent = (expected_frames > 0.0) ? (frames_diff / expected_frames) * 100.0 : 0.0;
+                    
                     std::string stop_msg = std::string("Reached end of time window: frames_read=") +
-                                         std::to_string(actual_frame_position_);
+                                         std::to_string(actual_frame_position_) +
+                                         ", expected~" + std::to_string(static_cast<int>(expected_frames)) +
+                                         ", diff=" + std::to_string(static_cast<int>(frames_diff)) +
+                                         " (" + std::to_string(static_cast<int>(frames_diff_percent)) + "%)" +
+                                         ", actual_fps=" + std::to_string(actual_fps) +
+                                         ", reported_fps=" + std::to_string(fps_);
                     LOG_INFO("VideoReader", stop_msg);
                     return false;  // Past end time, done with this clip
                 }
