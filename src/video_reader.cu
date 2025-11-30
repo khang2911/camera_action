@@ -631,15 +631,22 @@ bool VideoReader::readFrame(cv::Mat& frame) {
             }
         }
         
-        // If we couldn't send any packets and we're at end of stream, we're done
-        if (!sent_any && end_of_stream_) {
-            stop_reason_ = VideoStopReason::END_OF_VIDEO_FILE;
-            std::string eof_stop_msg = std::string("Reached end of video file: frames_read=") +
-                                      std::to_string(actual_frame_position_) +
-                                      ", total_frames_decoded=" + std::to_string(total_frames_read_) +
-                                      ", has_time_window=" + (has_clip_metadata_ && clip_.has_time_window ? "true" : "false");
-            LOG_INFO("VideoReader", eof_stop_msg);
-            return false;
+        // If we're at end of stream, check if decoder has any remaining frames
+        if (end_of_stream_) {
+            // Try to receive any remaining frames from decoder
+            cv::Mat dummy_frame;
+            if (!receiveFrame(dummy_frame)) {
+                // Decoder is empty, we're done
+                stop_reason_ = VideoStopReason::END_OF_VIDEO_FILE;
+                std::string eof_stop_msg = std::string("Reached end of video file: frames_read=") +
+                                          std::to_string(actual_frame_position_) +
+                                          ", total_frames_decoded=" + std::to_string(total_frames_read_) +
+                                          ", has_time_window=" + (has_clip_metadata_ && clip_.has_time_window ? "true" : "false");
+                LOG_INFO("VideoReader", eof_stop_msg);
+                return false;
+            }
+            // Got a frame, process it in next iteration
+            continue;
         }
         
         // If we sent packets or got EAGAIN, loop back to try receiving frames
@@ -726,34 +733,21 @@ bool VideoReader::sendNextPacket() {
 }
 
 bool VideoReader::receiveFrame(cv::Mat& out) {
-    while (true) {
-        int ret = avcodec_receive_frame(codec_ctx_, frame_);
-        if (ret == AVERROR(EAGAIN)) {
-            return false;
-        }
-        if (ret == AVERROR_EOF) {
-            std::string eof_receive_msg = "receiveFrame: AVERROR_EOF detected, total_read=" + 
-                                         std::to_string(total_frames_read_) +
-                                         ", actual_pos=" + std::to_string(actual_frame_position_);
-            LOG_DEBUG("VideoReader", eof_receive_msg);
-            return false;
-        }
-        if (ret < 0) {
-            log_ffmpeg_error("avcodec_receive_frame", ret);
-            return false;
-        }
-        
-        // Check if this frame has the same PTS as the previous frame (indicates duplicate frame from decoder)
-        // Note: Some video encodings have duplicate frames for timing purposes
-        // Currently not skipping duplicate frames - they are valid in video encoding
-        (void)frame_->pts;  // Suppress unused variable warning
-        
-        // CRITICAL: Convert frame immediately to ensure we copy the data before
-        // the next call to avcodec_receive_frame potentially overwrites frame_
-        if (convertFrameToMat(frame_, out)) {
-            return true;
-        }
+    int ret = avcodec_receive_frame(codec_ctx_, frame_);
+    if (ret == AVERROR(EAGAIN)) {
+        return false;
     }
+    if (ret == AVERROR_EOF) {
+        return false;
+    }
+    if (ret < 0) {
+        log_ffmpeg_error("avcodec_receive_frame", ret);
+        return false;
+    }
+    
+    // CRITICAL: Convert frame immediately to ensure we copy the data before
+    // the next call to avcodec_receive_frame potentially overwrites frame_
+    return convertFrameToMat(frame_, out);
 }
 
 bool VideoReader::convertFrameToMat(AVFrame* src, cv::Mat& out) {
