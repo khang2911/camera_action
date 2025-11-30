@@ -149,8 +149,10 @@ def read_video_with_time_window(video_path, start_ts, end_ts, moment_time=None):
     frames_after_window = 0
     total_read = 0
     frame_timestamps = []
+    first_frame_in_window = None
+    last_frame_in_window = None
     
-    print(f"\n=== Reading Frames ===")
+    print(f"\n=== Reading Frames (Sequential, No Seeking) ===")
     frame_number = 0
     
     while True:
@@ -162,7 +164,7 @@ def read_video_with_time_window(video_path, start_ts, end_ts, moment_time=None):
         
         # Calculate timestamp for this frame
         # Frame timestamp = moment_time + (frame_number / fps)
-        frame_ts = moment_time + (frame_number / fps)
+        frame_ts = moment_time + (frame_number / fps) if fps > 0 else moment_time
         frame_timestamps.append(frame_ts)
         
         # Check if frame is in time window
@@ -170,10 +172,15 @@ def read_video_with_time_window(video_path, start_ts, end_ts, moment_time=None):
             frames_before_window += 1
         elif frame_ts > end_ts:
             frames_after_window += 1
-            # Can stop early if we're past end_ts
-            # But continue to see all frames for analysis
+            # For efficiency, we could stop here, but continue to see all frames for analysis
+            if frames_after_window > 100:  # Stop after 100 frames past end_ts
+                print(f"  Stopping early: found 100+ frames after end_ts")
+                break
         else:
             frames_in_window += 1
+            if first_frame_in_window is None:
+                first_frame_in_window = frame_number
+            last_frame_in_window = frame_number
         
         frame_number += 1
         
@@ -189,14 +196,14 @@ def read_video_with_time_window(video_path, start_ts, end_ts, moment_time=None):
     
     # Calculate FPS based on first and last frame timestamps
     if first_frame_in_window is not None and last_frame_in_window is not None:
-        first_ts = moment_time + (first_frame_in_window / fps) if fps > 0 else moment_time
-        last_ts = moment_time + (last_frame_in_window / fps) if fps > 0 else moment_time
-        actual_time_span = last_ts - first_ts
+        first_ts_calc = moment_time + (first_frame_in_window / fps) if fps > 0 else moment_time
+        last_ts_calc = moment_time + (last_frame_in_window / fps) if fps > 0 else moment_time
+        actual_time_span = last_ts_calc - first_ts_calc
         fps_from_span = (frames_in_window - 1) / actual_time_span if actual_time_span > 0 and frames_in_window > 1 else 0
     else:
         fps_from_span = 0
-        first_ts = None
-        last_ts = None
+        first_ts_calc = None
+        last_ts_calc = None
     
     # Calculate statistics
     result = {
@@ -216,8 +223,8 @@ def read_video_with_time_window(video_path, start_ts, end_ts, moment_time=None):
         'first_frame_in_window': first_frame_in_window,
         'last_frame_in_window': last_frame_in_window,
         'fps_from_span': fps_from_span,
-        'first_ts': first_ts,
-        'last_ts': last_ts
+        'first_ts': first_ts_calc if first_frame_in_window is not None else None,
+        'last_ts': last_ts_calc if last_frame_in_window is not None else None
     }
     
     return result
