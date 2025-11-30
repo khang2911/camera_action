@@ -40,6 +40,7 @@ public:
     bool readFrame(cv::Mat& frame);
     int getFrameNumber() const { return frame_number_; }
     int getActualFramePosition() const;  // Get actual frame position in video file
+    long long getTotalFramesRead() const { return total_frames_read_; }  // Get total frames decoded (including filtered)
     VideoStopReason getStopReason() const { return stop_reason_; }
     double getFps() const { return fps_; }
     int getVideoId() const { return video_id_; }

@@ -1147,6 +1147,7 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
     
     // Log frame count for this video
     int final_actual_pos = reader.getActualFramePosition();
+    long long total_frames_decoded = reader.getTotalFramesRead();
     VideoStopReason stop_reason = reader.getStopReason();
     std::string status;
     if (debug_mode_limit_reached_) {
@@ -1173,10 +1174,16 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
     } else {
         status = "unknown";
     }
+    std::string frame_info = "frames_read=" + std::to_string(frame_count) +
+                            ", actual_frame_position=" + std::to_string(final_actual_pos) +
+                            ", total_frames_decoded=" + std::to_string(total_frames_decoded);
+    if (total_frames_decoded > final_actual_pos) {
+        long long filtered = total_frames_decoded - final_actual_pos;
+        frame_info += " (filtered=" + std::to_string(filtered) + " frames)";
+    }
     LOG_INFO("Reader", "*** Reader " + std::to_string(reader_id) + " finished video " + video_key + " ***" +
              " status=" + status +
-             ", frames_read=" + std::to_string(frame_count) +
-             ", actual_frame_position=" + std::to_string(final_actual_pos) +
+             ", " + frame_info +
              ", path=" + clip.path);
     
     // Update total frames read for this message (for validation)

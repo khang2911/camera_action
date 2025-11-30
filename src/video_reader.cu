@@ -618,7 +618,9 @@ bool VideoReader::readFrame(cv::Mat& frame) {
         if (!sent_any && end_of_stream_) {
             stop_reason_ = VideoStopReason::END_OF_VIDEO_FILE;
             std::string eof_stop_msg = std::string("Reached end of video file: frames_read=") +
-                                      std::to_string(actual_frame_position_);
+                                      std::to_string(actual_frame_position_) +
+                                      ", total_frames_decoded=" + std::to_string(total_frames_read_) +
+                                      ", has_time_window=" + (has_clip_metadata_ && clip_.has_time_window ? "true" : "false");
             LOG_INFO("VideoReader", eof_stop_msg);
             return false;
         }
