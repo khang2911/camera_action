@@ -161,6 +161,8 @@ VideoReader::VideoReader(const std::string& video_path, int video_id, const Read
       frame_number_(0),
       total_frames_read_(0),
       actual_frame_position_(0),
+      first_frame_after_seek_(0),
+      seek_performed_(false),
       fps_(0.0),
       has_clip_metadata_(false),
       original_width_(0),
@@ -193,6 +195,8 @@ VideoReader::VideoReader(const VideoClip& clip, int video_id, const ReaderOption
       frame_number_(0),
       total_frames_read_(0),
       actual_frame_position_(0),
+      first_frame_after_seek_(0),
+      seek_performed_(false),
       fps_(0.0),
       has_clip_metadata_(true),
       clip_(clip),
@@ -538,27 +542,41 @@ bool VideoReader::readFrame(cv::Mat& frame) {
                 frame_pts_seconds = frame_->pts * av_q2d(video_stream_->time_base);
             }
             
-            // Increment total_frames_read_ for ALL frames (for timestamp calculation)
-            // This tracks the actual position in the video file
+            // Increment total_frames_read_ for ALL frames decoded (after seek)
+            // This tracks frames read after seeking
             ++total_frames_read_;
             
             // Check time window
         if (has_clip_metadata_ && clip_.has_time_window) {
             double effective_fps = (fps_ > 0.0) ? fps_ : 30.0;
-                // Calculate timestamp from frame PTS if available (most accurate)
-                // Fall back to calculated timestamp based on total_frames_read_ if PTS unavailable
-                double current_ts;
-                double actual_ts_from_pts = -1.0;
-                double calc_ts_from_frame_count = clip_.moment_time + static_cast<double>(total_frames_read_ - 1) / effective_fps;
-                
-                if (frame_pts_seconds >= 0.0) {
-                    // Use actual PTS from frame (most accurate)
-                    actual_ts_from_pts = clip_.moment_time + frame_pts_seconds;
-                    current_ts = actual_ts_from_pts;
+            
+            // CRITICAL: Match cv2's timestamp calculation
+            // cv2 calculates: frame_ts = moment_time + (frame_number / fps)
+            // where frame_number is the absolute frame number from video start (0-indexed)
+            // After seeking, we need to calculate the absolute frame number
+            long long absolute_frame_number;
+            if (seek_performed_) {
+                // After seeking, use PTS to determine actual frame position (most accurate)
+                // PTS is relative to video start (time 0), so we can calculate absolute frame number
+                if (frame_pts_seconds >= 0.0 && video_stream_) {
+                    // PTS is in seconds from video start, so absolute frame = PTS * fps
+                    // This matches cv2's calculation where frame_number = (frame_ts - moment_time) * fps
+                    // But here PTS is already relative to video start, so we use it directly
+                    absolute_frame_number = static_cast<long long>(std::max(0.0, std::floor(frame_pts_seconds * effective_fps)));
                 } else {
-                    // Fall back to calculated timestamp (less accurate, but better than nothing)
-                    current_ts = calc_ts_from_frame_count;
+                    // Fallback: estimate from seek position + frames read after seek
+                    // This is less accurate but better than nothing
+                    absolute_frame_number = first_frame_after_seek_ + (total_frames_read_ - 1);
                 }
+            } else {
+                // No seeking: frame_number = total_frames_read_ - 1 (0-indexed, matching cv2)
+                // cv2: frame_number starts at 0, so first frame is frame 0
+                absolute_frame_number = total_frames_read_ - 1;
+            }
+            
+            // Calculate timestamp matching cv2: moment_time + (frame_number / fps)
+            // This ensures we match cv2's sequential reading behavior
+            double current_ts = clip_.moment_time + static_cast<double>(absolute_frame_number) / effective_fps;
                 
             if (current_ts < clip_.start_timestamp) {
                     // Frame is before start time - skip it
@@ -921,13 +939,27 @@ void VideoReader::initializeMetadata() {
             int64_t target = static_cast<int64_t>(offset_seconds / av_q2d(video_stream_->time_base));
             av_seek_frame(fmt_ctx_, video_stream_->index, target, AVSEEK_FLAG_BACKWARD);
             avcodec_flush_buffers(codec_ctx_);
-            // Estimate the frame number at the seek position for timestamp calculation
-            // total_frames_read_ will be incremented for ALL frames read (including skipped ones)
-            // actual_frame_position_ will only count frames in the time window
-            long long estimated_frame = static_cast<long long>(std::max(0.0, std::floor(offset_seconds * fps_)));
-            total_frames_read_ = estimated_frame;  // Start from estimated position for timestamp calculation
-            actual_frame_position_ = 0;  // Will count only frames in time window
+            // Calculate the frame number at the seek position (matching cv2 calculation)
+            // cv2: frame_ts = moment_time + (frame_number / fps)
+            // So: frame_number = (start_ts - moment_time) * fps
+            long long seek_frame_number = static_cast<long long>(std::max(0.0, std::floor(offset_seconds * fps_)));
+            first_frame_after_seek_ = seek_frame_number;
+            seek_performed_ = true;
+            total_frames_read_ = 0;  // Reset counter - will track frames read after seek
+            actual_frame_position_ = 0;  // Will count only frames in the time window
+        } else {
+            // No seeking needed - start from beginning
+            first_frame_after_seek_ = 0;
+            seek_performed_ = false;
+            total_frames_read_ = 0;
+            actual_frame_position_ = 0;
         }
+    } else {
+        // No time window - start from beginning
+        first_frame_after_seek_ = 0;
+        seek_performed_ = false;
+        total_frames_read_ = 0;
+        actual_frame_position_ = 0;
     }
 }
 

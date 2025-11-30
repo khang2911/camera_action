@@ -92,6 +92,8 @@ private:
     int frame_number_;
     long long total_frames_read_;
     int actual_frame_position_;  // Track the actual frame position that was processed (for bin file)
+    long long first_frame_after_seek_;  // Track the first frame number after seeking (for timestamp calculation)
+    bool seek_performed_;  // Track if seeking was performed
     double fps_;
     bool has_clip_metadata_;
     VideoClip clip_;
