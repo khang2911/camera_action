@@ -728,9 +728,8 @@ bool VideoReader::receiveFrame(cv::Mat& out) {
         
         // Check if this frame has the same PTS as the previous frame (indicates duplicate frame from decoder)
         // Note: Some video encodings have duplicate frames for timing purposes
-        static thread_local int64_t last_pts = AV_NOPTS_VALUE;
-        int64_t current_pts = frame_->pts;
-        last_pts = current_pts;
+        // Currently not skipping duplicate frames - they are valid in video encoding
+        (void)frame_->pts;  // Suppress unused variable warning
         
         // CRITICAL: Convert frame immediately to ensure we copy the data before
         // the next call to avcodec_receive_frame potentially overwrites frame_

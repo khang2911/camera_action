@@ -1154,7 +1154,7 @@ int ThreadPool::processVideo(int reader_id, const VideoClip& clip, int video_id,
         status = "debug_limit (max_frames_per_video reached)";
     } else if (stop_reason == VideoStopReason::END_OF_TIME_WINDOW) {
         // Check if we read significantly fewer frames than expected
-        if (has_clip_metadata_ && clip.has_time_window) {
+        if (clip.has_time_window) {
             double time_window_duration = clip.end_timestamp - clip.start_timestamp;
             double expected_frames = time_window_duration * reader.getFps();
             double frames_diff_percent = (expected_frames > 0.0) 
